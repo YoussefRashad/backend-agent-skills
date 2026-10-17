@@ -2573,6 +2573,49 @@ async function inputBinding(context) {
         // the set differs in both directions at once while the number of entries is unchanged
         tamper('a declared input swapped for an undeclared in-scope documentation path (same number of entries)', (plan) => { dropInput(plan, IN_CONSUMER); addInput(plan, extraDoc, null); }, (r) => [tpath(r, IN_CONSUMER), tpath(r, extraDoc), ...bodiesOf(r)]);
       });
+      // I2-10 (docs/plans/2026-10-18-project-setup-v3-rc1-c2-followup-decisions.md): commit applies the per-target refusal checks of the prepared
+      // review (I2-2) to every plan op, in target order, after loadPlan and before the binding recheck, any heartbeat, journal or write. Each case
+      // rewrites plan.json with one extra draft op whose draft source, sourceInventory entry, source hash, preRawSha and inputs entry are all
+      // consistent, and commits with the hash of the rewritten file, so loadPlan and the binding recheck accept it and only the new check can stop it.
+      const forgeCommit = (target, current, draftText) => {
+        const r = cloneTree(scen.root, path.join(dir, `tp${++counter.n}`));
+        putFile(tpath(r, target), current);
+        const draft = Buffer.from(draftText);
+        putDraft(r, id, target, draft);
+        const plan = readPlan(r, id);
+        const op = { ...expectedOp({ target, draft, current, secret: target === '.env' }), uncommittedUserChanges: false };
+        plan.ops = [...plan.ops, op].sort(byTarget);
+        plan.sourceInventory = [...plan.sourceInventory, { target, origin: 'draft' }].sort(byTarget);
+        addInput(plan, target, op.preRawSha);
+        putFile(runFile(r, id, 'plan.json'), jsonText(plan));
+        return { r, draft, current, sha: planShaOf(r, id) };
+      };
+      await step('I2-10 commit refuses an extra draft op for a secret-pattern path or for a path outside the write scope (exit 3) before any read, heartbeat, journal or write, even when plan.json is rewritten with every binding consistent and its hash approved', async () => {
+        // control: the same construction for an ordinary documentation path commits, so the refusals below come from the rule under test and not from
+        // the rewrite (a plan that loadPlan or the binding recheck would reject would be APPLY_PLAN_INVALID or APPLY_DRIFT instead)
+        const ctlTarget = 'docs/i210-control.md';
+        const ctl = forgeCommit(ctlTarget, Buffer.from('# control before\n'), '# control after\n');
+        const rc = kit.commit(ctl.r, id, ctl.sha);
+        check(rc.code === 0 && rc.json && rc.json.ok === true && rc.json.committed === true, 'control: a rewritten plan with a consistent extra draft op for an ordinary documentation path commits', rc.stdout.slice(0, 300));
+        check(Buffer.compare(readBytes(tpath(ctl.r, ctlTarget)) || Buffer.alloc(0), ctl.draft) === 0, 'control: the extra op was written, so the rewrite is a plan commit accepts');
+        const marker = 'I210-MARKER-VALUE-6b2d84';
+        for (const [label, target, current, draftText, want] of [
+          ['an extra draft op for .env', '.env', Buffer.from(`SECRET_TOKEN=${marker}\n`), 'DRAFT-ENV-CONTENT=1\n', { code: 'APPLY_SECRET_TARGET', error: MSG.SECRET_PREPARE }],
+          ['an extra draft op for src/forged.ts', 'src/forged.ts', Buffer.from('export const kept = 1;\n'), 'export const forged = 2;\n', { code: 'APPLY_WRITE_SCOPE', error: MSG.SCOPE('src/forged.ts') }],
+        ]) {
+          const f = forgeCommit(target, current, draftText);
+          const snap = projectSnapshot(f.r);
+          const lockBytes = readBytes(lockOwnerPath(f.r));
+          const guard = makeGuard(dir, [tpath(f.r, target), ...bodiesOf(f.r)], 'record');
+          const res = kit.commit(f.r, id, f.sha, { preload: guard.file });
+          expectF(check, `I2-10 ${label} (commit)`, res, { code: want.code, exit: 3, error: want.error });
+          check(!exists(runFile(f.r, id, 'journal.json')), `I2-10 ${label} (commit): no journal`);
+          check(projectSnapshot(f.r) === snap && Buffer.compare(lockBytes, readBytes(lockOwnerPath(f.r))) === 0, `I2-10 ${label} (commit): nothing is written and the lock bytes are unchanged (no heartbeat)`);
+          check(Buffer.compare(readBytes(tpath(f.r, target)) || Buffer.alloc(0), current) === 0, `I2-10 ${label} (commit): the target bytes are unchanged`);
+          check(guard.hits().length === 0, `I2-10 ${label} (commit): no target or draft body was read`, guard.hits().slice(0, 3));
+          check(!res.stdout.includes(marker) && !res.stdout.includes(draftText.trim()), `I2-10 ${label} (commit): nothing of the target or the draft is printed`, res.stdout.slice(0, 300));
+        }
+      });
     });
   });
 }

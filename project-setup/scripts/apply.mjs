@@ -853,6 +853,21 @@ function renderReview(ops) {
 }
 
 /**
+ * Decisions I2-2 and I2-10: every plan op passes the per-target checks of an unprepared source, in target order, before
+ * any target or draft body is read; the first refusal fails (exit 3, an unsafe path exit 2). Shared by diff and commit.
+ */
+function refusePlanOps(plan, mode) {
+  const { isSecret } = requireRefusalSet();
+  const seen = new Set();
+  for (const o of [...plan.ops].sort(byTarget)) {
+    if (seen.has(o.target)) failCode('APPLY_DUPLICATE_TARGET', 'target appears in both drafts and vault', 3);
+    seen.add(o.target);
+    const c = checkSource(o, isSecret, mode);
+    if (c.code) failCode(c.code, c.error, 3);
+  }
+}
+
+/**
  * Prepared review: the plan it read, its bindings rechecked, the bytes it binds rendered. The plan is run-local and diff
  * knows no approved hash, so its ops are refused exactly like unprepared sources (decision I2-2) before any target or
  * draft body is read, the binding hashes included: a rewritten plan.json can never turn diff into a reader of `.env`.
@@ -860,14 +875,7 @@ function renderReview(ops) {
 function preparedReview(planBuf) {
   const plan = loadPlan(planBuf);
   inventory(); // run-chain and link safety first (exit 2)
-  const refusal = requireRefusalSet();
-  const seen = new Set();
-  for (const o of [...plan.ops].sort(byTarget)) {
-    if (seen.has(o.target)) failCode('APPLY_DUPLICATE_TARGET', 'target appears in both drafts and vault', 3);
-    seen.add(o.target);
-    const c = checkSource(o, refusal.isSecret, 'diff');
-    if (c.code) failCode(c.code, c.error, 3);
-  }
+  refusePlanOps(plan, 'diff');
   const drift = bindingDrift(plan);
   if (drift.length) failCode('APPLY_DRIFT', DRIFT_ERROR, 4, { drift });
   const ops = plan.ops.map((o) => {
@@ -979,8 +987,9 @@ else if (cmd === 'prepare') {
 }
 
 // ---------------------------------------------------------------- commit ----
-// Plan 4.6 order: lock check (read-only), lifecycle, approved plan hash, plan format, path safety, bindings, genuine
-// no-op, heartbeat, then one journal for content (in plan order) and the manifest (last).
+// Plan 4.6 order: lock check (read-only), lifecycle, approved plan hash, plan format, path safety, the per-target
+// refusals (I2-10), bindings, genuine no-op, heartbeat, then one journal for content (in plan order) and the manifest
+// (last).
 else if (cmd === 'commit') {
   const owner = checkLock();
   assertWritableLifecycle('commit'); // before any other check: a used run never commits again
@@ -993,13 +1002,15 @@ else if (cmd === 'commit') {
   try { plan = loadPlan(planBuf); } catch (e) { if (!isFsFailure(e)) throw e; failFs(e); }
 
   // Every run directory must still be a real directory inside the repo, and every target path safe, before anything
-  // is compared or written. (Each individual read/write re-validates again at the moment it happens.)
+  // is compared or written. (Each individual read/write re-validates again at the moment it happens.) An approved hash
+  // does not make a forged op safe (decision I2-10): every op is refused like prepare would, before any body is read.
   let drift;
   try {
     for (const sub of [['drafts'], ['vault'], ['vault', 'backup']]) {
       if (!runSub(...sub)) throw Object.assign(new Error('run directory missing'), { unsafePath: [...RUN, ...sub].join('/') });
     }
     for (const op of plan.ops) ioTagged(op.target, () => safeResolve(root, op.target));
+    refusePlanOps(plan, 'prepare');
     drift = bindingDrift(plan);
   } catch (e) { if (!isFsFailure(e)) throw e; failFs(e); }
   if (drift.length) failCode('APPLY_DRIFT', DRIFT_ERROR, 4, { drift });
