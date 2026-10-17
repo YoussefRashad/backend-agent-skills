@@ -1,5 +1,7 @@
-// Structural validators used by validate.mjs. The only dependency is the shared policy reader.
+// Structural validators used by validate.mjs. The only dependencies are the shared policy reader and the shared
+// manifest reader.
 import { readSecurityPolicy } from '../assets/tools/security-policy.mjs';
+import { readManifest } from './ownership.mjs';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStrArr = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -49,26 +51,21 @@ export function checkClaudeSettings(s) {
   return out;
 }
 
-const HEX64 = /^[0-9a-f]{64}$/;
+const MANIFEST_ERROR_CODES = new Set(['MANIFEST_INVALID', 'MANIFEST_SCHEMA']);
+
+/**
+ * Structural check of .ai/manifest.json through the shared reader (scripts/ownership.mjs): [] for a valid schema-2 or
+ * schema-3 manifest, otherwise the reader's issues. A valid schema 2 is migration input, not a failure; validate.mjs
+ * reports it as needing an update. An unrelated exception is rethrown, never turned into an issue.
+ */
 export function checkManifest(m) {
-  const errs = [];
-  if (!isObj(m)) return ['root must be an object'];
-  if (m.schema !== 2) errs.push('schema must be 2');
-  if (m.skill !== 'project-setup') errs.push('skill must be "project-setup"');
-  if (typeof m.skillVersion !== 'string') errs.push('skillVersion must be a string');
-  if (!isStrArr(m.agents)) errs.push('agents must be an array of strings');
-  if (!isObj(m.files)) return [...errs, 'files must be an object'];
-  for (const [f, e] of Object.entries(m.files)) {
-    if (!isObj(e)) { errs.push(`files["${f}"] must be an object`); continue; }
-    switch (e.ownership) {
-      case 'full': if (!HEX64.test(e.sha256 || '')) errs.push(`files["${f}"].sha256 must be a sha256 hex`); break;
-      case 'blocks': if (!isObj(e.blocks) || !Object.values(e.blocks).every((h) => HEX64.test(h))) errs.push(`files["${f}"].blocks must map ids to sha256 hex`); break;
-      case 'keys': if (!isObj(e.managed)) errs.push(`files["${f}"].managed must be an object`); break;
-      case 'merged': break;
-      default: errs.push(`files["${f}"].ownership is invalid: ${e.ownership}`);
-    }
+  try {
+    readManifest(m);
+  } catch (e) {
+    if (e instanceof Error && Object.prototype.hasOwnProperty.call(e, 'code') && MANIFEST_ERROR_CODES.has(e.code) && Array.isArray(e.issues)) return [...e.issues];
+    throw e;
   }
-  return errs;
+  return [];
 }
 
 // Plan docs/plans/2026-10-16-project-setup-v3-rc1-c1.md section 2.4: exactly the 20 reader error codes. Classification

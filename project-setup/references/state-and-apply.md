@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `full` | Files the skill created entirely: `.ai/agents/*`, wrappers | Regenerate when unchanged | Ask before replacing user edits |
 | `blocks` | Markdown and `#`-comment files with managed blocks: `AGENTS.md`, `CLAUDE.md`, `.gitignore` | Rewrite inside its blocks only | Per-block: unchanged / edited-by-user / removed-by-user |
-| `keys` | `.claude/settings.json` | Append missing managed entries to `permissions.deny/allow` | Never removes or reorders; reports conflicts |
+| `keys` | `.claude/settings.json`, `.ai/security-paths.json` | Append missing managed entries; record the approved managed list | Never removes or reorders without approval; reports conflicts |
 | `merged` | Living docs, `.env.example`, pre-existing files without markers | Targeted, reviewed edits | Not tracked |
 
 A matching hash means "the skill's region is as the skill left it". It is **not** permission to rewrite the whole
@@ -17,6 +17,13 @@ Broken markers stop the run for that file.
 
 JSON has no comments, so `.claude/settings.json` uses key-level ownership; the managed entry list is stored in the
 manifest. TOML wrappers are `full` files; the skill never merges into user TOML.
+
+Managed metadata is file-specific (`scripts/ownership.mjs`): the settings record holds exact permission strings per
+array (`permissions.allow`, `permissions.deny`), hook identities (event, matcher, command; options such as `timeout`
+are not identity) and `heldBack`; the policy record holds the complete `{ schema, patterns }` entries, every field kept.
+Approved omissions are stored in the record's `omissions` field, separately from `managed`, and match only the exact
+anchor and case-insensitive glob they name. New manifests are schema 3; a valid schema-2 manifest is migration input
+that detect and validate report as "needs update".
 
 ## Hashing
 
@@ -30,7 +37,7 @@ lock acquire → apply init → drafts (agent + blocks.mjs + merge/env scripts)
 → apply prepare: plan with, per file, the target's raw pre-hash and the draft's SHA-256;
                  rejects outside-block / user-edited changes unless --approve-user-content names that file;
                  prints planSha256
-→ user reviews the diffs and approves planSha256
+→ user reviews `apply.mjs diff` (content and metadata operations) and approves planSha256
 → apply commit --approved-plan <planSha256>:
      1. plan hash, every draft hash, every target hash, manifest hash re-verified → exit 4, nothing written, on any change
      2. per file: backup to vault → journal entry {preRawSha, expectedWriteSha, state "backed-up"}
@@ -46,9 +53,30 @@ every existing segment must be a real directory (symlinks and Windows junctions 
 must be inside the repository, a linked leaf file is refused, and writes go through an exclusive temp file + rename
 (never through an existing link). `commit` also checks the whole run chain before its first write (exit 2).
 
-`ownership.json` and `managed-keys.json` (run dir) are validated at prepare and embedded in the plan with their
-hashes, so the approval covers manifest ownership too; commit uses only the embedded copy and aborts (exit 4) if
-either file appeared, disappeared, or changed after prepare. Run ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
+`ownership.json`, `managed-keys.json`, `omissions.json`, `manifest-metadata.json` and `transaction-inputs.json` (run
+dir) are validated at prepare and embedded in the plan with their hashes, so the approval covers manifest metadata too;
+commit uses only the embedded copy and aborts (exit 4) if any of them appeared, disappeared, or changed after prepare.
+The plan holds content operations and metadata operations separately; an explicit ownership, managed-list removal or
+reordering, or omission change needs `--approve-user-content <target>` even when the file's bytes are unchanged. One
+commit and one journal apply both, the manifest last, exactly as approved. Every bound input (targets, drafts, declared
+`transaction-inputs.json` consumers, the installed policy, the manifest) is rechecked before anything is written. Run
+ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
+
+Review drafts with the apply command. It renders target-versus-draft differences in-process
+without invoking Git, including during root discovery. The explicit project root is checked
+through the filesystem. Review does not acquire or refresh a lock, create directories, write
+a plan, or initialize a journal.
+
+```
+node <SKILL_DIR>/scripts/apply.mjs diff --project . --run-id <id>
+```
+
+Before prepare, this is an unapproved preview. After prepare, the report identifies
+planSha256 and refuses changed inputs. Vault files appear only as key names and value
+classifications. Review metadata operations even when the affected file bytes are unchanged.
+Any changed input requires a new prepare and approval.
+
+If detect reports mode "invalid", repair or restore .ai/manifest.json before running prepare.
 
 The vault accepts only env templates (`.env.example`, `.env.sample`, `.env.template`) produced by `env-keys.mjs`.
 Agent drafts can never target a secret-pattern path.
@@ -122,5 +150,9 @@ removes the lock.
 
 ## Zero diff
 
-With unchanged inputs and skill version, a re-run produces no file changes and no manifest change.
-`sourceCommit` changes only when outputs change. Nothing time-based is written into managed content.
+A genuine no-op has neither content writes nor metadata operations. Commit still requires
+this run's lock and rechecks the prepared inputs. It leaves project files, manifest bytes
+and lock bytes unchanged and creates no journal. An ownership, omission, snippet or schema
+change can be a metadata operation even when every content operation is unchanged.
+sourceCommit changes only when actual content or metadata work is committed. Nothing time-based is written into
+managed content.

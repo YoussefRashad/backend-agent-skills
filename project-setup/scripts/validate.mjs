@@ -25,14 +25,28 @@ const files = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard
   .filter((p) => !p.startsWith('.ai/.run/') && !p.startsWith('.ai/.canary/') && !p.includes('node_modules/'));
 
 // 1. JSON: syntax AND shape (valid JSON with wrong types is still broken configuration)
-const jsonChecks = { '.claude/settings.json': checkClaudeSettings, '.ai/manifest.json': checkManifest };
+// A valid schema-2 manifest passes and gets one info record (not counted in the totals): it is migration input that
+// the next prepare converts, not a failure. A manifest that fails validation is never used further down (section 5
+// and 6), so no path it names is read. Its parse error never echoes the native parser message or the source text.
+const MANIFEST_REL = '.ai/manifest.json';
+let manifest = null;
+const jsonChecks = { '.claude/settings.json': checkClaudeSettings, [MANIFEST_REL]: checkManifest };
 for (const [rel, check] of Object.entries(jsonChecks)) {
   if (!exists(rel)) continue;
   let data;
-  try { data = readJsonFile(path.join(root, rel)); } catch (e) { add('fail', 'json-syntax', `${rel}: ${e.message}`); continue; }
+  try { data = readJsonFile(path.join(root, rel)); } catch (e) {
+    add('fail', 'json-syntax', rel === MANIFEST_REL ? `${rel}: manifest is not valid JSON` : `${rel}: ${e.message}`);
+    continue;
+  }
   const found = check(data).map((e) => (typeof e === 'string' ? { level: 'fail', msg: e } : e));
   found.forEach((e) => add(e.level, 'json-schema', `${rel}: ${e.msg}`));
-  if (!found.some((e) => e.level === 'fail')) add('pass', 'json-schema', rel);
+  if (!found.some((e) => e.level === 'fail')) {
+    add('pass', 'json-schema', rel);
+    if (rel === MANIFEST_REL) {
+      manifest = data;
+      if (data.schema === 2) add('info', 'manifest-version', `${rel}: schema 2 needs update to schema 3`);
+    }
+  }
 }
 
 // 2. Codex agent wrappers: real TOML parse (subset), required string keys, no legacy sandbox
@@ -90,8 +104,6 @@ for (const rel of [...agentsFiles, ...claudeFiles, ...files.filter((p) => /^\.ai
 }
 
 // 5. Managed markers and drift against the manifest
-let manifest = null;
-if (exists('.ai/manifest.json')) { try { manifest = readJsonFile(path.join(root, '.ai/manifest.json')); } catch { /* reported above */ } }
 for (const rel of files.filter((p) => /\.(md|gitignore)$/.test(p) || p === '.gitignore')) {
   if (isSecretPath(rel, spec)) continue;
   const { errors } = parseBlocks(read(rel));

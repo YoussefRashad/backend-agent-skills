@@ -8,6 +8,7 @@
 // imports are import-safe as well and load this module lazily, so there is no eager read across the cycle.
 import { C11A_IMPLEMENTATIONS } from './c11a.test.mjs';
 import { C1_IMPLEMENTATIONS } from './c1.test.mjs';
+import { C2_IMPLEMENTATIONS } from './c2.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -57,11 +58,29 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'V2/C1/exception-overlap', name: 'user exception overlap stays conservative' },
     { id: 'V2/C1/module-contract', name: 'standalone module and component contracts' },
   ],
+  // C2 plan (docs/plans/2026-10-17-project-setup-v3-rc1-c2.md) section 7.1, in its exact order.
+  C2: [
+    { id: 'R79/C2/policy-schema', name: 'complete policy ownership metadata' },
+    { id: 'R79/C2/settings-schema', name: 'permission and hook ownership schemas' },
+    { id: 'R79/C2/manifest-schema', name: 'manifest schema 3 and legacy input' },
+    { id: 'R86/C2/omissions', name: 'exact persistent omission identities' },
+    { id: 'R86/C2/metadata-only', name: 'approved metadata without content writes' },
+    { id: 'R86/C2/mixed-transaction', name: 'one content and metadata transaction' },
+    { id: 'R80/C2/input-binding', name: 'all approved inputs remain bound' },
+    { id: 'R02/C2/diff-output', name: 'deterministic read-only draft review' },
+    { id: 'R02/C2/no-git', name: 'draft review invokes no Git' },
+    { id: 'R02/C2/diff-safety', name: 'secret and unsafe targets are refused' },
+    { id: 'R15/C2/metadata-binding', name: 'metadata presence and bytes are approved' },
+    { id: 'R29/C2/approval-noop', name: 'unchanged-file approvals and genuine no-op' },
+    { id: 'V2/C2/recovery', name: 'metadata transaction recovery preserves later edits' },
+    { id: 'V2/C2/module-contract', name: 'shared exports and component registration' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C11a: Object.freeze([...C11A_IMPLEMENTATIONS]),
   C1: Object.freeze([...C1_IMPLEMENTATIONS]),
+  C2: Object.freeze([...C2_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

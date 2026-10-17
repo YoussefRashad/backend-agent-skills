@@ -10,7 +10,7 @@
 //     Writes the merged file to .ai/.run/<id>/vault/files/<file> (covered by the secret deny list).
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseArgs, repoRoot, safeResolve, detectEol, ok, fail, validateRunId, secureDir, writeInRepo, ENV_TEMPLATE_RE, assertNotSecretInput } from './lib.mjs';
+import { parseArgs, repoRoot, safeResolve, detectEol, ok, fail, validateRunId, secureDir, writeInRepo, ENV_TEMPLATE_RE, assertNotSecretInput, classifyEnvTemplate } from './lib.mjs';
 import { upsertBlock, parseBlocks } from './blocks.mjs';
 
 const args = parseArgs(process.argv.slice(2));
@@ -21,28 +21,9 @@ const fileArg = args.file && args.file !== true ? String(args.file) : '.env.exam
 if (!ENV_TEMPLATE_RE.test(fileArg.replace(/\\/g, '/'))) fail('only .env.example/.env.sample/.env.template are supported; .env is never opened');
 const { abs, rel } = safeResolve(root, fileArg);
 
-const SECRETISH = /(SECRET|TOKEN|PASSWORD|PASSWD|PASS$|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|_KEY$|DSN|SALT|SIGNING|CERT)/i;
-const PLACEHOLDER = /^(|<[^>]*>|changeme|change_me|xxx+|your[_-].*|example.*|placeholder|todo|redacted|\*+|""|'')$/i;
-
-function parse(text) {
-  const entries = [];
-  text.split(/\r?\n/).forEach((line, i) => {
-    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/);
-    if (!m) return;
-    const [, name, rawValue] = m;
-    const value = rawValue.replace(/\s+#.*$/, '').trim().replace(/^(['"])(.*)\1$/, '$2');
-    let state;
-    if (PLACEHOLDER.test(value)) state = value === '' ? 'empty' : 'placeholder';
-    else if (SECRETISH.test(name) || /:\/\/[^/\s]*:[^@\s]+@/.test(value)) state = 'possible-real-secret';
-    else state = 'non-placeholder';
-    entries.push({ name, line: i + 1, valueState: state });
-  });
-  return entries;
-}
-
 const exists = fs.existsSync(abs);
 const text = exists ? fs.readFileSync(abs, 'utf8') : '';
-const entries = parse(text);
+const entries = classifyEnvTemplate(text);
 
 if (cmd === 'keys') {
   ok({ file: rel, exists, keys: entries, possibleRealSecrets: entries.filter((e) => e.valueState === 'possible-real-secret').map((e) => e.name) });
