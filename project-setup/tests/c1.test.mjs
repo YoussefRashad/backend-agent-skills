@@ -837,21 +837,26 @@ async function schemaChecks(context, failures, check, step) {
       check(!r.threw && eq(r.value, [message(code, loc)]), `checkSecurityPolicy reports exactly [${code} message]`, r.threw ? errMsg(r.error) : r.value);
     }
   });
-  await step('2.4 schemas.mjs imports the shared reader exactly and no other relative module', async () => {
+  await step('2.4 schemas.mjs imports the shared policy reader exactly and no relative module other than the shared manifest reader (I2-1)', async () => {
     const src = readBytes(path.join(context.skillRoot, 'scripts', 'schemas.mjs'));
     const text = src ? src.toString('utf8') : '';
     check(text.includes("import { readSecurityPolicy } from '../assets/tools/security-policy.mjs';\n"), "scripts/schemas.mjs contains exactly: import { readSecurityPolicy } from '../assets/tools/security-policy.mjs';");
     const specs = [...text.matchAll(/(?:^|\n)\s*import\s[^'"\n]*?['"]([^'"]+)['"]/g), ...text.matchAll(/(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g), ...text.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g), ...text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]/g)].map((x) => x[1]);
     const relative = [...new Set(specs.filter((s) => s.startsWith('.')))];
-    check(eq(relative, ['../assets/tools/security-policy.mjs']), 'schemas.mjs imports no relative module other than the shared policy module', relative);
+    // I2-1 (docs/plans/2026-10-17-project-setup-v3-rc1-c2-implement-decisions.md): exactly two relative imports, in this order.
+    check(eq(relative, ['../assets/tools/security-policy.mjs', './ownership.mjs']), 'schemas.mjs imports exactly the shared policy module and the shared manifest reader (./ownership.mjs), in that order', relative);
   });
   await step('4.5 classification: only an Error with an own code from the 20 known codes is reported; everything else is rethrown unchanged', async () => {
     await withScratch(context, 'cls', async (dir) => {
       fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
       fs.mkdirSync(path.join(dir, 'assets', 'tools'), { recursive: true });
       fs.copyFileSync(path.join(context.skillRoot, 'scripts', 'schemas.mjs'), path.join(dir, 'scripts', 'schemas.mjs'));
+      // I2-1: schemas.mjs also imports the shared manifest reader, so the real scripts/ownership.mjs is copied too; the stub then also exports
+      // policyEntryKey and validateRepoPath (ownership.mjs imports them; this step never calls them).
+      fs.copyFileSync(path.join(context.skillRoot, 'scripts', 'ownership.mjs'), path.join(dir, 'scripts', 'ownership.mjs'));
       fs.writeFileSync(path.join(dir, 'assets', 'tools', 'security-policy.mjs'), [
-        'export let sentinel;', '', 'export function setSentinel(value) {', '  sentinel = value;', '}', '', 'export function readSecurityPolicy() {', '  throw sentinel;', '}', ''].join('\n'));
+        'export let sentinel;', '', 'export function setSentinel(value) {', '  sentinel = value;', '}', '', 'export function readSecurityPolicy() {', '  throw sentinel;', '}', '',
+        'export function policyEntryKey() {', '  throw sentinel;', '}', '', 'export function validateRepoPath() {', '  throw sentinel;', '}', ''].join('\n'));
       const schemasUrl = pathToFileURL(path.join(dir, 'scripts', 'schemas.mjs')).href;
       const stubUrl = new URL('../assets/tools/security-policy.mjs', schemasUrl).href;
       const stub = await import(stubUrl); const copied = await import(schemasUrl);

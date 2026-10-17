@@ -584,6 +584,35 @@ function makeFault(dir, rules) {
   const file = writePreload(dir, FAULT_SOURCE({ log, rules: rules.map((r) => ({ dest: destKey(r.dest), nth: r.nth || 1, action: r.action, exitCode: r.exitCode || 137 })) }));
   return { file, log, fired: () => (readText(log) || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return l; } }) };
 }
+// Filesystem fault injection (I2-6): an EACCES thrown from readdirSync, lstatSync or statSync for one path. Rules are { op, path }.
+const FSFAULT_SOURCE = (cfg) => [
+  "'use strict';",
+  "const fs = require('fs');",
+  "const path = require('path');",
+  `const CFG = ${JSON.stringify(cfg)};`,
+  "const WIN = process.platform === 'win32';",
+  "const fold = (s) => (WIN ? s.toLowerCase() : s);",
+  "function keysOf(p) { let abs; try { abs = path.resolve(String(p)); } catch (e) { return []; } const out = []; let d = path.dirname(abs); try { d = fs.realpathSync.native(d); } catch (e) { /* keep */ } out.push(fold(path.join(d, path.basename(abs)))); try { out.push(fold(fs.realpathSync.native(abs))); } catch (e) { /* absent */ } return out; }",
+  "function note(o) { try { fs.appendFileSync(CFG.log, JSON.stringify(o) + '\\n'); } catch (e) { /* ignore */ } }",
+  "function wrap(name) {",
+  "  const orig = fs[name];",
+  "  if (typeof orig !== 'function') return;",
+  "  fs[name] = function (p) {",
+  "    for (const r of CFG.rules) {",
+  "      if (r.op !== name) continue;",
+  "      const ks = keysOf(p);",
+  "      if (ks.some((k) => r.keys.includes(k))) { note({ op: name, key: ks[0] }); const e = new Error('C2 injected EACCES'); e.code = 'EACCES'; e.errno = -13; e.syscall = name.replace('Sync', ''); e.path = String(p); throw e; }",
+  "    }",
+  "    return orig.apply(this, arguments);",
+  "  };",
+  "}",
+  "for (const n of ['readdirSync', 'lstatSync', 'statSync']) wrap(n);",
+].join('\n') + '\n';
+function makeFsFault(dir, rules) {
+  const log = path.join(dir, `fsfault-${preloadSeq + 1}.log`);
+  const file = writePreload(dir, FSFAULT_SOURCE({ log, rules: rules.map((r) => ({ op: r.op, keys: keysOfPath(r.path) })) }));
+  return { file, log, fired: () => (readText(log) || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return l; } }) };
+}
 
 // Plan 7.3: a recording, failing git first on PATH. Windows: a copy of Node named git.exe, a preload that recognizes it and exits 91.
 function makeGitShim(context, dir) {
@@ -1712,6 +1741,53 @@ async function metadataOnly(context) {
           expectPrepared(check, 'M21/M14 an allow append leaves deny and heldBack as they were', a, { metadataOps: [fileOp(T_SETTINGS, f.settingsRec, { ...f.settingsRec, managed: { ...f.settingsRec.managed, 'permissions.allow': allow2 } }, [])] });
         });
       });
+      await step('D1 on managed hook lists: an append needs no path approval; replacement, removal and reordering need it, with the settings reason', async () => {
+        await withScratch(context, 'd1h', async (dir) => {
+          const f = baseFacts(v3p.root);
+          const hA = HOOK({ command: 'node a.mjs' });
+          const hB = HOOK({ command: 'node b.mjs' });
+          const hC = HOOK({ event: 'PostToolUse', matcher: 'Edit', command: 'node c.mjs' });
+          const recWith = (hooks) => ({ ...f.settingsRec, managed: { ...f.settingsRec.managed, hooks } });
+          const base = cloneBase(dir, v3p, 'base');
+          const m = readManifestFile(base);
+          putFile(manifestPath(base), jsonText({ ...m, files: sortedFiles({ ...m.files, [T_SETTINGS]: recWith([hA, hB]) }) }));
+          commitAll(context, base, 'recorded hooks');
+          const before = recWith([hA, hB]);
+          const hooksReq = (hooks) => ({ 'managed-keys.json': { [T_SETTINGS]: { hooks } } });
+          // an exact-prefix append: no path approval, one reviewed file metadata operation, and the new list is recorded in order
+          const a = cloneBase(dir, base, 'append');
+          const pa = runSpec(kit, a, 'run-c2-d1h-a', { requests: hooksReq([hA, hB, hC]) });
+          expectPrepared(check, 'D1 hooks append', pa, { metadataOps: [fileOp(T_SETTINGS, before, recWith([hA, hB, hC]), [])] });
+          if (pa.ok) {
+            commitOk(kit, check, 'D1 hooks append', pa, [{ target: T_MANIFEST }]);
+            check(eq(settingsRecordOf(a), recWith([hA, hB, hC])), 'D1 hooks append: the appended list is recorded in order', settingsRecordOf(a));
+          }
+          // the old identity records re-spelled with another key order plus an appended one are still an append (JSON values, key order ignored)
+          const respelled = [{ command: hA.command, matcher: hA.matcher, event: hA.event }, { command: hB.command, matcher: hB.matcher, event: hB.event }, hC];
+          const k = cloneBase(dir, base, 'respelled');
+          const pk = runSpec(kit, k, 'run-c2-d1h-k', { requests: hooksReq(respelled) });
+          expectPrepared(check, 'D1 hooks append with the old identity records in another key order', pk, { metadataOps: [fileOp(T_SETTINGS, before, recWith(respelled), [])] });
+          // anything but an exact-prefix append needs the path approval and carries the settings reason alone
+          const needs = [
+            ['replacing the command of an element', [hA, HOOK({ command: 'node b2.mjs' })]],
+            ['replacing the matcher of an element', [hA, HOOK({ command: hB.command, matcher: 'Edit' })]],
+            ['replacing the event of an element', [hA, HOOK({ command: hB.command, event: 'PostToolUse' })]],
+            ['reordering two entries', [hB, hA]],
+            ['removing the last entry', [hA]],
+            ['removing the first entry and appending one', [hB, hC]],
+            ['an explicit empty array (a replacement, not an absence)', []],
+          ];
+          for (const [label, hooks] of needs) {
+            const r2 = cloneBase(dir, base, `n-${label.replace(/\W+/g, '-')}`);
+            const id = 'run-c2-d1h-b';
+            const q = runSpec(kit, r2, id, { requests: hooksReq(hooks) });
+            expectP(check, `D1 hooks ${label} needs approval`, q.prep, [{ target: T_SETTINGS, code: 'APPLY_APPROVAL_REQUIRED', error: metaApprovalError(T_SETTINGS) }]);
+            check(!exists(runFile(r2, id, 'plan.json')), `D1 hooks ${label}: a rejected prepare writes no plan`);
+            const ok = kit.prepare(r2, id, { approve: [T_SETTINGS] });
+            check(ok.code === 0 && ok.json && ok.json.ok === true && eq(ok.json.metadataOps, [fileOp(T_SETTINGS, before, recWith(hooks), [R_SETTINGS])]), `D1 hooks ${label}: with approval, reason "${R_SETTINGS}" only`, ok.json && ok.json.metadataOps);
+          }
+        });
+      });
       await step('C2-P3-3: a recorded policy managed-schema change is an ownership change and needs approval; an append does not', async () => {
         await withScratch(context, 'p33', async (dir) => {
           const f = baseFacts(v3p.root);
@@ -1808,6 +1884,33 @@ async function metadataOnly(context) {
           }
         });
       });
+      if (v3p) {
+        await step('C2-P3-2 for the policy: keys ownership with complete managed metadata on an unchanged unrecorded .ai/security-paths.json is an approved ownership change (before null)', async () => {
+          await withScratch(context, 'p32p', async (dir) => {
+            const f = baseFacts(v3p.root);
+            const policyBytes = readBytes(projPath(v3p.root, T_POLICY));
+            const root = cloneBase(dir, plain, 'p');
+            putFile(projPath(root, T_POLICY), policyBytes);
+            commitAll(context, root, 'installed policy, no manifest');
+            const id = 'run-c2-p32p';
+            const reqs = { 'ownership.json': { [T_POLICY]: 'keys' }, 'managed-keys.json': { [T_POLICY]: f.policyManaged } };
+            const rec = { ownership: 'keys', managed: f.policyManaged };
+            const refused = runSpec(kit, root, id, { drafts: { [T_POLICY]: policyBytes }, requests: reqs });
+            expectP(check, 'C2-P3-2 policy, no approval', refused.prep, [{ target: T_POLICY, code: 'APPLY_APPROVAL_REQUIRED', error: metaApprovalError(T_POLICY) }]);
+            check(!exists(runFile(root, id, 'plan.json')), 'C2-P3-2 policy: a rejected prepare writes no plan');
+            const p = kit.prepare(root, id, { approve: [T_POLICY] });
+            const ready = { ok: p.code === 0 && p.json && p.json.ok === true, root, id, prep: p, plan: readPlan(root, id), sha: p.json && p.json.planSha256 };
+            expectPrepared(check, 'C2-P3-2 policy', ready, { changed: 0, unchanged: 1, metadataOps: [fileOp(T_POLICY, null, rec, [R_POLICY])] });
+            if (!ready.ok) return;
+            check(ready.plan.manifestAfter && eq(ready.plan.manifestAfter.files[T_POLICY], rec), 'C2-P3-2 policy: manifestAfter carries the complete record', ready.plan.manifestAfter && ready.plan.manifestAfter.files);
+            const j = commitOk(kit, check, 'C2-P3-2 policy', ready, [{ target: T_MANIFEST, created: true }]);
+            check(j && eq(j.entries.map((e) => e.target), [T_MANIFEST]) && j.entries[0].existed === false, 'C2-P3-2 policy: the manifest is created, nothing else written', j && j.entries);
+            const man = readManifestFile(root);
+            check(man && man.schema === 3 && eq(Object.keys(man.files), [T_POLICY]) && eq(man.files[T_POLICY], rec), 'C2-P3-2 policy: the only record is the requested one', man && man.files);
+            check(Buffer.compare(readBytes(projPath(root, T_POLICY)), policyBytes) === 0, 'C2-P3-2 policy: the policy bytes are unchanged');
+          });
+        });
+      }
       await step('C2-P3-1: an omission change always needs approval, also on a newly written target with no previous record', async () => {
         await withScratch(context, 'p31', async (dir) => {
           const root = cloneBase(dir, plain, 'p');
@@ -2357,6 +2460,118 @@ async function inputBinding(context) {
         expectF(check, 'M25', r, { code: 'APPLY_DRIFT', exit: 4, error: MSG.DRIFT, extra: ['drift'] });
         check(eq(r.json && r.json.drift, [dr(DOC_DB, DRIFT_WHAT.SOURCE)]), 'M25: the drift row names the unchanged draft', r.json && r.json.drift);
         check(!exists(runFile(c1, 'run-c2-noop1', 'journal.json')) && Buffer.compare(lockBefore, readBytes(lockOwnerPath(c1))) === 0, 'M25: no journal and no heartbeat');
+      });
+      // I2-4 and I2-5 (docs/plans/2026-10-17-project-setup-v3-rc1-c2-implement-decisions.md): a prepared plan is validated before anything it
+      // names is hashed, read, heartbeated or journaled. Each case rewrites plan.json (the approved hash is then the hash of the rewritten file),
+      // and runs diff and commit in separate copies of the prepared project.
+      const tamper = (label, mutate, watch, extra = {}) => {
+        for (const cmdName of ['diff', 'commit']) {
+          const r = cloneTree(scen.root, path.join(dir, `tp${++counter.n}`));
+          if (extra.before) extra.before(r);
+          const plan = readPlan(r, id);
+          mutate(plan, r);
+          putFile(runFile(r, id, 'plan.json'), jsonText(plan));
+          const newSha = planShaOf(r, id);
+          const snap = projectSnapshot(r);
+          const lockBytes = readBytes(lockOwnerPath(r));
+          const guard = makeGuard(dir, watch(r), 'record');
+          const res = cmdName === 'diff' ? kit.diff(r, id, { preload: guard.file }) : kit.commit(r, id, newSha, { preload: guard.file });
+          expectF(check, `${label} (${cmdName})`, res, { code: 'APPLY_PLAN_INVALID', exit: 1, error: MSG.PLAN_INVALID });
+          check(!exists(runFile(r, id, 'journal.json')), `${label} (${cmdName}): no journal`);
+          check(projectSnapshot(r) === snap && Buffer.compare(lockBytes, readBytes(lockOwnerPath(r))) === 0, `${label} (${cmdName}): nothing is written and the lock bytes are unchanged (no heartbeat)`);
+          check(guard.hits().length === 0, `${label} (${cmdName}): no watched body was read`, guard.hits().slice(0, 3));
+          if (extra.marker) check(!res.stdout.includes(extra.marker), `${label} (${cmdName}): the marker value is never printed`);
+        }
+      };
+      const bodiesOf = (r) => [DOC_API, DOC_DB, DOC_OBS].flatMap((t) => [tpath(r, t), dpath(r, t)]);
+      const byTarget = (a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0);
+      await step('I2-4 a prepared plan whose only change is an extra inputs entry for a secret file is APPLY_PLAN_INVALID (exit 1) in diff and commit; the file is never read', async () => {
+        // control: the same rewrite of plan.json that changes nothing is not refused, so the refusals below come from the rule under test and not
+        // from the rewrite. (An extra entry for an ordinary documentation path is no longer a control: I2-9 replaced that clause of I2-4 and
+        // refuses it, see the I2-9 step.)
+        for (const [label, mutate] of [
+          ['a plan rewritten through the same serializer without any change', () => {}],
+        ]) {
+          const ctlD = cloneTree(scen.root, path.join(dir, `ct${++counter.n}`));
+          const planD = readPlan(ctlD, id); mutate(planD); putFile(runFile(ctlD, id, 'plan.json'), jsonText(planD));
+          const rd = kit.diff(ctlD, id);
+          check(rd.code === 0 && rd.json && rd.json.ok === true && rd.json.prepared === true, `control: ${label}: diff accepts it`, rd.stdout.slice(0, 300));
+          const ctlC = cloneTree(scen.root, path.join(dir, `ct${++counter.n}`));
+          const planC = readPlan(ctlC, id); mutate(planC); putFile(runFile(ctlC, id, 'plan.json'), jsonText(planC));
+          const rc = kit.commit(ctlC, id, planShaOf(ctlC, id));
+          check(rc.code === 0 && rc.json && rc.json.ok === true && rc.json.committed === true, `control: ${label}: commit accepts it`, rc.stdout.slice(0, 300));
+        }
+        const marker = 'I24-MARKER-VALUE-5c1e90';
+        const envBytes = Buffer.from(`SECRET_TOKEN=${marker}\n`);
+        tamper('an extra .env inputs entry', (plan) => { plan.inputs = [...plan.inputs, { target: '.env', preRawSha: sha(envBytes) }].sort(byTarget); },
+          (r) => [tpath(r, '.env'), ...bodiesOf(r)], { before: (r) => putFile(tpath(r, '.env'), envBytes), marker });
+        // the other refusal classes of the declared-input rules (4.1): outside the write scope, under the run area, not structurally valid
+        for (const [label, target] of [['an input outside the write scope', 'src/a.ts'], ['an input under .ai/.run', `.ai/.run/${id}/ownership.json`], ['an input under .ai/.setup.lock', '.ai/.setup.lock/owner.json'], ['a non-canonical input path', 'docs//x.md']]) {
+          tamper(label, (plan) => { plan.inputs = [...plan.inputs, { target, preRawSha: null }].sort(byTarget); }, (r) => bodiesOf(r));
+        }
+      });
+      await step('I2-5 a prepared plan is APPLY_PLAN_INVALID (exit 1) when an embedded request value fails its reader, inputs hold a duplicate, a target has no inputs entry, or a content op disagrees with its inputs entry', async () => {
+        const meta = (key, value) => (plan) => { plan.metadata[key] = value; };
+        tamper('metadata.managedKeys set to 7', meta('managedKeys', 7), bodiesOf);
+        tamper('metadata.ownership set to a string', meta('ownership', 'x'), bodiesOf);
+        tamper('metadata.omissions set to an array', meta('omissions', []), bodiesOf);
+        tamper('metadata.manifestMetadata set to a number', meta('manifestMetadata', 5), bodiesOf);
+        tamper('metadata.transactionInputs set to an object', meta('transactionInputs', {}), bodiesOf);
+        tamper('a duplicate inputs target', (plan) => { plan.inputs = [plan.inputs[0], ...plan.inputs]; }, bodiesOf);
+        tamper('a changed content-op target without an inputs entry', (plan) => { plan.inputs = plan.inputs.filter((i) => i.target !== DOC_OBS); }, bodiesOf);
+        tamper('an unchanged content-op target without an inputs entry', (plan) => { plan.inputs = plan.inputs.filter((i) => i.target !== DOC_DB); }, bodiesOf);
+        tamper('a file-metadata-op target without an inputs entry', (plan) => { plan.inputs = plan.inputs.filter((i) => i.target !== T_SETTINGS); }, bodiesOf);
+        tamper('a content op whose preRawSha differs from its inputs entry', (plan) => { plan.ops.find((o) => o.target === DOC_API).preRawSha = H('f'); }, bodiesOf);
+      });
+      // I2-8 and I2-9 (the same decisions file): plan.json lists what prepare bound, and loadPlan holds it to that. A file metadata op targets a
+      // content op's path or a control file; the inputs are exactly the content targets, the file-metadata targets, the installed policy and the
+      // declared inputs (except the manifest). Each case starts from the genuine prepared plan with work and changes only what it names, so the
+      // rest of the plan stays valid and only the rule under test can refuse it.
+      const addInput = (plan, target, preRawSha) => { plan.inputs = [...plan.inputs, { target, preRawSha }].sort(byTarget); };
+      const dropInput = (plan, target) => { plan.inputs = plan.inputs.filter((i) => i.target !== target); };
+      // A well-formed forged file metadata op: the shape of the genuine one (before null, a complete record in after), no approval needed.
+      const forgeFileOp = (plan, target) => {
+        const genuine = plan.metadataOps.find((m) => m.kind === 'file');
+        const files = [...plan.metadataOps.filter((m) => m.kind === 'file'), { kind: 'file', target, before: null, after: clone(genuine.after), requiresApproval: false, reasons: [] }].sort(byTarget);
+        plan.metadataOps = [...files, ...plan.metadataOps.filter((m) => m.kind !== 'file')];
+      };
+      await step('I2-8 and I2-9 control: the genuine prepared plan (a control-file metadata op, declared inputs, the installed policy) passes diff and commit', async () => {
+        const plan = scen.p.plan;
+        const ofKind = (kind) => plan.metadataOps.filter((m) => m.kind === kind).map((m) => m.target);
+        check(eq(ofKind('file'), [T_SETTINGS]) && !plan.ops.some((o) => o.target === T_SETTINGS), 'premise: the only file metadata op is the control file .claude/settings.json, which is not a content target', plan.metadataOps.map((m) => m.target));
+        check(eq(plan.metadata.transactionInputs, [IN_CONSUMER, IN_ABSENT, DOC_API]), 'premise: the plan declares a consumer, an absent input and a content target (declared through transaction-inputs.json at prepare)', plan.metadata.transactionInputs);
+        check([IN_CONSUMER, IN_ABSENT, T_POLICY].every((t) => plan.inputs.some((i) => i.target === t) && !plan.ops.some((o) => o.target === t) && !plan.metadataOps.some((m) => m.target === t)), 'premise: the declared inputs and the installed policy are bound by inputs entries alone (no content or metadata role)', plan.inputs.map((i) => i.target));
+        const d = cloneTree(scen.root, path.join(dir, `ct${++counter.n}`));
+        const rd = kit.diff(d, id);
+        check(rd.code === 0 && rd.json && rd.json.ok === true && rd.json.prepared === true, 'diff accepts the genuine plan', rd.stdout.slice(0, 300));
+        const c = cloneTree(scen.root, path.join(dir, `ct${++counter.n}`));
+        const rc = kit.commit(c, id, scen.p.sha);
+        check(rc.code === 0 && rc.json && rc.json.ok === true && rc.json.committed === true, 'commit accepts the genuine plan', rc.stdout.slice(0, 300));
+      });
+      await step('I2-8 a forged file metadata op for a path that is neither a content target nor a control file is APPLY_PLAN_INVALID (exit 1) in diff and commit, even with a matching inputs entry; the file is never read', async () => {
+        const marker = 'I28-MARKER-VALUE-3f7a62';
+        const envBytes = Buffer.from(`SECRET_TOKEN=${marker}\n`);
+        tamper('a forged file metadata op for .env with a matching inputs entry', (plan) => { forgeFileOp(plan, '.env'); addInput(plan, '.env', sha(envBytes)); },
+          (r) => [tpath(r, '.env'), ...bodiesOf(r)], { before: (r) => putFile(tpath(r, '.env'), envBytes), marker });
+        const forgedDoc = 'docs/forged.md';
+        const forgedBytes = Buffer.from('# forged\n');
+        tamper('a forged file metadata op for an in-scope documentation path (not a content target, not a control file) with a matching inputs entry', (plan) => { forgeFileOp(plan, forgedDoc); addInput(plan, forgedDoc, sha(forgedBytes)); },
+          (r) => [tpath(r, forgedDoc), ...bodiesOf(r)], { before: (r) => putFile(tpath(r, forgedDoc), forgedBytes) });
+      });
+      await step('I2-9 a prepared plan whose inputs differ from the set prepare binds, by a missing declared-input or policy binding or by an extra entry, is APPLY_PLAN_INVALID (exit 1) in diff and commit; nothing is hashed', async () => {
+        const extraDoc = 'docs/extra.md';
+        const extraBytes = Buffer.from('# extra\n');
+        // a declared transaction input (also bound when absent) and the installed policy must each keep their inputs entry
+        tamper('a declared existing input without its inputs entry', (plan) => dropInput(plan, IN_CONSUMER), (r) => [tpath(r, IN_CONSUMER), ...bodiesOf(r)]);
+        tamper('a declared absent input without its inputs entry', (plan) => dropInput(plan, IN_ABSENT), (r) => [tpath(r, IN_ABSENT), ...bodiesOf(r)]);
+        // the loader reads the installed policy to build the refusal set, so only the bodies the review would hash are watched here
+        tamper('the installed policy .ai/security-paths.json without its inputs entry', (plan) => dropInput(plan, T_POLICY), bodiesOf);
+        // an in-scope documentation path that nothing declares, bound as absent or by its true hash
+        tamper('an extra inputs entry for an undeclared in-scope documentation path (absent)', (plan) => addInput(plan, extraDoc, null), (r) => [tpath(r, extraDoc), ...bodiesOf(r)]);
+        tamper('an extra inputs entry for an undeclared in-scope documentation path (present, true hash)', (plan) => addInput(plan, extraDoc, sha(extraBytes)),
+          (r) => [tpath(r, extraDoc), ...bodiesOf(r)], { before: (r) => putFile(tpath(r, extraDoc), extraBytes) });
+        // the set differs in both directions at once while the number of entries is unchanged
+        tamper('a declared input swapped for an undeclared in-scope documentation path (same number of entries)', (plan) => { dropInput(plan, IN_CONSUMER); addInput(plan, extraDoc, null); }, (r) => [tpath(r, IN_CONSUMER), tpath(r, extraDoc), ...bodiesOf(r)]);
       });
     });
   });
@@ -3364,6 +3579,42 @@ async function diffSafety(context) {
           },
         });
       });
+      // I2-2 (docs/plans/2026-10-17-project-setup-v3-rc1-c2-implement-decisions.md): a prepared review takes its bindings from the plan itself and
+      // knows no approved hash, so it must apply the refusal checks to every plan op before reading any target or draft body. Here plan.json is
+      // rewritten with an extra op for .env whose source inventory entry, source hash, preRawSha and inputs entry are all consistent: only the
+      // refusal check can stop it.
+      // PLAN-GAP: .env is outside the existing write scope, so the expected APPLY_SECRET_TARGET (not APPLY_WRITE_SCOPE) needs the refusal
+      // check to run before the scope check in the prepared review, which is the order I2-2 lists; 6.2 lists scope first for the unprepared one.
+      await step('I2-2 a prepared review applies the refusal checks to every plan op before reading any body (tampered plan.json with a consistent .env op)', async () => {
+        const root = cloneBase(dir, plain, `row${++n}`);
+        const id = 'run-c2-saf1';
+        if (!kit.begin(root, id)) return;
+        putDraft(root, id, 'docs/ok.md', '# ok\n');
+        const p = kit.prepare(root, id);
+        check(p.code === 0 && p.json && p.json.ok === true, 'a valid prepare comes first', p.stdout.slice(0, 300));
+        if (!(p.json && p.json.ok === true)) return;
+        const marker = 'I22-MARKER-VALUE-9f3a71';
+        const envPath = projPath(root, '.env');
+        const envBytes = Buffer.from(`SECRET_TOKEN=${marker}\n`);
+        putFile(envPath, envBytes);
+        const draftBytes = Buffer.from('DRAFT-ENV-CONTENT=1\n');
+        putDraft(root, id, '.env', draftBytes);
+        const plan = readPlan(root, id);
+        plan.ops = [{
+          target: '.env', origin: 'draft', source: 'drafts/.env', sourceSha256: sha(draftBytes), action: 'modify', preRawSha: sha(envBytes), eol: '\n',
+          linesBefore: null, linesAfter: 1, uncommittedUserChanges: false, userContentChange: false, userContentReasons: [],
+        }, ...plan.ops];
+        plan.sourceInventory = [{ target: '.env', origin: 'draft' }, ...plan.sourceInventory];
+        plan.inputs = [...plan.inputs, { target: '.env', preRawSha: sha(envBytes) }].sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
+        putFile(runFile(root, id, 'plan.json'), jsonText(plan));
+        const before = projectSnapshot(root);
+        const guard = makeGuard(dir, [envPath], 'record');
+        const r = kit.diff(root, id, { preload: guard.file });
+        expectF(check, 'I2-2 prepared review of a tampered plan', r, { code: 'APPLY_SECRET_TARGET', exit: 3, error: MSG.SECRET_DIFF('.env') });
+        check(!r.stdout.includes(marker) && !r.stdout.includes('DRAFT-ENV-CONTENT') && !r.stdout.includes('"files"'), 'I2-2: nothing of the file or the draft, and no partial review, is printed', r.stdout.slice(0, 300));
+        check(guard.hits().length === 0, 'I2-2: the .env file was never read', guard.hits().slice(0, 3));
+        check(projectSnapshot(root) === before, 'I2-2: the project, the run and the lock are unchanged');
+      });
       await step('7.9 request paths and containers: bad metadata target and declared-input paths, invalid JSON, wrong container, wrong typed values', async () => {
         const pathP = (p) => (check2, label, r) => {
           check2(r.code === 3 && r.stderr === '' && r.json !== null && fmtOk(r), `${label}: exit 3, empty stderr, two-space JSON`, { code: r.code, out: r.stdout.slice(0, 300) });
@@ -3444,6 +3695,74 @@ async function diffSafety(context) {
           // PLAN-GAP: the entry target for an unreadable declared input is not pinned; the code, the exact message and the envelope are.
           const j = r.json || {};
           check(r.code === 3 && r.stderr === '' && fmtOk(r) && j.ok === false && j.code === 'APPLY_PLAN_REJECTED' && j.error === MSG.PLAN_REJECTED && Array.isArray(j.errors) && j.errors.length === 1 && j.errors[0].code === 'APPLY_INPUT_IO' && j.errors[0].error === 'cannot read transaction input: docs/consumer.md' && typeof j.errors[0].target === 'string', 'an unreadable declared input: one APPLY_INPUT_IO entry with the exact message', { code: r.code, out: r.stdout.slice(0, 300) });
+        }
+      });
+      // I2-6 (docs/plans/2026-10-17-project-setup-v3-rc1-c2-implement-decisions.md): a filesystem failure other than an unsafe path while
+      // enumerating the run's drafts, or while stat-ing a target, is reported like an unreadable body, with an empty stderr and nothing written.
+      // PLAN-GAP: I2-6 pins the project-relative path but not which path each case prints; the checks require a relative POSIX path that ends in
+      // the target for the stat failure and one inside the run directory for the enumeration failure.
+      // PLAN-GAP: the unprepared review is the only review exercised for the target stat failure; I2-7 leaves the prepared review of an unreadable
+      // bound target out as a narrow subcase.
+      await step('I2-6 an injected EACCES from readdirSync on the drafts directory and from lstatSync on a target: APPLY_DIFF_IO (diff, exit 2), APPLY_INPUT_IO (prepare entry, exit 3; commit, exit 2), empty stderr, nothing written', async () => {
+        const ID = 'run-c2-saf1';
+        const relIo = (prefix, tail) => new RegExp(`^${prefix}: (?!/)[^\\\\:]*${tail}$`);
+        const clean = (label, r) => check(!/EACCES|injected|errno|permission denied/i.test(r.stdout), `${label}: no native or injected error text is printed`, r.stdout.slice(0, 300));
+        const cases = [
+          {
+            label: 'readdirSync on the drafts directory', op: 'readdirSync', tail: `\\.ai/\\.run/${ID}(?:/[^\\\\:]*)?`, approve: [], preparedReview: true,
+            setup: (root) => putDraft(root, ID, 'docs/ok.md', '# ok\n'), failing: (root) => path.join(runDirOf(root, ID), 'drafts'),
+          },
+          {
+            label: 'lstatSync on a target', op: 'lstatSync', tail: 'docs/a\\.md', approve: ['docs/a.md'], preparedReview: false,
+            setup: (root) => { putFile(projPath(root, 'docs/a.md'), '# old\n'); putDraft(root, ID, 'docs/a.md', '# new\n'); }, failing: (root) => projPath(root, 'docs/a.md'),
+          },
+        ];
+        for (const c of cases) {
+          const root = cloneBase(dir, plain, `row${++n}`);
+          if (!kit.begin(root, ID)) continue;
+          c.setup(root);
+          const mk = () => makeFsFault(dir, [{ op: c.op, path: c.failing(root) }]);
+          const L = c.label;
+          // the unprepared review
+          const snap0 = projectSnapshot(root);
+          const f1 = mk();
+          const rd = kit.diff(root, ID, { preload: f1.file });
+          expectF(check, `${L}: the unprepared review`, rd, { code: 'APPLY_DIFF_IO', exit: 2, error: relIo('cannot read draft review input', c.tail) });
+          clean(`${L}: the unprepared review`, rd);
+          check(f1.fired().length > 0, `${L}: the injected fault fired in the unprepared review`, f1.fired());
+          check(!rd.stdout.includes('"files"') && projectSnapshot(root) === snap0, `${L}: the unprepared review prints no partial review and changes nothing`);
+          // prepare
+          const f2 = mk();
+          const rp = kit.prepare(root, ID, { preload: f2.file, approve: c.approve });
+          const j = rp.json || {};
+          check(rp.code === 3 && rp.stderr === '' && fmtOk(rp) && j.ok === false && j.code === 'APPLY_PLAN_REJECTED' && j.error === MSG.PLAN_REJECTED && Array.isArray(j.errors) && j.errors.length === 1 && j.errors[0].code === 'APPLY_INPUT_IO' && typeof j.errors[0].error === 'string' && relIo('cannot read transaction input', c.tail).test(j.errors[0].error) && typeof j.errors[0].target === 'string', `${L}: prepare rejects with one APPLY_INPUT_IO entry (exit 3, empty stderr)`, { code: rp.code, out: rp.stdout.slice(0, 400), err: rp.stderr.slice(0, 200) });
+          clean(`${L}: prepare`, rp);
+          check(f2.fired().length > 0, `${L}: the injected fault fired in prepare`, f2.fired());
+          check(!exists(runFile(root, ID, 'plan.json')) && projectSnapshot(root) === snap0, `${L}: a rejected prepare writes no plan and changes nothing`);
+          // a prepared run, then the commit (and, for the enumeration, the prepared review)
+          const pp = kit.prepare(root, ID, { approve: c.approve });
+          check(pp.code === 0 && pp.json && pp.json.ok === true, `${L}: the run prepares without the fault`, pp.stdout.slice(0, 300));
+          if (!(pp.json && pp.json.ok === true)) continue;
+          const planSha = planShaOf(root, ID);
+          const snap1 = projectSnapshot(root);
+          if (c.preparedReview) {
+            const f3 = mk();
+            const rd2 = kit.diff(root, ID, { preload: f3.file });
+            expectF(check, `${L}: the prepared review`, rd2, { code: 'APPLY_DIFF_IO', exit: 2, error: relIo('cannot read draft review input', c.tail) });
+            clean(`${L}: the prepared review`, rd2);
+            check(f3.fired().length > 0, `${L}: the injected fault fired in the prepared review`, f3.fired());
+            check(!rd2.stdout.includes('"files"') && projectSnapshot(root) === snap1, `${L}: the prepared review prints no partial review and changes nothing`);
+          }
+          const manifestText = readText(manifestPath(root));
+          const treeBefore = treeWithout(root);
+          const f4 = mk();
+          const rc = kit.commit(root, ID, planSha, { preload: f4.file });
+          expectF(check, `${L}: commit`, rc, { code: 'APPLY_INPUT_IO', exit: 2, error: relIo('cannot read transaction input', c.tail) });
+          clean(`${L}: commit`, rc);
+          check(f4.fired().length > 0, `${L}: the injected fault fired in commit`, f4.fired());
+          check(!exists(runFile(root, ID, 'journal.json')), `${L}: commit writes no journal`);
+          check(treeWithout(root) === treeBefore && readText(manifestPath(root)) === manifestText, `${L}: commit leaves every project file and the manifest unchanged`);
+          check(planShaOf(root, ID) === planSha, `${L}: the prepared plan is unchanged`);
         }
       });
     });
