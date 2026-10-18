@@ -48,7 +48,7 @@ import {
 } from './lib.mjs';
 import { blockHashes, outsideContent } from './blocks.mjs';
 import { readManagedMetadata, readManifest, readOmissions } from './ownership.mjs';
-import { parseSecurityPolicy, validateRepoPath } from '../assets/tools/security-policy.mjs';
+import { matchesPolicyPath, parseSecurityPolicy, validateRepoPath } from '../assets/tools/security-policy.mjs';
 import { renderSecurityControls } from './render-permissions.mjs';
 import { mergeManagedDenies } from './merge-claude-settings.mjs';
 import { checkSecurityToolUnit, classifySecurityMigration, readRuntimeUnits, resolveSecurityMigration } from './migrate-security-paths.mjs';
@@ -667,19 +667,52 @@ function targetExists(rel) {
   try { fs.lstatSync(abs); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw Object.assign(e, { ioPath: rel }); }
 }
 
-/** The trusted runtime-unit catalog with its source bytes, by target (skill files are trusted, not transaction-bound). */
+/**
+ * The trusted runtime-unit catalog with its source bytes, by target (skill files are trusted, not transaction-bound).
+ * `order` keeps the catalog file position for C4's complete-unit check (C4 plan 3.10: first offender in file order).
+ */
 let catalogCache = null;
 function loadCatalog() {
   if (catalogCache) return catalogCache;
   const bad = () => c3Fail(CATALOG_REL, 'TOOL_CATALOG', 'TOOL_CATALOG: invalid runtime unit catalog');
   let units;
   try { units = readRuntimeUnits(JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'data', 'runtime-units.json'), 'utf8'))).units; } catch { throw bad(); }
-  catalogCache = units.map((u) => {
+  catalogCache = units.map((u, order) => {
     let src;
     try { src = fs.readFileSync(path.join(SKILL_DIR, ...u.source.split('/'))); } catch { throw bad(); }
-    return { ...u, src };
+    return { ...u, src, order };
   }).sort(byTarget);
   return catalogCache;
+}
+
+/**
+ * C4 plan 3.10, the maintainer-authorized extension of C3's gate: in EVERY plan, ordinary or migration, that creates or
+ * modifies a catalog runtime target (or a C1 alias of one), every catalog member must end equal to its CURRENT trusted
+ * source by C3's normalized hash (C4-P3-5). Without it an ordinary plan could downgrade the reader of a schema-2 project.
+ * Members in catalog file order. An alias op must itself be trusted and never stands in for its canonical member. The
+ * canonical candidate is its op (an unchanged op is judged by its installed bytes, I3-2), else an installed target with
+ * a bound role: the role is checked first and a protected target is never read (I3-3). Labels, claimed hashes and plan
+ * hashes are never consulted. File and hash operations only (Q1: no Git). Throws the c3 TOOL_UNIT_UNREVIEWED refusal.
+ *   draftOf(op), curOf(op)  the bound draft and installed bytes        hasInput(t)  t has a bound input role
+ */
+function checkCompleteUnit(ops, { draftOf, curOf, hasInput, isSecret }) {
+  if (!ops.length) return;
+  const units = [...loadCatalog()].sort((a, b) => a.order - b.order);
+  const matchers = units.map((u) => {
+    const policy = { schema: 2, patterns: [{ anchor: 'root', glob: u.target }], projectPatterns: [] };
+    try { matchesPolicyPath(u.target, policy); } catch { throw c3Fail(CATALOG_REL, 'TOOL_CATALOG', 'TOOL_CATALOG: invalid runtime unit catalog'); }
+    return (t) => matchesPolicyPath(t, policy);
+  });
+  const unitOps = units.map((u, i) => ops.filter((o) => matchers[i](o.target)));
+  if (!unitOps.some((list) => list.some((o) => o.action !== 'unchanged'))) return;
+  const trusted = (u, buf) => buf !== null && normalizedHash(buf) === normalizedHash(u.src);
+  units.forEach((u, i) => {
+    const refuse = () => c3Fail(u.target, 'TOOL_UNIT_UNREVIEWED', `TOOL_UNIT_UNREVIEWED: reviewed tool bytes required: ${u.target}`);
+    for (const o of unitOps[i]) if (o.target !== u.target && !trusted(u, draftOf(o))) throw refuse();
+    const op = unitOps[i].find((o) => o.target === u.target);
+    if (op) { if (!trusted(u, op.action === 'unchanged' ? curOf(op) : draftOf(op))) throw refuse(); return; }
+    if (!hasInput(u.target) || isSecret(u.target) || !trusted(u, projectBytes(u.target))) throw refuse();
+  });
 }
 
 /**
@@ -921,13 +954,15 @@ function analyze(mode, approvals = new Set()) {
     try {
       const dec = readRunFile(DECISIONS);
       if (dec.io) throw c3Fail(DECISIONS, 'APPLY_INPUT_IO', `cannot read transaction input: ${dec.io}`, { ioPath: dec.io });
+      const declaredSet = new Set(declared);
       if (dec.buf === null) {
         if (needsMigrationWorkflow(ops, (o) => o.draft)) throw c3Fail(POLICY_REL, 'MIGRATION_REQUIRED', MIGRATION_REQUIRED);
       } else {
-        const declaredSet = new Set(declared);
         const evidence = securityEvidence({ decisionsBuf: dec.buf, ops, data: reqData, prior: priorState.manifest, hasInput: (t) => declaredSet.has(t), isSecret, prepared: false });
         security = { decisionsSha256: sha256(dec.buf), evidence };
       }
+      // C4 plan 3.10 step 4: after C3's checks, before approvals and any write-producing prepare work.
+      checkCompleteUnit(ops, { draftOf: (o) => o.draft, curOf: (o) => o.cur, hasInput: (t) => declaredSet.has(t), isSecret });
       if (mode === 'prepare' && ops.length) ordered = runtimeOrder(ops, loadCatalog());
     } catch (e) {
       if (!e || !e.c3) throw e;
@@ -1147,7 +1182,9 @@ function preparedReview(planBuf) {
     if (r.io || r.buf === null) failCode('APPLY_DIFF_IO', `cannot read draft review input: ${RUN_REL}/${o.source}`, 2);
     return { ...o, cur, draft: r.buf };
   });
-  const review = { prepared: true, planSha256: sha256(planBuf), ...renderReview(ops), metadataOps: plan.metadataOps, metadataRequests: null };
+  // C4 plan 3.10: the C3 evidence, then the complete-unit check, both before any printable review text is built.
+  const inputs = new Set(plan.inputs.map((i) => i.target));
+  let security = null;
   if (plan.security) {
     // C3 plan 3.8: the evidence is rebuilt from the bound run and project inputs and the CURRENT trusted skill files,
     // never copied from plan.json; a target without a bound role is never read. Prepared review writes nothing.
@@ -1162,15 +1199,20 @@ function preparedReview(planBuf) {
     }
     const prior = loadPriorManifest();
     if (prior.io) diffIo(prior.io);
-    const inputs = new Set(plan.inputs.map((i) => i.target));
     try {
-      review.security = securityEvidence({ decisionsBuf: dec.buf, ops, data, prior: prior.manifest || null, hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret, prepared: true });
+      security = securityEvidence({ decisionsBuf: dec.buf, ops, data, prior: prior.manifest || null, hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret, prepared: true });
     } catch (e) {
       if (!e || !e.c3) throw e;
       failCode(e.c3.code, e.c3.error, 3, { target: e.c3.target });
     }
   }
-  return review;
+  try {
+    checkCompleteUnit(ops, { draftOf: (o) => o.draft, curOf: (o) => o.cur, hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret });
+  } catch (e) {
+    if (!e || !e.c3) throw e;
+    failCode(e.c3.code, e.c3.error, 3, { target: e.c3.target });
+  }
+  return { prepared: true, planSha256: sha256(planBuf), ...renderReview(ops), metadataOps: plan.metadataOps, metadataRequests: null, ...(security ? { security } : {}) };
 }
 
 /** Unprepared review: the same checks as prepare, without approvals; the first refusal, in target order, is reported. */
@@ -1362,6 +1404,9 @@ else if (cmd === 'commit') {
     };
     if (!plan.security && needsMigrationWorkflow(plan.ops, draftOf)) failCode('MIGRATION_REQUIRED', MIGRATION_REQUIRED, 3, { target: POLICY_REL });
     if (plan.security) commitToolUnit(plan, draftOf);
+    // C4 plan 3.10: current trusted sources against the bound candidates, every plan, never cached from prepare.
+    const inputs = new Set(plan.inputs.map((i) => i.target));
+    checkCompleteUnit(plan.ops, { draftOf, curOf: (o) => projectBytes(o.target), hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret });
     verifyManifest(plan, draftOf);
   } catch (e) {
     if (e && e.c3) failCode(e.c3.code, e.c3.error, 3, { target: e.c3.target });

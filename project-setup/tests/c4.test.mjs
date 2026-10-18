@@ -1956,7 +1956,11 @@ async function isolation(context) {
     await step('the installed entrypoint executes through a supported alternate path (C4-P3-4): a junction on Windows, a directory symlink elsewhere', async () => {
       if (!proj) return;
       const link = path.join(scratchDir(context, 'link'), 'project-link');
-      try { fs.symlinkSync(fx.root, link, WIN ? 'junction' : 'dir'); } catch { return; } // not exercised when links cannot be created
+      // I4-3: a junction (no privilege needed) or a directory symlink that cannot be created is a failure, never a silent skip: the step never passes without running the launch
+      let linked = true;
+      try { fs.symlinkSync(fx.root, link, WIN ? 'junction' : 'dir'); } catch (e) { linked = false; check(false, `cannot create the ${WIN ? 'junction' : 'directory symlink'} for the alternate-path launch (C4-P3-4)`, errMsg(e)); }
+      if (!linked) return;
+      check(exists(path.join(link, '.ai', 'tools', 'git-safe.mjs')), 'premise: the installed entrypoint is reachable through the link spelling');
       const head = rev(fx, 'c4-head');
       const r = execNode(context, { cwd: link, script: path.join(link, '.ai', 'tools', 'git-safe.mjs'), args: ['cat', head, '--', 'safe.txt'] });
       check(r.dead === null && r.code === 0 && r.stdout === 'needle\n' && r.stderr === '', 'through the link spelling the CLI prints the committed bytes (never an empty successful no-op)', { code: r.code, out: r.stdout.slice(0, 80), err: r.stderr.slice(0, 200) });
@@ -2056,6 +2060,12 @@ const badResults = (limitNull) => [
   ['a string stdout', { status: 0, signal: null, error: null, stdout: LEAK, overflow: false }], ['a null stdout', { status: 0, signal: null, error: null, stdout: null, overflow: false }],
   ['a Uint8Array stdout', { status: 0, signal: null, error: null, stdout: new Uint8Array([1, 2]), overflow: false }], ['a non-boolean overflow', { status: 0, signal: null, error: null, stdout: EMPTY, overflow: 'no' }],
   ...(limitNull ? [['overflow on an unbounded call', { status: null, signal: null, error: null, stdout: Buffer.from(LEAK), overflow: true }]] : []),
+  // I4-1: overflow does not relax the other rules; only the all-null overflow result is valid, so an inconsistent combination is the Git failure, never the limit error
+  ['overflow true with status 0 and a signal', { status: 0, signal: 'SIGTERM', error: null, stdout: Buffer.from(LEAK), overflow: true }],
+  ['overflow true with status 0 and an error', { status: 0, signal: null, error: LEAK, stdout: Buffer.from(LEAK), overflow: true }],
+  ['overflow true with both a signal and an error', { status: null, signal: 'SIGTERM', error: LEAK, stdout: Buffer.from(LEAK), overflow: true }],
+  ['overflow true with a status and no failure', { status: 0, signal: null, error: null, stdout: Buffer.from(LEAK), overflow: true }],
+  ['overflow true with a status 1, a signal and an oversized Buffer', { status: 1, signal: 'SIGKILL', error: null, stdout: Buffer.alloc(MAX_BYTES + 1, 0x78), overflow: true }],
 ];
 const STAGES = [
   ['version', ['ls', 'c4-head'], 'version', true], ['root', ['ls', 'c4-head'], 'root', true], ['resolution', ['cat', 'c4-head', '--', 'safe.txt'], 'resolve', true],
@@ -2157,6 +2167,11 @@ async function failuresGroup(context) {
           const s = await seamMain(core, context, argv, { world: tableWorld({ handle: (k) => { if (k === kind && !used) { used = true; return mk(); } return undefined; } }) });
           expectMain(check, `${stage}: ${label}`, s.r, failMain(E.GIT));
         }
+      }
+      // the permitted all-null overflow result at a bounded call stays the command-specific limit error (I4-1 keeps it passing)
+      for (const [label, argv] of [['cat', ['cat', 'c4-head', '--', 'safe.txt']], ['diff', ['diff', 'c4-base..c4-head']], ['grep', ['grep', 'c4-head', 'needle']]]) {
+        const s = await seamMain(core, context, argv, { world: tableWorld({ content: { status: null, signal: null, error: null, stdout: Buffer.from(LEAK), overflow: true } }) });
+        expectMain(check, `${label}: the all-null overflow result is still the limit error`, s.r, failMain(E.LIMIT(label)));
       }
       for (const [label, res] of [['a successful normal result', { status: 0, signal: null, error: null, stdout: EMPTY, overflow: false }]]) {
         const s = await seamMain(core, context, ['ls', 'c4-head'], { world: { tree: ['a.txt'], handle: (k) => (k === 'invTree' ? res : undefined) } });
@@ -2700,15 +2715,25 @@ async function runtimeTargets(context) {
       const fr = cloneTree(base.root, path.join(dir, `f-${seq}`));
       const sha1 = forgeRuntime(fr, CID, { drafts: spec.drafts, declared: spec.declared || [] });
       const fb = noWriteState(fr, CID);
-      const pd = kit.diff(fr, CID, gopt);
+      // I4-2: the prepared review and commit run against the clone `fr`, so they get their own guard on fr's paths (the guard above watches the other clone) and its reads are asserted independently
+      const fguard = spec.noRead ? readGuard(dir, spec.noRead.map((t) => projPath(fr, t))) : null;
+      const fopt = fguard ? { preload: fguard.file } : {};
+      const pd = kit.diff(fr, CID, fopt);
       if (accepted) check(pd.code === 3 && pd.json && pd.json.ok === false && accepted.includes(pd.json.code) && pd.json.target === spec.expect && pd.stderr === '', `${label}: prepared diff refuses ${spec.expect}`, { code: pd.code, out: pd.stdout.slice(0, 300) });
       else expectF(check, `${label}: prepared diff`, pd, { ...unrev(spec.expect), exit: 3 });
       check(!/"files"|"diff"/.test(pd.stdout), `${label}: the prepared review builds no printable review text before refusing`, pd.stdout.slice(0, 120));
-      const pc = kit.commit(fr, CID, sha1, gopt);
+      const pc = kit.commit(fr, CID, sha1, fopt);
       if (accepted) check(pc.code === 3 && pc.json && pc.json.ok === false && accepted.includes(pc.json.code) && pc.json.target === spec.expect && pc.stderr === '', `${label}: commit refuses ${spec.expect}`, { code: pc.code, out: pc.stdout.slice(0, 300) });
       else expectF(check, `${label}: commit`, pc, { ...unrev(spec.expect), exit: 3 });
       checkNoWrite(check, `${label}: commit`, fr, CID, fb);
-      if (guard) check(guard.hits().length === 0, `${label}: the unbound installed target was not read by the prepared review or commit either`, guard.hits().slice(0, 3));
+      if (fguard) {
+        check(fguard.hits().length === 0, `${label}: the unbound installed target was not read by the prepared review or commit (guard on the clone they ran against)`, fguard.hits().slice(0, 3));
+        // control: the same kind of guard does observe a read of a bound target of that clone (the first drafted target is hashed against its binding), so an empty record above is not a blind guard
+        const bound = Object.keys(spec.drafts)[0];
+        const cguard = readGuard(dir, [projPath(fr, bound)]);
+        kit.diff(fr, CID, { preload: cguard.file });
+        check(cguard.hits().length > 0, `${label}: control: a guard on the bound target ${bound} records the prepared review's read`, cguard.hits().length);
+      }
     }
     let seq = 0;
     await withScratch(context, 'r80', async (dir) => {
@@ -2871,10 +2896,16 @@ async function runtimeTargets(context) {
           const bom = (b) => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(normText(b).replace(/\n/g, '\r\n'), 'utf8')]);
           const lone = (b) => Buffer.from(normText(b).replace(/\n/g, '\r'), 'utf8');
           putDraft(root, CID, T_HELPER, bom(T[T_HELPER])); putDraft(root, CID, T_CORE, lone(T[T_CORE])); putDraft(root, CID, T_ENTRY, bom(T[T_ENTRY]));
+          // I4-4: the unprepared review accepts the normalized-equal drafts too (it never prepares, so this is its own boundary)
+          const nud = kit.diff(root, CID);
+          check(nud.code === 0 && nud.json && nud.json.ok === true && nud.json.prepared === false, 'normalized-equal drafts (BOM and CRLF, lone CR, BOM) pass the unprepared review (C4-P3-5)', nud.stdout.slice(0, 300));
           const p = kit.prepare(root, CID);
           check(p.code === 0 && p.json && p.json.ok === true, 'a BOM and CRLF draft, a lone-CR draft and a BOM draft all equal their trusted sources after normalization (C4-P3-5)', p.stdout.slice(0, 300));
           if (p.code === 0) {
             const sha1 = p.json.planSha256;
+            const npd = kit.diff(root, CID);
+            check(npd.code === 0 && npd.json && npd.json.ok === true && npd.json.prepared === true && npd.json.planSha256 === sha1, 'the same drafts pass the prepared review of that plan (C4-P3-5)', npd.stdout.slice(0, 300));
+            check(UNIT.every((t) => npd.json && Array.isArray(npd.json.files) && npd.json.files.some((x) => x.target === t)), 'the prepared review lists all three normalized-equal runtime targets', npd.json && npd.json.files && npd.json.files.map((x) => x.target));
             // raw input drift is still detected although the LF version is normalized-equal
             const drift = cloneTree(root, path.join(dir, `drift-${seq}`));
             putDraft(drift, CID, T_HELPER, T[T_HELPER]);

@@ -2,9 +2,11 @@
 
 ## 1. Secret paths
 
-`data/secret-paths.json` is the only list. Claude denies, the Codex profile snippet, git pathspec excludes, and
-`detect`/`validate` exclusions are all rendered from it. To change coverage, edit that file (in the skill
-source), re-render, and re-run setup. Never hand-edit rendered output in a project.
+`data/secret-paths.json` holds the shipped defaults. A project's effective policy is its installed
+`.ai/security-paths.json`: the managed `patterns` plus the project's own `projectPatterns`, validated by the shared
+helper `.ai/tools/security-policy.mjs`. Rendered controls and the git-safe reader use that effective policy. To
+change the defaults, edit the skill's file and re-run setup; to protect more in one project, add `projectPatterns`
+there. Never hand-edit rendered output in a project.
 
 `.env.example` is in the list on purpose: real values end up in templates often enough that no agent reads any
 `.env*` file. `env-keys.mjs` gives you what you need: key names, and per key one of `empty`, `placeholder`,
@@ -14,22 +16,52 @@ Agent-facing exclusion is not the same as a local tool inspecting content. Two s
 content in-process, by design, and never emit it: `env-keys.mjs` (templates only, never `.env`) and
 `secret-scan.mjs` (gitleaks, redacted, report kept in the vault).
 
-## 2. Diffs and history
+## 2. Diffs, history and committed files
 
-Run diffs and history only through `node .ai/tools/git-safe.mjs diff|log|show …` (before installation:
-`node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0 use
-`git diff --name-status` only, which prints paths, not content). It spawns git without a shell, so `**` globs are
-never expanded by Bash or mangled by PowerShell, adds `--no-ext-diff --no-textconv`, and enforces:
+Read diffs, history and committed files only through `node .ai/tools/git-safe.mjs <command>` (before
+installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0
+use `git diff --name-status` only, which prints paths, not content). The installed reader is one reviewed unit of
+three files: `git-safe.mjs`, `git-safe-core.mjs` and `security-policy.mjs`. It accepts exactly these six forms:
 
-- every revision argument must resolve to a **commit** (`<rev>^{commit}`). Object forms print file content
-  directly and ignore pathspec excludes, so `HEAD:.env`, `:.env`, blob/tree ids are rejected;
-- blocked options: `--no-index`, `-c`, `--output`, `--ext-diff`, `--textconv`, `--pathspec-from-file`, `--stdin`,
-  `--git-dir`, `--work-tree`, `-O`;
-- environment that changes pathspec semantics or injects config (`GIT_LITERAL_PATHSPECS`, `GIT_CONFIG_*`,
-  `GIT_EXTERNAL_DIFF`, …) is removed; excludes are case-insensitive;
-- options that take a value must be attached (`-n5`, `--max-count=5`), otherwise the value is read as a revision
-  and rejected. `.gitignore` does not protect files that are already
-tracked; tracked secret files are a stop condition (detect warns), not something to work around.
+```text
+diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]
+log [-p] [--oneline] [-n<k>|--max-count=<k>] <rev>|<A>..<B>|<A>...<B> [-- <paths>]
+show <commit> [--stat|--name-status] [-- <paths>]
+cat <commit> -- <path>
+ls <commit> [-- <paths>]
+grep <commit> <pattern> [-- <paths>]
+```
+
+- Every other option or form is refused: worktree and index diffs (`diff <rev>`, `--cached`), formatting and
+  traversal options (`--format`, `--reverse`, `--all`, `--follow`), detached values (`-n 5`), object and reflog
+  forms (`HEAD:.env`, `:.env`, `^REV`, `@{1}`). Counts are attached: `-n5` or `--max-count=5`.
+- Every revision resolves to a **commit** ID before any content command, so blob and tree IDs are refused and a
+  ref that moves mid-command changes nothing.
+- Protected paths are omitted from diff, log, show, ls and grep, including names that existed only in history;
+  `cat` of a protected path is refused. A grep pattern is a basic regular expression; no match is an empty success.
+- Git runs without a shell, so `**` globs are never expanded by Bash or mangled by PowerShell. Errors name the
+  failure only, never a path, revision, pattern or Git output.
+
+Every git-safe command limits its complete stdout result to 1,048,576 bytes. Exactly that
+many bytes is allowed. Larger results are refused without partial output. Narrow paths with
+-- <paths>; for log, use attached -n<k> or a smaller commit range. For an oversized cat result,
+use grep with a more selective pattern or select a smaller file. A refused result is not a
+completed review. After narrowing, record the reviewed subset and the scope still unreviewed.
+
+Log counts limit content output, not the names-only policy inventory. That inventory runs
+once over the full resolved expression. A single-revision log may walk the full reachable
+history; use a smaller commit range to reduce that work.
+
+Paths are literal and repository-root-relative. Secret checks are case-insensitive through
+the shared policy; Git object lookup preserves exact case. The installed policy is required.
+The reader supports policy schemas 1 and 2 and refuses unknown schemas.
+
+Git 2.31 or later is required. The reader preserves the user's global and system configuration
+sources, including safe.directory, while removing environment-injected keys and overriding
+the execution and output settings used by these commands.
+
+`.gitignore` does not protect files that are already tracked; tracked secret files are a stop condition (detect
+warns), not something to work around.
 
 ## 3. Secret scan (optional, bounded)
 

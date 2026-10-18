@@ -8,10 +8,16 @@
       "policySchemas": [1, 2]
     },
     {
+      "source": "assets/tools/git-safe-core.mjs",
+      "target": ".ai/tools/git-safe-core.mjs",
+      "role": "helper",
+      "policySchemas": [1, 2]
+    },
+    {
       "source": "assets/tools/git-safe.mjs",
       "target": ".ai/tools/git-safe.mjs",
       "role": "entrypoint",
-      "policySchemas": [1]
+      "policySchemas": [1, 2]
     }
   ]
 }
