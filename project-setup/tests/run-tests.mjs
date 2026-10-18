@@ -272,12 +272,12 @@ test('R09', 'merge holds back deny rules that would cancel user exceptions', () 
   const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
   const rep = m.json?.report;
   check(m.code === 0 && m.json.needsDecision === true, 'needsDecision', m);
-  check(rep?.conflicts.some((c) => c.rule === 'Read(**/.env.*)'), 'conflict reported for Read(**/.env.*)', rep);
-  check(rep?.heldBack.includes('Read(**/.env.*)') && !rep.added.deny.includes('Read(**/.env.*)'), 'rule held back', rep);
+  check(rep?.conflicts.some((c) => c.rule === 'Read(**/.env*)'), 'conflict reported for Read(**/.env*)', rep);
+  check(rep?.heldBack.includes('Read(**/.env*)') && !rep.added.deny.includes('Read(**/.env*)'), 'rule held back', rep);
   const draft = JSON.parse(read(path.join(d, '.ai', '.run', 'run-0001', 'drafts', '.claude', 'settings.json')));
-  check(!draft.permissions.deny.includes('Read(**/.env.*)') && draft.permissions.deny.indexOf('Read(!.env.example)') === 1, 'draft keeps the exception effective', draft.permissions.deny);
+  check(!draft.permissions.deny.includes('Read(**/.env*)') && draft.permissions.deny.indexOf('Read(!.env.example)') === 1, 'draft keeps the exception effective', draft.permissions.deny);
   const m2 = S('merge-claude-settings', ['--run-id', 'run-0001', '--override-user-exceptions'], d);
-  check(m2.json?.report.added.deny.includes('Read(**/.env.*)'), 'appended only with explicit override', m2);
+  check(m2.json?.report.added.deny.includes('Read(**/.env*)'), 'appended only with explicit override', m2);
 });
 
 test('R10', 'validator rejects invalid TOML and wrongly typed JSON', () => {
@@ -421,6 +421,12 @@ test('R15', 'ownership metadata is bound to the approved plan', async () => {
   fs.mkdirSync(context.tmp, { recursive: true });
   const rep = await runComponentAssertions('C2', context);
   check(rep.ok === true, 'C2 component assertions pass', { errors: rep.errors, failed: rep.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C3 component assertions (policy migration and synchronized controls) run after the existing component coverage. Their sub-assertion
+  // records are not printed here and do not inflate the case counts; R15 fails unless the whole C3 report is ok.
+  const c3context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c3'), env: { ...ENV } };
+  fs.mkdirSync(c3context.tmp, { recursive: true });
+  const rep3 = await runComponentAssertions('C3', c3context);
+  check(rep3.ok === true, 'C3 component assertions pass', { errors: rep3.errors, failed: rep3.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R16', 'TOML validation matches tomllib on the conformance corpus; invalid escapes fail validate', () => {
@@ -449,8 +455,8 @@ test('R17', 'wildcard user exceptions are held back unless provably disjoint', a
   for (const exc of ['Read(!*.example)', 'Read(!**/*.example)', 'Read(!.env.?xample)', 'Read(!*)', 'Read(![.]env.example)']) {
     const d = repo({ '.claude/settings.json': JSON.stringify({ permissions: { deny: [exc] } }) }); begin(d);
     const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
-    check(m.code === 0 && m.json?.needsDecision === true && m.json.report.heldBack.includes('Read(**/.env.*)'), `${exc}: Read(**/.env.*) held back`, m.json?.report?.heldBack);
-    check(!m.json?.report?.added?.deny?.includes('Read(**/.env.*)'), `${exc}: not appended`);
+    check(m.code === 0 && m.json?.needsDecision === true && m.json.report.heldBack.includes('Read(**/.env*)'), `${exc}: Read(**/.env*) held back`, m.json?.report?.heldBack);
+    check(!m.json?.report?.added?.deny?.includes('Read(**/.env*)'), `${exc}: not appended`);
   }
   // Disjoint from every managed rule (no path can match both), so nothing is held back.
   for (const exc of ['Read(!docs/README.md)', 'Read(!/README.md)']) {
@@ -461,7 +467,7 @@ test('R17', 'wildcard user exceptions are held back unless provably disjoint', a
   // A bare name overlaps directory rules (secrets/README.md matches both), so those are deferred.
   { const d = repo({ '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Read(!README.md)'] } }) }); begin(d);
     const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
-    check(m.json?.report.heldBack.includes('Read(**/secrets/**)') && !m.json.report.heldBack.includes('Read(**/.env)'), 'bare-name exception: only overlapping rules deferred', m.json?.report?.heldBack); }
+    check(m.json?.report.heldBack.includes('Read(**/secrets/**)') && !m.json.report.heldBack.includes('Read(**/.env*)'), 'bare-name exception: only overlapping rules deferred', m.json?.report?.heldBack); }
   const probe = path.join(TMP, `glob-probe-${++n}.mjs`);
   fs.writeFileSync(probe, `import { globsMayOverlap } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts', 'globs.mjs')).href)};
 import { globToRegExp, loadSecretSpec } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts', 'lib.mjs')).href)};

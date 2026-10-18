@@ -9,6 +9,7 @@
 import { C11A_IMPLEMENTATIONS } from './c11a.test.mjs';
 import { C1_IMPLEMENTATIONS } from './c1.test.mjs';
 import { C2_IMPLEMENTATIONS } from './c2.test.mjs';
+import { C3_IMPLEMENTATIONS } from './c3.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -75,12 +76,34 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'V2/C2/recovery', name: 'metadata transaction recovery preserves later edits' },
     { id: 'V2/C2/module-contract', name: 'shared exports and component registration' },
   ],
+  // C3 plan (docs/plans/2026-10-18-project-setup-v3-rc1-c3.md) section 4.1, in its exact order.
+  C3: [
+    { id: 'R44/C3/anchors', name: 'anchored control rendering' },
+    { id: 'R47/C3/project-controls', name: 'project patterns reach every rendered control' },
+    { id: 'R74/C3/rendering', name: 'shared corpus and stored rendering spelling' },
+    { id: 'R48/C3/project-moves', name: 'approved project pattern moves' },
+    { id: 'R78/C3/baseline', name: 'installed records establish baseline identity' },
+    { id: 'R78/C3/migration', name: 'versioned migration preserves project fields' },
+    { id: 'R78/C3/replacement-coverage', name: 'replacement coverage needs its own decision' },
+    { id: 'R52/C3/user-denies', name: 'identical user denies stay user owned' },
+    { id: 'R85/C3/retained-denies', name: 'retired deny bytes and ownership survive' },
+    { id: 'R80/C3/snapshot', name: 'one approved snapshot binds migration outputs' },
+    { id: 'R80/C3/tool-unit', name: 'policy migration requires compatible reviewed tools' },
+    { id: 'R80/C3/manifest-after', name: 'commit verifies the derived manifest' },
+    { id: 'R81/C3/recorded-patterns', name: 'recorded patterns distinguish drift and behind' },
+    { id: 'R82/C3/snippet', name: 'recorded snippet hash detects stale rendering' },
+    { id: 'R97/C3/environment-controls', name: 'environment variants receive rendered coverage' },
+    { id: 'Q4/C3/scan-labels', name: 'protected findings remain scanned and redacted' },
+    { id: 'V2/C3/recovery', name: 'coupled migration rolls back through one journal' },
+    { id: 'V2/C3/module-contract', name: 'C3 exports errors and component contracts' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C11a: Object.freeze([...C11A_IMPLEMENTATIONS]),
   C1: Object.freeze([...C1_IMPLEMENTATIONS]),
   C2: Object.freeze([...C2_IMPLEMENTATIONS]),
+  C3: Object.freeze([...C3_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

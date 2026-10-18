@@ -2595,6 +2595,16 @@ async function inputBinding(context) {
         // the rewrite (a plan that loadPlan or the binding recheck would reject would be APPLY_PLAN_INVALID or APPLY_DRIFT instead)
         const ctlTarget = 'docs/i210-control.md';
         const ctl = forgeCommit(ctlTarget, Buffer.from('# control before\n'), '# control after\n');
+        // C3 (docs/plans/2026-10-18-project-setup-v3-rc1-c3.md section 4.8): commit now verifies the manifest it derives from the bound inputs, so the
+        // extra op also carries its automatic record { ownership: 'merged' } in manifestAfter (no metadata operation is added for it). The file map is
+        // sorted and the plan is rewritten with its hash recomputed; the secret and out-of-scope cases below stay unchanged.
+        {
+          const forged = readPlan(ctl.r, id);
+          forged.manifestAfter.files[ctlTarget] = { ownership: 'merged' };
+          forged.manifestAfter.files = sortedFiles(forged.manifestAfter.files);
+          putFile(runFile(ctl.r, id, 'plan.json'), jsonText(forged));
+          ctl.sha = planShaOf(ctl.r, id);
+        }
         const rc = kit.commit(ctl.r, id, ctl.sha);
         check(rc.code === 0 && rc.json && rc.json.ok === true && rc.json.committed === true, 'control: a rewritten plan with a consistent extra draft op for an ordinary documentation path commits', rc.stdout.slice(0, 300));
         check(Buffer.compare(readBytes(tpath(ctl.r, ctlTarget)) || Buffer.alloc(0), ctl.draft) === 0, 'control: the extra op was written, so the rewrite is a plan commit accepts');
