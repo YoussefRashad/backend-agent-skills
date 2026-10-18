@@ -263,7 +263,7 @@ const C1_DESCRIPTORS = [
 // Plan 2.1: the exact export sets. lib.mjs keeps every export it has at 8b3f1c4 and adds two; schemas.mjs keeps its three.
 const OWNERSHIP_EXPORTS = ['hookIdentity', 'isPolicyOmitted', 'readManagedMetadata', 'readManifest', 'readOmissions'];
 const LIB_OLD_EXPORTS = ['ENV_TEMPLATE_RE', 'IS_WINDOWS', 'SKILL_DIR', 'WRITE_ALLOWLIST', 'WRITE_DENYLIST', 'assertNotLink', 'assertNotSecretInput', 'assertWritable', 'atomicWrite', 'canonicalPath', 'detectEol', 'fail', 'git', 'globToRegExp', 'hostId', 'isSecretPath', 'loadSecretSpec', 'matchesAny', 'normalizeText', 'normalizedHash', 'ok', 'parseArgs', 'rawFileHash', 'readInRepo', 'readJsonFile', 'repoRoot', 'run', 'safeResolve', 'secretGlobs', 'secureDir', 'secureDirRel', 'sha256', 'skillVersion', 'toPosix', 'validateRunId', 'writeInRepo'];
-const LIB_NEW_EXPORTS = ['classifyEnvTemplate', 'setFilesystemRoot'];
+const LIB_NEW_EXPORTS = ['classifyEnvTemplate', 'loadEffectivePolicy', 'setFilesystemRoot'];
 const SCHEMAS_EXPORTS = ['checkClaudeSettings', 'checkManifest', 'checkSecurityPolicy'];
 const CASE_EXPORTS = ['C2_IMPLEMENTATIONS'];
 

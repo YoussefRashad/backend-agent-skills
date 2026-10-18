@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  repoRoot, git, readJsonFile, normalizedHash, loadSecretSpec, isSecretPath, ok, fail, SKILL_DIR,
+  repoRoot, git, readJsonFile, normalizedHash, loadSecretSpec, isSecretPath, ok, fail,
 } from './lib.mjs';
 import { parseBlocks, blockHashes } from './blocks.mjs';
 import { checkClaudeSettings, checkManifest } from './schemas.mjs';
@@ -146,10 +146,8 @@ if (!hits) add('pass', 'secret-shaped-content', `${generated.length} generated f
 // 7. Project-local security tooling
 if (exists('.ai/agents')) {
   for (const rel of ['.ai/security-paths.json', '.ai/tools/git-safe.mjs']) if (!exists(rel)) add('fail', 'security-tooling', `${rel} missing; shared agents depend on it`);
-  if (exists('.ai/security-paths.json')) {
-    const skillCopy = fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths.json'), 'utf8');
-    if (normalizedHash(read('.ai/security-paths.json')) !== normalizedHash(skillCopy)) add('warn', 'security-tooling', '.ai/security-paths.json differs from this skill version (older install or local edit)');
-  }
+  // C3 (plan section 3.11): no shipped-byte comparison. A project policy legitimately differs from the shipped file;
+  // drift and staleness are judged from the installed managed record (inspectSecurityState), which C10 wires in here.
 }
 
 // 8. Hygiene

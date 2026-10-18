@@ -44,11 +44,14 @@ import {
   parseArgs, repoRoot, setFilesystemRoot, git, safeResolve, loadSecretSpec, isSecretPath, matchesAny,
   WRITE_ALLOWLIST, WRITE_DENYLIST, normalizeText, normalizedHash, rawFileHash, sha256, detectEol, readJsonFile,
   skillVersion, hostId, toPosix, ok, fail, validateRunId, secureDir, secureDirRel, ENV_TEMPLATE_RE, classifyEnvTemplate,
-  writeInRepo, readInRepo, assertNotLink,
+  writeInRepo, readInRepo, assertNotLink, SKILL_DIR,
 } from './lib.mjs';
 import { blockHashes, outsideContent } from './blocks.mjs';
 import { readManagedMetadata, readManifest, readOmissions } from './ownership.mjs';
 import { parseSecurityPolicy, validateRepoPath } from '../assets/tools/security-policy.mjs';
+import { renderSecurityControls } from './render-permissions.mjs';
+import { mergeManagedDenies } from './merge-claude-settings.mjs';
+import { checkSecurityToolUnit, classifySecurityMigration, readRuntimeUnits, resolveSecurityMigration } from './migrate-security-paths.mjs';
 
 const MANIFEST_REL = '.ai/manifest.json';
 const POLICY_REL = '.ai/security-paths.json';
@@ -76,6 +79,12 @@ const R_SETTINGS = 'settings ownership or managed metadata changes';
 const R_OMIT = 'approved omission records change';
 const GENERIC_REASON = 'recorded file ownership changes';
 const SECRET_NOTE = 'secret-pattern path; content never hashed into reports';
+// C3 (docs/plans/2026-10-18-project-setup-v3-rc1-c3.md sections 3.8-3.10 and 3.12).
+const DECISIONS = 'security-decisions.json';
+const CATALOG_REL = 'data/runtime-units.json';
+const HELPER_REL = '.ai/tools/security-policy.mjs';
+const MIGRATION_REQUIRED = 'schema-2 policy changes with installed tools require security-decisions.json';
+const MANIFEST_MISMATCH = 'prepared manifest does not match reviewed operations; run prepare again';
 
 /** Plan 5.2 "F": a direct failure with a code. The text is exactly the plan's; the code is never prepended to it. */
 function failCode(code, error, exit, extra = {}) {
@@ -469,6 +478,329 @@ const appendOnly = (before, after) => {
 };
 
 /**
+ * The per-target metadata requests of the three request files (plan 4.1), shared by prepare and commit's derivation.
+ * `known` holds every drafted target and every recorded one; a declared input never makes a target known. Returns the
+ * validated requests and the rejections as [target, code, error], first error per target.
+ */
+function buildReq(data, known, skip = new Set()) {
+  const rejects = [];
+  const rejected = new Set(skip);
+  const reject = (t, code, error) => { rejects.push([t, code, error]); rejected.add(t); };
+  const req = new Map();
+  for (const [name, field] of [['ownership.json', 'own'], ['managed-keys.json', 'managed'], ['omissions.json', 'omissions']]) {
+    if (!data[name]) continue;
+    for (const [t, v] of Object.entries(data[name])) {
+      try { validateRepoPath(t); } catch { reject(name, 'APPLY_PATH', `unsafe path: ${t}`); continue; }
+      if (!known.has(t)) { reject(t, 'APPLY_METADATA_UNKNOWN', `metadata target is not in this plan or manifest: ${t}`); continue; }
+      if (!req.has(t)) req.set(t, {});
+      req.get(t)[field] = v;
+    }
+  }
+  for (const [t, q] of [...req].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (rejected.has(t)) continue;
+    if (hasOwn(q, 'own') && (!OWNERSHIP_VALUES.has(q.own) || (q.own === 'keys' && !CONTROL_FILES.has(t)))) {
+      reject(t, 'APPLY_OWNERSHIP_VALUE', `${t}: invalid ownership "${q.own}"`);
+      continue;
+    }
+    try {
+      if (hasOwn(q, 'managed')) q.managed = readManagedMetadata(t, q.managed);
+      if (hasOwn(q, 'omissions')) q.omissions = readOmissions(t, q.omissions);
+    } catch (e) {
+      if (!(e instanceof Error) || typeof e.code !== 'string') throw e;
+      reject(t, e.code, e.message);
+    }
+  }
+  return { req, rejects };
+}
+
+/**
+ * Plan C3 3.10: the ONE record derivation of prepare and commit (C2 plan 4.1, 4.2 and 4.4, unchanged). Automatic records
+ * of content writes are bookkeeping, never metadata operations; an explicit change of a recorded record, an omission, or
+ * explicit keys ownership of an unchanged unrecorded control file is one file operation per target. Nothing is inferred
+ * from current target bytes: it reads no file, uses op.action as classified at prepare, and consults a draft body only
+ * for a non-secret write (a secret or vault target gets the fixed merged record without its body being looked at).
+ *   ops: [{ target, action, eol, secret, draft }]   req: buildReq's map   skip: targets already rejected
+ */
+function deriveRecords(priorFiles, ops, req, skip = new Set()) {
+  const rejects = [];
+  const rejected = new Set(skip);
+  const reject = (t, code, error) => { if (!rejected.has(t)) { rejected.add(t); rejects.push([t, code, error]); } };
+  const opOf = new Map(ops.map((o) => [o.target, o]));
+  const files = { ...priorFiles };
+  const fileOps = [];
+  const metaReasons = new Map();
+  const autoRecord = (t, ownership, outBuf, base, secret) => {
+    const ext = extensions(base);
+    if (secret) return { ownership: 'merged', note: SECRET_NOTE, ...ext };
+    const text = outBuf.toString('utf8');
+    if (ownership === 'full') return { ownership, sha256: normalizedHash(text), ...ext };
+    if (ownership === 'blocks') return { ownership, blocks: blockHashes(text).hashes, ...ext };
+    if (ownership === 'keys') return { ...base, ownership };
+    return { ownership: 'merged', ...ext };
+  };
+  // v2 inference, used only for a written target with no explicit and no prior ownership. A secret target's record is
+  // the fixed merged one whatever this returns, so its body is never inspected.
+  const infer = (t, outBuf, action, secret) => {
+    if (secret) return 'merged';
+    const hasBlocks = Object.keys(blockHashes(outBuf.toString('utf8')).hashes).length > 0;
+    const living = /^(docs\/|\.ai\/context\/|\.ai\/decisions\/)/.test(t) || t === 'TODO.md' || t === 'README.md';
+    if (living && !hasBlocks) return 'merged';
+    return hasBlocks ? 'blocks' : action === 'create' ? 'full' : 'merged';
+  };
+  const targets = [...new Set([...ops.map((o) => o.target), ...req.keys()])].sort();
+  for (const t of targets) {
+    if (rejected.has(t)) continue;
+    const op = opOf.get(t);
+    const write = Boolean(op) && op.action !== 'unchanged';
+    const q = req.get(t) || {};
+    const hasOwnership = hasOwn(q, 'own'); const hasM = hasOwn(q, 'managed'); const hasO = hasOwn(q, 'omissions');
+    const prior = hasOwn(priorFiles, t) ? priorFiles[t] : null;
+    const outBuf = write && !op.secret ? withEol(op.draft, op.eol) : null;
+    const autoOwn = prior ? prior.ownership : write ? infer(t, outBuf, op.action, op.secret) : null;
+    const auto = write ? autoRecord(t, autoOwn, outBuf, prior || {}, op.secret) : prior;
+    if (!hasOwnership && !hasM && !hasO) { if (auto) files[t] = auto; continue; }
+
+    const resulting = hasOwnership ? q.own : autoOwn;
+    if ((hasM || hasO) && resulting !== 'keys') { reject(t, 'APPLY_METADATA_OWNERSHIP', `managed or omission metadata requires keys ownership: ${t}`); continue; }
+    // Without a content write, the only supported ownership change is an approved move of a control file into keys.
+    // Generic re-baselining of an unchanged file, and leaving keys without a write, are not supported.
+    if (hasOwnership && !write && q.own !== (prior ? prior.ownership : null) && q.own !== 'keys') {
+      reject(t, 'APPLY_METADATA_TARGET', `metadata-only adoption is not supported for ${t}`);
+      continue;
+    }
+    let after;
+    if (resulting === 'keys') {
+      const kept = prior && prior.ownership === 'keys' ? prior : null;
+      let managed;
+      // A settings request patches its present fields; a policy request is a complete container and replaces it.
+      if (hasM) managed = t === SETTINGS_REL ? { ...(kept ? kept.managed : {}), ...q.managed } : q.managed;
+      else if (kept) managed = kept.managed;
+      else if (t === SETTINGS_REL) managed = {};
+      else { reject(t, 'APPLY_METADATA_REQUIRED', `policy keys ownership requires complete managed metadata: ${t}`); continue; }
+      let omissions = kept && hasOwn(kept, 'omissions') ? kept.omissions : undefined;
+      if (hasO && Object.keys(q.omissions).length) omissions = { ...(omissions || {}), ...q.omissions };
+      after = { ...extensions(prior), ownership: 'keys', managed, ...(omissions !== undefined ? { omissions } : {}) };
+    } else {
+      after = write ? autoRecord(t, resulting, outBuf, prior || {}, op.secret) : prior;
+    }
+    files[t] = after;
+
+    let reasons = null;
+    if (prior) {
+      if (!canonEq(after, auto)) {
+        reasons = [];
+        let changed = after.ownership !== prior.ownership;
+        if (!changed && after.ownership === 'keys') {
+          changed = t === SETTINGS_REL
+            ? ['permissions.allow', 'permissions.deny', 'hooks'].some((f) => !appendOnly(prior.managed[f], after.managed[f]))
+            : prior.managed.schema !== after.managed.schema || !appendOnly(prior.managed.patterns, after.managed.patterns);
+        }
+        if (changed) reasons.push(ownershipReason(t));
+        if (!canonEq(prior.omissions, after.omissions)) reasons.push(R_OMIT);
+      }
+    } else if (!write) {
+      reasons = [ownershipReason(t), ...(after.omissions !== undefined ? [R_OMIT] : [])];
+    } else if (after.omissions !== undefined) {
+      reasons = [R_OMIT]; // C2-P3-1: an omission always needs approval, also as initial metadata of a written target
+    }
+    if (reasons) {
+      fileOps.push({ kind: 'file', target: t, before: prior, after, requiresApproval: reasons.length > 0, reasons });
+      if (reasons.length) metaReasons.set(t, reasons);
+    }
+  }
+  return { files, fileOps, metaReasons, rejects };
+}
+
+/**
+ * The manifest to write (C2 plan 3.5, 4.4): prior extension fields, the derived records, the plan's headers. Written only
+ * when there is real work; a genuine no-op leaves every manifest byte alone. One manifest operation only for a schema-2
+ * conversion or a changed snippet hash of an existing manifest (D4, C2-P3-6). Shared by prepare and commit.
+ */
+function buildManifest({ prior, files, fileOps, writes, snippet, mode, agents, head, version }) {
+  const manifestChange = Boolean(prior) && (prior.schema === 2 || (snippet !== undefined && snippet !== prior.codexSnippetSha256));
+  const metadataOps = [...fileOps];
+  let manifestAfter = null;
+  if (writes || metadataOps.length || manifestChange) {
+    const known = ['schema', 'skill', 'skillVersion', 'mode', 'agents', 'sourceCommit', 'files'];
+    const extra = Object.fromEntries(Object.entries(prior || {}).filter(([k]) => !known.includes(k)));
+    manifestAfter = {
+      schema: 3, skill: 'project-setup', skillVersion: version, mode, agents, sourceCommit: head,
+      ...extra, ...(snippet !== undefined ? { codexSnippetSha256: snippet } : {}), files: Object.fromEntries(Object.keys(files).sort().map((k) => [k, files[k]])),
+    };
+    const headerOf = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'files'));
+    if (manifestChange) metadataOps.push({ kind: 'manifest', target: MANIFEST_REL, before: headerOf(prior), after: headerOf(manifestAfter), requiresApproval: false, reasons: [] });
+  }
+  return { manifestAfter, metadataOps };
+}
+
+// --------------------------------------------------------------- C3 checks ----
+// A C3 refusal: { target, code, error } as plan 3.12 pins them, carried to the prepare entry, the diff F or the commit F.
+const c3Fail = (target, code, error, extra = {}) => Object.assign(new Error(error), { c3: { target, code, error, ...extra } });
+const stripBom = (buf) => buf.toString('utf8').replace(/^\uFEFF/, '');
+const parseJson = (buf) => { try { return JSON.parse(stripBom(buf)); } catch { return undefined; } };
+const at = (v, ...ks) => ks.reduce((o, k) => (isPlainObj(o) && hasOwn(o, k) ? o[k] : undefined), v);
+const mismatch = (t) => c3Fail(t, 'MIGRATION_OUTPUT_MISMATCH', `MIGRATION_OUTPUT_MISMATCH: staged migration output does not match decisions: ${t}`);
+/** A coded pure error at the target plan 3.12 pins for it (its prefixed message kept). */
+function c3FromError(e) {
+  if (e && e.c3) return e;
+  if (!(e instanceof Error) || typeof e.code !== 'string') throw e;
+  const c = e.code;
+  const target = typeof e.target === 'string' ? e.target
+    : c.startsWith('MANIFEST_') ? MANIFEST_REL
+      : c === 'DENY_SETTINGS' ? SETTINGS_REL
+        : c === 'TOOL_CATALOG' ? CATALOG_REL
+          : c.startsWith('MIGRATION_DECISION') || c === 'MIGRATION_REPORT_CHANGED' || c === 'DENY_OWNERSHIP_SELECTION' || c.startsWith('OMISSIONS_') ? DECISIONS
+            : POLICY_REL;
+  return c3Fail(target, c, e.message);
+}
+
+/** A project body for C3 evaluation (null when absent). A link is unsafe (exit 2); another read failure is tagged I/O. */
+function projectBytes(rel) {
+  const { abs } = ioTagged(rel, () => safeResolve(root, rel));
+  try { return fs.readFileSync(abs); } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw Object.assign(new Error(`cannot read ${rel}`), { ioPath: rel });
+  }
+}
+function targetExists(rel) {
+  const { abs } = ioTagged(rel, () => safeResolve(root, rel));
+  try { fs.lstatSync(abs); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw Object.assign(e, { ioPath: rel }); }
+}
+
+/** The trusted runtime-unit catalog with its source bytes, by target (skill files are trusted, not transaction-bound). */
+let catalogCache = null;
+function loadCatalog() {
+  if (catalogCache) return catalogCache;
+  const bad = () => c3Fail(CATALOG_REL, 'TOOL_CATALOG', 'TOOL_CATALOG: invalid runtime unit catalog');
+  let units;
+  try { units = readRuntimeUnits(JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'data', 'runtime-units.json'), 'utf8'))).units; } catch { throw bad(); }
+  catalogCache = units.map((u) => {
+    let src;
+    try { src = fs.readFileSync(path.join(SKILL_DIR, ...u.source.split('/'))); } catch { throw bad(); }
+    return { ...u, src };
+  }).sort(byTarget);
+  return catalogCache;
+}
+
+/**
+ * Plan 3.9: a plan with any catalog runtime content target writes the runtime units first (the security-policy helper,
+ * other helpers sorted, entrypoints sorted), then the other content targets in target order, the policy last; the
+ * manifest stays last. Any other plan, a policy-only one included, keeps C2's order.
+ */
+function runtimeOrder(ops, units) {
+  const unit = new Map(units.map((u) => [u.target, u]));
+  if (!ops.some((o) => unit.has(o.target))) return ops;
+  const rank = (o) => { const u = unit.get(o.target); return u ? (u.target === HELPER_REL ? 0 : u.role === 'helper' ? 1 : 2) : o.target === POLICY_REL ? 4 : 3; };
+  return [...ops].sort((a, b) => rank(a) - rank(b) || byTarget(a, b));
+}
+
+/**
+ * Plan 3.9 workflow gate: a create/modify policy draft that parses as a JSON object with numeric schema 2, while some
+ * catalog runtime target is installed or staged, needs security-decisions.json. Unchanged policies, schema-1 drafts,
+ * metadata-only runs and a project with no runtime consumer are never gated.
+ */
+function needsMigrationWorkflow(ops, draftOf) {
+  const op = ops.find((o) => o.target === POLICY_REL && (o.action === 'create' || o.action === 'modify'));
+  if (!op) return false;
+  const v = parseJson(draftOf(op));
+  if (!isPlainObj(v) || v.schema !== 2) return false;
+  return loadCatalog().some((u) => ops.some((o) => o.target === u.target) || targetExists(u.target));
+}
+
+function shippedPolicies() {
+  try {
+    const b = fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths-v2.0.0.json'));
+    const d = fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths.json'));
+    return { baselinePolicy: JSON.parse(stripBom(b)), baselineSha256: normalizedHash(b), desiredPolicy: JSON.parse(stripBom(d)), desiredSha256: normalizedHash(d) };
+  } catch { throw c3Fail(POLICY_REL, 'MIGRATION_BASELINE_INVALID', 'MIGRATION_BASELINE_INVALID: shipped policy baseline is unavailable or invalid'); }
+}
+
+/**
+ * Plan 3.8: the ONE migration snapshot of prepare and both reviews. Recomputes the report, the resolved policy, its
+ * controls and the deny merge from the bound project and run inputs and the currently trusted skill files (exactly what
+ * migrate-security-paths.mjs stage computes), checks every staged C3 projection in the pinned order (policy, settings,
+ * the request files in their fixed order, runtime targets sorted), then the tool unit. Returns the review evidence.
+ *   ops      content ops with their cur and draft buffers        data      request name -> parsed value or null
+ *   prior    the validated prior manifest or null                hasInput  target -> declared or bound input
+ *   isSecret the shipped plus installed refusal set; a protected settings or runtime path is never read (I3-3)
+ *   prepared true in the prepared review, where a target without a bound role is never read
+ * Decision I3-4: the catalog is loaded only after the decisions and the non-runtime projections are checked.
+ */
+function securityEvidence({ decisionsBuf, ops, data, prior, hasInput, isSecret, prepared }) {
+  const decisions = parseJson(decisionsBuf);
+  if (decisions === undefined) throw c3Fail(DECISIONS, 'MIGRATION_DECISIONS', 'MIGRATION_DECISIONS: invalid security migration decisions');
+  const opOf = new Map(ops.map((o) => [o.target, o]));
+  const guard = (t) => { if (isSecret(t)) throw c3Fail(t, 'MIGRATION_PROTECTED_INPUT', `migration input is protected by the security policy: ${t}`); };
+  let report; let resolved; let controls; let merged;
+  try {
+    const policyBuf = projectBytes(POLICY_REL);
+    const input = { policy: policyBuf === null ? null : JSON.parse(stripBom(policyBuf)), manifest: prior ? JSON.parse(JSON.stringify(prior)) : null, ...shippedPolicies() };
+    report = classifySecurityMigration(input);
+    resolved = resolveSecurityMigration(input, decisions);
+    controls = renderSecurityControls(resolved.policy);
+  } catch (e) { throw c3FromError(e); }
+
+  guard(SETTINGS_REL);
+  if (prepared && !opOf.has(SETTINGS_REL) && !hasInput(SETTINGS_REL)) throw mismatch(SETTINGS_REL);
+  const settingsBuf = opOf.has(SETTINGS_REL) ? opOf.get(SETTINGS_REL).cur : projectBytes(SETTINGS_REL);
+  let settings = { $schema: 'https://json.schemastore.org/claude-code-settings.json' };
+  if (settingsBuf !== null) settings = parseJson(settingsBuf);
+  if (settings === undefined) throw c3Fail(SETTINGS_REL, 'DENY_SETTINGS', 'DENY_SETTINGS: settings permissions must contain string arrays');
+  const srec = prior && prior.files[SETTINGS_REL] && prior.files[SETTINGS_REL].ownership === 'keys' ? prior.files[SETTINGS_REL] : null;
+  const priorDenyOmissions = (srec && srec.omissions && srec.omissions['permissions.deny']) || [];
+  try {
+    merged = mergeManagedDenies({
+      settings, managed: srec ? srec.managed : {}, policy: resolved.policy,
+      omissions: { ...((srec && srec.omissions) || {}), 'permissions.deny': decisions.denyOmissions },
+      dropOwnership: decisions.dropDenyOwnership, overrideUserExceptions: decisions.overrideUserExceptions,
+    });
+  } catch (e) { throw c3FromError(e); }
+  const settingsChanged = settingsBuf === null || JSON.stringify(merged.settings) !== JSON.stringify(settings);
+  const denyOf = (v) => (Array.isArray(at(v, 'permissions', 'deny')) ? v.permissions.deny : []);
+  const draftJson = (t) => (opOf.has(t) && opOf.get(t).origin === 'draft' ? parseJson(opOf.get(t).draft) : undefined);
+
+  if (!canonEq(draftJson(POLICY_REL), resolved.policy)) throw mismatch(POLICY_REL);
+  if (opOf.has(SETTINGS_REL)) { const v = draftJson(SETTINGS_REL); if (v === undefined || !canonEq(denyOf(v), denyOf(merged.settings))) throw mismatch(SETTINGS_REL); }
+  else if (settingsChanged || !hasInput(SETTINGS_REL)) throw mismatch(SETTINGS_REL);
+  const own = data['ownership.json'];
+  if (at(own, POLICY_REL) !== 'keys' || at(own, SETTINGS_REL) !== 'keys') throw mismatch('ownership.json');
+  const mk = data['managed-keys.json'];
+  if (!canonEq(at(mk, POLICY_REL), resolved.managed) || !canonEq(at(mk, SETTINGS_REL, 'permissions.deny'), merged.managed['permissions.deny'])
+    || !canonEq(at(mk, SETTINGS_REL, 'heldBack'), merged.managed.heldBack)) throw mismatch('managed-keys.json');
+  // An omission request is staged only for a real change; an existing (even empty) container is kept, never dropped.
+  const prec = prior && prior.files[POLICY_REL];
+  const needPolicy = resolved.omissions.patterns.length > 0 || Boolean(prec && prec.ownership === 'keys' && hasOwn(prec, 'omissions'));
+  const needDeny = !canonEq(decisions.denyOmissions, priorDenyOmissions);
+  const gotPolicy = at(data['omissions.json'], POLICY_REL);
+  const gotDeny = at(data['omissions.json'], SETTINGS_REL, 'permissions.deny');
+  if ((gotPolicy === undefined ? needPolicy : !canonEq(gotPolicy, { patterns: resolved.omissions.patterns }))
+    || (gotDeny === undefined ? needDeny : !canonEq(gotDeny, decisions.denyOmissions))) throw mismatch('omissions.json');
+  if (at(data['manifest-metadata.json'], 'codexSnippetSha256') !== sha256(Buffer.from(controls.codexSnippet, 'utf8'))) throw mismatch('manifest-metadata.json');
+
+  // Runtime units: a staged draft must be the trusted source; a target without one must be bound and already reviewed.
+  // Decision I3-2: only a create or modify op is a planned candidate; an unchanged op is judged by the installed bytes.
+  const toolUnit = loadCatalog().map((u) => {
+    guard(u.target);
+    const op = opOf.get(u.target);
+    let installed;
+    if (op) {
+      if (normalizedHash(op.draft) !== normalizedHash(u.src)) throw mismatch(u.target);
+      installed = op.cur;
+    } else {
+      if (!hasInput(u.target)) throw mismatch(u.target);
+      installed = projectBytes(u.target);
+      if (installed === null || normalizedHash(installed) !== normalizedHash(u.src)) throw mismatch(u.target);
+    }
+    return {
+      source: u.source, target: u.target, role: u.role, policySchemas: [...u.policySchemas], reviewedSha256: normalizedHash(u.src),
+      installedSha256: installed === null ? null : normalizedHash(installed), plannedSha256: op && op.action !== 'unchanged' ? normalizedHash(op.draft) : null,
+    };
+  });
+  try { checkSecurityToolUnit(toolUnit, resolved.policy.schema); } catch (e) { throw c3FromError(e); }
+  return { report, controls, deny: merged.report, toolUnit };
+}
+
+/**
  * Validates and evaluates one run: inventory, refusal set, requests, per-target checks, then (only when no request is
  * malformed) the target and source bodies, the content operations and the metadata operations. Shared by prepare and
  * by the unprepared review, so both refuse the same things. Returns { entries } when anything is rejected, one entry
@@ -522,31 +854,9 @@ function analyze(mode, approvals = new Set()) {
   // Metadata requests per target. Every drafted target counts as known, including rejected ones, so one rejection
   // never cascades into misleading errors; a declared input never makes a target known.
   const known = new Set([...sources.map((s) => s.target), ...Object.keys(priorFiles)]);
-  const req = new Map();
-  for (const [name, field] of [['ownership.json', 'own'], ['managed-keys.json', 'managed'], ['omissions.json', 'omissions']]) {
-    const data = requests[name].data;
-    if (!data) continue;
-    for (const [t, v] of Object.entries(data)) {
-      try { validateRepoPath(t); } catch { rejectRequest(name, 'APPLY_PATH', `unsafe path: ${t}`); continue; }
-      if (!known.has(t)) { rejectRequest(t, 'APPLY_METADATA_UNKNOWN', `metadata target is not in this plan or manifest: ${t}`); continue; }
-      if (!req.has(t)) req.set(t, {});
-      req.get(t)[field] = v;
-    }
-  }
-  for (const [t, q] of [...req].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    if (entries.has(t)) continue;
-    if (hasOwn(q, 'own') && (!OWNERSHIP_VALUES.has(q.own) || (q.own === 'keys' && !CONTROL_FILES.has(t)))) {
-      rejectRequest(t, 'APPLY_OWNERSHIP_VALUE', `${t}: invalid ownership "${q.own}"`);
-      continue;
-    }
-    try {
-      if (hasOwn(q, 'managed')) q.managed = readManagedMetadata(t, q.managed);
-      if (hasOwn(q, 'omissions')) q.omissions = readOmissions(t, q.omissions);
-    } catch (e) {
-      if (!(e instanceof Error) || typeof e.code !== 'string') throw e;
-      rejectRequest(t, e.code, e.message);
-    }
-  }
+  const reqData = Object.fromEntries(REQUESTS.map(([name]) => [name, requests[name].data]));
+  const { req, rejects: reqRejects } = buildReq(reqData, known, new Set(entries.keys()));
+  for (const [t, code, error] of reqRejects) rejectRequest(t, code, error);
 
   // Declared inputs: unique, structurally valid paths in the documentation/configuration scope; never a secret or
   // run-internal path. Their hashes are computed here, never taken from the caller.
@@ -597,88 +907,32 @@ function analyze(mode, approvals = new Set()) {
     });
   }
 
-  // Manifest records (plan 4.1, 4.2, 4.4). Automatic records of content writes are bookkeeping, never metadata
-  // operations; an explicit change of a recorded record, an omission, or explicit keys ownership of an unchanged
-  // unrecorded control file is one file operation per target. Nothing is inferred from current file bytes.
-  const opOf = new Map(ops.map((o) => [o.target, o]));
-  const files = { ...priorFiles };
-  const fileOps = [];
-  const metaReasons = new Map();
-  const autoRecord = (t, ownership, outBuf, base, secret) => {
-    const ext = extensions(base);
-    if (secret) return { ownership: 'merged', note: SECRET_NOTE, ...ext };
-    const text = outBuf.toString('utf8');
-    if (ownership === 'full') return { ownership, sha256: normalizedHash(text), ...ext };
-    if (ownership === 'blocks') return { ownership, blocks: blockHashes(text).hashes, ...ext };
-    if (ownership === 'keys') return { ...base, ownership };
-    return { ownership: 'merged', ...ext };
-  };
-  // v2 inference, used only for a written target with no explicit and no prior ownership.
-  const infer = (t, outBuf, action) => {
-    const hasBlocks = Object.keys(blockHashes(outBuf.toString('utf8')).hashes).length > 0;
-    const living = /^(docs\/|\.ai\/context\/|\.ai\/decisions\/)/.test(t) || t === 'TODO.md' || t === 'README.md';
-    if (living && !hasBlocks) return 'merged';
-    return hasBlocks ? 'blocks' : action === 'create' ? 'full' : 'merged';
-  };
-  const targets = [...new Set([...ops.map((o) => o.target), ...req.keys()])].sort();
-  for (const t of targets) {
-    if (entries.has(t)) continue;
-    const op = opOf.get(t);
-    const write = Boolean(op) && op.action !== 'unchanged';
-    const q = req.get(t) || {};
-    const hasOwnership = hasOwn(q, 'own'); const hasM = hasOwn(q, 'managed'); const hasO = hasOwn(q, 'omissions');
-    const prior = hasOwn(priorFiles, t) ? priorFiles[t] : null;
-    const outBuf = write ? withEol(op.draft, op.eol) : null;
-    const autoOwn = prior ? prior.ownership : write ? infer(t, outBuf, op.action) : null;
-    const auto = write ? autoRecord(t, autoOwn, outBuf, prior || {}, op.secret) : prior;
-    if (!hasOwnership && !hasM && !hasO) { if (auto) files[t] = auto; continue; }
+  // Manifest records (plan 4.1, 4.2, 4.4; C3 3.10): the one derivation commit repeats.
+  const derived = deriveRecords(priorFiles, ops, req, new Set(entries.keys()));
+  for (const [t, code, error] of derived.rejects) reject(t, code, error);
+  const { files, fileOps, metaReasons } = derived;
 
-    const resulting = hasOwnership ? q.own : autoOwn;
-    if ((hasM || hasO) && resulting !== 'keys') { reject(t, 'APPLY_METADATA_OWNERSHIP', `managed or omission metadata requires keys ownership: ${t}`); continue; }
-    // Without a content write, the only supported ownership change is an approved move of a control file into keys.
-    // Generic re-baselining of an unchanged file, and leaving keys without a write, are not supported.
-    if (hasOwnership && !write && q.own !== (prior ? prior.ownership : null) && q.own !== 'keys') {
-      reject(t, 'APPLY_METADATA_TARGET', `metadata-only adoption is not supported for ${t}`);
-      continue;
-    }
-    let after;
-    if (resulting === 'keys') {
-      const kept = prior && prior.ownership === 'keys' ? prior : null;
-      let managed;
-      // A settings request patches its present fields; a policy request is a complete container and replaces it.
-      if (hasM) managed = t === SETTINGS_REL ? { ...(kept ? kept.managed : {}), ...q.managed } : q.managed;
-      else if (kept) managed = kept.managed;
-      else if (t === SETTINGS_REL) managed = {};
-      else { reject(t, 'APPLY_METADATA_REQUIRED', `policy keys ownership requires complete managed metadata: ${t}`); continue; }
-      let omissions = kept && hasOwn(kept, 'omissions') ? kept.omissions : undefined;
-      if (hasO && Object.keys(q.omissions).length) omissions = { ...(omissions || {}), ...q.omissions };
-      after = { ...extensions(prior), ownership: 'keys', managed, ...(omissions !== undefined ? { omissions } : {}) };
-    } else {
-      after = write ? autoRecord(t, resulting, outBuf, prior || {}, op.secret) : prior;
-    }
-    files[t] = after;
-
-    let reasons = null;
-    if (prior) {
-      if (!canonEq(after, auto)) {
-        reasons = [];
-        let changed = after.ownership !== prior.ownership;
-        if (!changed && after.ownership === 'keys') {
-          changed = t === SETTINGS_REL
-            ? ['permissions.allow', 'permissions.deny', 'hooks'].some((f) => !appendOnly(prior.managed[f], after.managed[f]))
-            : prior.managed.schema !== after.managed.schema || !appendOnly(prior.managed.patterns, after.managed.patterns);
-        }
-        if (changed) reasons.push(ownershipReason(t));
-        if (!canonEq(prior.omissions, after.omissions)) reasons.push(R_OMIT);
+  // C3 (plan 3.8, 3.9, 3.12), after C2's structural checks and before approvals: the schema-2 workflow gate, the one
+  // migration snapshot when security-decisions.json exists, and the runtime-first operation order. A C3 refusal stops
+  // here, before any approval is evaluated.
+  let security = null;
+  let ordered = ops;
+  if (!entries.size) {
+    try {
+      const dec = readRunFile(DECISIONS);
+      if (dec.io) throw c3Fail(DECISIONS, 'APPLY_INPUT_IO', `cannot read transaction input: ${dec.io}`, { ioPath: dec.io });
+      if (dec.buf === null) {
+        if (needsMigrationWorkflow(ops, (o) => o.draft)) throw c3Fail(POLICY_REL, 'MIGRATION_REQUIRED', MIGRATION_REQUIRED);
+      } else {
+        const declaredSet = new Set(declared);
+        const evidence = securityEvidence({ decisionsBuf: dec.buf, ops, data: reqData, prior: priorState.manifest, hasInput: (t) => declaredSet.has(t), isSecret, prepared: false });
+        security = { decisionsSha256: sha256(dec.buf), evidence };
       }
-    } else if (!write) {
-      reasons = [ownershipReason(t), ...(after.omissions !== undefined ? [R_OMIT] : [])];
-    } else if (after.omissions !== undefined) {
-      reasons = [R_OMIT]; // C2-P3-1: an omission always needs approval, also as initial metadata of a written target
-    }
-    if (reasons) {
-      fileOps.push({ kind: 'file', target: t, before: prior, after, requiresApproval: reasons.length > 0, reasons });
-      if (reasons.length) metaReasons.set(t, reasons);
+      if (mode === 'prepare' && ops.length) ordered = runtimeOrder(ops, loadCatalog());
+    } catch (e) {
+      if (!e || !e.c3) throw e;
+      reject(e.c3.target, e.c3.code, e.c3.error, { control: true, ...(e.c3.ioPath ? { ioPath: e.c3.ioPath } : {}) });
+      return done();
     }
   }
 
@@ -711,7 +965,7 @@ function analyze(mode, approvals = new Set()) {
     }
     if (entries.size) return done();
   }
-  return { entries: [], ops, fileOps, files, prior: priorState.manifest, priorSha: priorState.sha, requests, sources, bound, isSecret };
+  return { entries: [], ops: ordered, fileOps, files, prior: priorState.manifest, priorSha: priorState.sha, requests, sources, bound, isSecret, security };
 }
 
 // ------------------------------------------------------------- plan reading ----
@@ -734,6 +988,8 @@ function validPlan(p) {
   const work = p.ops.some((o) => o.action !== 'unchanged') || p.metadataOps.length > 0;
   if (work !== (p.manifestAfter !== null)) return false;
   if (p.manifestAfter !== null) { try { if (readManifest(p.manifestAfter).sourceSchema !== 3) return false; } catch { return false; } }
+  // C3 plan 3.8: the only optional field is security, exactly { decisionsSha256 }; no plan-supplied decision path.
+  if (hasOwn(p, 'security') && !(isPlainObj(p.security) && Object.keys(p.security).length === 1 && typeof p.security.decisionsSha256 === 'string' && HEX64.test(p.security.decisionsSha256))) return false;
   return true;
 }
 /** Plan 4.6 step 4: a pre-C2 plan is APPLY_PLAN_SCHEMA, a malformed one APPLY_PLAN_INVALID (exit 1); another run's is exit 4. */
@@ -821,6 +1077,11 @@ function bindingDrift(plan) {
   for (const [name, k] of REQUESTS) if (runFileSha(name) !== plan.metadata[`${k}Sha256`]) rows.push({ target: name, what: DRIFT.request });
   const m = projectHash(MANIFEST_REL);
   if (m.io || m.sha !== plan.manifestPreRawSha) rows.push({ target: MANIFEST_REL, what: DRIFT.manifest });
+  // C3 plan 3.8: one final row when the fixed decisions file's presence or raw bytes differ from the optional binding.
+  // An unreadable decisions file is an input failure, not drift.
+  const dec = readRunFile(DECISIONS);
+  if (dec.io) throw Object.assign(new Error('unreadable security decisions'), { ioPath: dec.io });
+  if ((dec.buf === null ? null : sha256(dec.buf)) !== (plan.security ? plan.security.decisionsSha256 : null)) rows.push({ target: DECISIONS, what: 'security decisions changed since prepare' });
   return rows;
 }
 
@@ -886,7 +1147,30 @@ function preparedReview(planBuf) {
     if (r.io || r.buf === null) failCode('APPLY_DIFF_IO', `cannot read draft review input: ${RUN_REL}/${o.source}`, 2);
     return { ...o, cur, draft: r.buf };
   });
-  return { prepared: true, planSha256: sha256(planBuf), ...renderReview(ops), metadataOps: plan.metadataOps, metadataRequests: null };
+  const review = { prepared: true, planSha256: sha256(planBuf), ...renderReview(ops), metadataOps: plan.metadataOps, metadataRequests: null };
+  if (plan.security) {
+    // C3 plan 3.8: the evidence is rebuilt from the bound run and project inputs and the CURRENT trusted skill files,
+    // never copied from plan.json; a target without a bound role is never read. Prepared review writes nothing.
+    const diffIo = (rel) => failCode('APPLY_DIFF_IO', `cannot read draft review input: ${rel}`, 2);
+    const dec = readRunFile(DECISIONS);
+    if (dec.io || dec.buf === null) diffIo(dec.io || `${RUN_REL}/${DECISIONS}`);
+    const data = {};
+    for (const [name] of REQUESTS) {
+      const r = readRunFile(name);
+      if (r.io) diffIo(r.io);
+      data[name] = r.buf === null ? null : (parseJson(r.buf) ?? null);
+    }
+    const prior = loadPriorManifest();
+    if (prior.io) diffIo(prior.io);
+    const inputs = new Set(plan.inputs.map((i) => i.target));
+    try {
+      review.security = securityEvidence({ decisionsBuf: dec.buf, ops, data, prior: prior.manifest || null, hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret, prepared: true });
+    } catch (e) {
+      if (!e || !e.c3) throw e;
+      failCode(e.c3.code, e.c3.error, 3, { target: e.c3.target });
+    }
+  }
+  return review;
 }
 
 /** Unprepared review: the same checks as prepare, without approvals; the first refusal, in target order, is reported. */
@@ -902,7 +1186,69 @@ function unpreparedReview() {
   return {
     prepared: false, planSha256: null, ...renderReview(a.ops), metadataOps: null,
     metadataRequests: { ownership: data('ownership.json'), managedKeys: data('managed-keys.json'), omissions: data('omissions.json'), manifestMetadata: data('manifest-metadata.json'), transactionInputs: data('transaction-inputs.json') },
+    ...(a.security ? { security: a.security.evidence } : {}),
   };
+}
+
+// ---------------------------------------------------------- commit checks ----
+/**
+ * C3 plan 3.9 step 5: capabilities and reviewed hashes come from the current trusted catalog and assets, candidate
+ * hashes from the bound installed and draft files. A target with no bound role is never read (its row has no candidate,
+ * so a capability failure still wins over the missing candidate). Filesystem failures are APPLY_INPUT_IO (C3-P3-1).
+ */
+function commitToolUnit(plan, draftOf) {
+  const opOf = new Map(plan.ops.map((o) => [o.target, o]));
+  const inputs = new Set(plan.inputs.map((i) => i.target));
+  const nh = (buf) => (buf === null ? null : normalizedHash(buf));
+  const rows = loadCatalog().map((u) => {
+    const op = opOf.get(u.target);
+    // Decision I3-2: commit writes only create and modify ops, so only those are planned candidates; an unchanged op
+    // (or a bound input) is judged by its installed bytes.
+    const planned = op && op.action !== 'unchanged' ? normalizedHash(draftOf(op)) : null;
+    const installed = (op && op.preRawSha !== null) || (!op && inputs.has(u.target)) ? nh(projectBytes(u.target)) : null;
+    return { source: u.source, target: u.target, role: u.role, policySchemas: [...u.policySchemas], reviewedSha256: normalizedHash(u.src), installedSha256: installed, plannedSha256: planned };
+  });
+  try { checkSecurityToolUnit(rows, 2); } catch (e) { throw c3FromError(e); }
+}
+
+/**
+ * C3 plan 3.10 (the C2 follow-up decision, option a): commit derives the manifest from the bound inputs and refuses a
+ * plan whose metadata operations or manifestAfter disagree. The five request files are re-read and must match both their
+ * bound hash and the embedded plan.metadata value, so embedded values can never stand in for the bound bytes. Headers
+ * come from the plan (skillVersion, head, mode, agents), never from the running skill or Git. A mismatch or a semantic
+ * rejection is APPLY_MANIFEST_MISMATCH (exit 4); a read failure is APPLY_INPUT_IO (exit 2).
+ */
+function verifyManifest(plan, draftOf) {
+  const refuse = () => failCode('APPLY_MANIFEST_MISMATCH', MANIFEST_MISMATCH, 4);
+  const prior = loadPriorManifest();
+  if (prior.io) failIo(prior.io);
+  if (prior.error) refuse();
+  const data = {};
+  for (const [name, k] of REQUESTS) {
+    const r = readRunFile(name);
+    if (r.io) failIo(r.io);
+    if ((r.buf === null ? null : sha256(r.buf)) !== plan.metadata[`${k}Sha256`]) refuse();
+    const v = r.buf === null ? null : parseJson(r.buf);
+    if (v === undefined || (v !== null && !REQUEST_SHAPES[name](v)) || !canonEq(v, plan.metadata[k])) refuse();
+    data[name] = v;
+  }
+  const priorFiles = prior.manifest ? prior.manifest.files : {};
+  const known = new Set([...plan.sourceInventory.map((s) => s.target), ...Object.keys(priorFiles)]);
+  const { req, rejects } = buildReq(data, known);
+  if (rejects.length) refuse();
+  const { isSecret } = requireRefusalSet();
+  const ops = plan.ops.map((o) => {
+    const secret = isSecret(o.target);
+    return { target: o.target, action: o.action, eol: o.eol, secret, draft: o.action !== 'unchanged' && !secret ? draftOf(o) : null };
+  });
+  const d = deriveRecords(priorFiles, ops, req);
+  if (d.rejects.length) refuse();
+  const { manifestAfter, metadataOps } = buildManifest({
+    prior: prior.manifest, files: d.files, fileOps: d.fileOps, writes: ops.some((o) => o.action !== 'unchanged'),
+    snippet: data['manifest-metadata.json'] ? data['manifest-metadata.json'].codexSnippetSha256 : undefined,
+    mode: plan.mode, agents: plan.agents, head: plan.head, version: plan.skillVersion,
+  });
+  if (!canonEq(metadataOps, plan.metadataOps) || !canonEq(manifestAfter, plan.manifestAfter)) refuse();
 }
 
 // ------------------------------------------------------------------ init ----
@@ -920,8 +1266,8 @@ else if (cmd === 'diff') {
     if (p.io) failCode('APPLY_DIFF_IO', `cannot read draft review input: ${p.io}`, 2);
     review = p.buf !== null ? preparedReview(p.buf) : unpreparedReview();
   } catch (e) { if (!isFsFailure(e)) throw e; failFs(e); }
-  const { prepared, planSha256, files, vault, metadataOps, metadataRequests } = review;
-  ok({ root: toPosix(root), runId, prepared, planSha256, files, vault, metadataOps, metadataRequests });
+  const { prepared, planSha256, files, vault, metadataOps, metadataRequests, security } = review;
+  ok({ root: toPosix(root), runId, prepared, planSha256, files, vault, metadataOps, metadataRequests, ...(security ? { security } : {}) });
 }
 
 // --------------------------------------------------------------- prepare ----
@@ -937,27 +1283,14 @@ else if (cmd === 'prepare') {
     failCode('APPLY_PLAN_REJECTED', 'plan rejected', 3, { errors: a.entries.map(({ target, code, error }) => ({ target, code, error })) });
   }
 
-  // The manifest to write (plan 3.5, 4.4): prior data with the explicit and automatic records, under the plan's
-  // headers. Written only when there is real work; a genuine no-op leaves every manifest byte (mode, sourceCommit) alone.
+  // The manifest to write (plan 3.5, 4.4), by the derivation commit repeats (C3 3.10). Written only when there is real
+  // work; a genuine no-op leaves every manifest byte (mode, sourceCommit) alone.
   const head = git(['rev-parse', '--short', 'HEAD'], root).stdout || null;
-  const snippet = a.requests['manifest-metadata.json'].data?.codexSnippetSha256;
-  const manifestChange = Boolean(a.prior) && (a.prior.schema === 2 || (snippet !== undefined && snippet !== a.prior.codexSnippetSha256));
-  const metadataOps = [...a.fileOps];
   const writes = a.ops.filter((o) => o.action !== 'unchanged');
-  let manifestAfter = null;
-  if (writes.length || metadataOps.length || manifestChange) {
-    const known = ['schema', 'skill', 'skillVersion', 'mode', 'agents', 'sourceCommit', 'files'];
-    const extra = Object.fromEntries(Object.entries(a.prior || {}).filter(([k]) => !known.includes(k)));
-    const files = Object.fromEntries(Object.keys(a.files).sort().map((k) => [k, a.files[k]]));
-    manifestAfter = {
-      schema: 3, skill: 'project-setup', skillVersion: skillVersion(), mode, agents, sourceCommit: head,
-      ...extra, ...(snippet !== undefined ? { codexSnippetSha256: snippet } : {}), files,
-    };
-    const headerOf = (m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== 'files'));
-    // One manifest operation only for a schema-2 conversion or a changed snippet hash of an existing manifest (D4,
-    // C2-P3-6); a header refresh caused by other work is not one.
-    if (manifestChange) metadataOps.push({ kind: 'manifest', target: MANIFEST_REL, before: headerOf(a.prior), after: headerOf(manifestAfter), requiresApproval: false, reasons: [] });
-  }
+  const { manifestAfter, metadataOps } = buildManifest({
+    prior: a.prior, files: a.files, fileOps: a.fileOps, writes: writes.length > 0, snippet: a.requests['manifest-metadata.json'].data?.codexSnippetSha256,
+    mode, agents, head, version: skillVersion(),
+  });
   const metadata = {};
   for (const [name, k] of REQUESTS) { metadata[`${k}Sha256`] = a.requests[name].sha; metadata[k] = a.requests[name].data; }
   const plan = {
@@ -971,6 +1304,8 @@ else if (cmd === 'prepare') {
     inputs: [...a.bound].filter(([t]) => t !== MANIFEST_REL).map(([target, preRawSha]) => ({ target, preRawSha })).sort(byTarget),
     sourceInventory: a.sources.map(({ target, origin }) => ({ target, origin })),
     manifestAfter,
+    // C3 plan 3.8: the one optional field, only when the run holds security-decisions.json.
+    ...(a.security ? { security: { decisionsSha256: a.security.decisionsSha256 } } : {}),
   };
   try { saveRunJson(PLAN_REL, plan); } catch (e) { failUnsafe(e); }
   ok({
@@ -1014,6 +1349,25 @@ else if (cmd === 'commit') {
     drift = bindingDrift(plan);
   } catch (e) { if (!isFsFailure(e)) throw e; failFs(e); }
   if (drift.length) failCode('APPLY_DRIFT', DRIFT_ERROR, 4, { drift });
+
+  // C3 plan 3.9 steps 4-6, still before heartbeat, journal or any write: the schema-2 workflow trigger (a forged plan
+  // cannot drop the decisions), the runtime unit rebuilt from the TRUSTED catalog and assets (never from plan.json),
+  // then the manifest derived from the bound inputs. Commit never resolves decisions, merges denies or renders again.
+  try {
+    const draftOf = (o) => {
+      const r = readRunFile(o.source);
+      if (r.io || r.buf === null) throw Object.assign(new Error('unreadable draft'), { ioPath: `${RUN_REL}/${o.source}` });
+      if (sha256(r.buf) !== o.sourceSha256) failCode('APPLY_DRIFT', DRIFT_ERROR, 4, { drift: [{ target: o.target, what: DRIFT.source }] });
+      return r.buf;
+    };
+    if (!plan.security && needsMigrationWorkflow(plan.ops, draftOf)) failCode('MIGRATION_REQUIRED', MIGRATION_REQUIRED, 3, { target: POLICY_REL });
+    if (plan.security) commitToolUnit(plan, draftOf);
+    verifyManifest(plan, draftOf);
+  } catch (e) {
+    if (e && e.c3) failCode(e.c3.code, e.c3.error, 3, { target: e.c3.target });
+    if (!isFsFailure(e)) throw e;
+    failFs(e);
+  }
 
   const ops = plan.ops.filter((o) => o.action !== 'unchanged');
   if (!ops.length && !plan.metadataOps.length) { ok({ committed: false, reason: 'nothing to change (zero diff)' }); process.exit(0); }

@@ -699,6 +699,32 @@ function makeGuard(dir, paths, mode = 'record') {
   const file = writePreload(dir, GUARD_SOURCE({ log, watch, mode }));
   return { file, log, hits: () => parseLog(readText(log)) };
 }
+// Read limit (C3-P3-1): counts the logical reads of the watched files (a readFileSync and the openSync it makes count once) and fails every read after the
+// first cfg.allow of them with an EACCES that carries its path. cfg.allow Infinity only counts.
+const READLIMIT_SOURCE = (cfg) => [
+  "'use strict';",
+  "const fs = require('fs');",
+  "const path = require('path');",
+  `const CFG = ${JSON.stringify(cfg)};`,
+  "const WIN = process.platform === 'win32';",
+  "const fold = (s) => (WIN ? s.toLowerCase() : s);",
+  "const WATCH = new Set(CFG.watch);",
+  "let depth = 0; let count = 0;",
+  "function toStr(p) { return typeof p === 'string' ? p : (Buffer.isBuffer(p) ? p.toString() : null); }",
+  "function hit(p) { const s = toStr(p); if (s === null) return false; let abs; try { abs = path.resolve(s); } catch (e) { return false; } let d = path.dirname(abs); try { d = fs.realpathSync.native(d); } catch (e) { /* keep */ } if (WATCH.has(fold(path.join(d, path.basename(abs))))) return true; try { return WATCH.has(fold(fs.realpathSync.native(abs))); } catch (e) { return false; } }",
+  "function note(o) { try { fs.appendFileSync(CFG.log, JSON.stringify(o) + '\\n'); } catch (e) { /* ignore */ } }",
+  "function count1(p, op) { count++; note({ op: op, n: count }); if (count > CFG.allow) { const e = new Error('C3 injected read failure'); e.code = 'EACCES'; e.syscall = 'open'; e.path = String(p); throw e; } }",
+  "const origRead = fs.readFileSync;",
+  "fs.readFileSync = function (p) { if (hit(p)) count1(p, 'readFileSync'); depth++; try { return origRead.apply(this, arguments); } finally { depth--; } };",
+  "const origOpen = fs.openSync;",
+  "fs.openSync = function (p, flags) { if (depth === 0 && hit(p) && (flags === undefined || flags === null || (typeof flags === 'string' && (flags.charAt(0) === 'r' || flags.indexOf('+') >= 0)))) count1(p, 'openSync'); return origOpen.apply(this, arguments); };",
+].join('\n') + '\n';
+function makeReadLimit(dir, paths, allow) {
+  const log = path.join(dir, `readlimit-${preloadSeq + 1}.log`);
+  const watch = [...new Set(paths.flatMap((p) => keysOfPath(p)))];
+  const file = writePreload(dir, READLIMIT_SOURCE({ log, watch, allow: allow === Infinity ? 1e9 : allow }));
+  return { file, log, reads: () => parseLog(readText(log)).length };
+}
 // Rename fault injection: rules are { dest: <file path>, nth, action: "throw" | "exit-after", exitCode }.
 function makeFault(dir, rules) {
   const log = path.join(dir, `fault-${preloadSeq + 1}.log`);
@@ -706,10 +732,14 @@ function makeFault(dir, rules) {
   return { file, log, fired: () => parseLog(readText(log)) };
 }
 // A recording, failing git first on PATH. Windows: a copy of Node named git.exe, a preload that recognizes it and exits 91.
-function makeGitShim(context, dir) {
-  const shimDir = path.join(dir, 'git-shim');
+let shimSeq = 0;
+function makeGitShim(context, parent) {
+  const dir = path.join(parent, `git-shim-${++shimSeq}`); // its own directory and records file: a record can never come from another shim
+  fs.mkdirSync(dir, { recursive: true });
+  const shimDir = path.join(dir, 'bin');
   fs.mkdirSync(shimDir, { recursive: true });
   const rec = path.join(dir, 'git-records.jsonl');
+  fs.writeFileSync(rec, '');
   const env = {};
   let origPath = null;
   for (const [k, v] of Object.entries(context.env)) {
@@ -2091,6 +2121,7 @@ async function retainedDenies(context) {
       await step('a metadata-only drop writes no settings draft, still needs the settings approval, and leaves the settings bytes alone', async () => {
         const root = clean('metaonly');
         const settingsBytes = readBytes(projPath(root, T_SETTINGS));
+        const denyCountBefore = baseFacts(root).deny.length; // read before the commit: the manifest changes with it
         const s = startMigration(kit, check, root, 'run-c3-rd5', { decide: (r) => decisionsFile(r, { coverage: coverAll(r, 'omit'), dropDenyOwnership: ['Read(**/.env)'] }) });
         check(s.ok === true, 'stage succeeds', s.st && s.st.stdout.slice(0, 300));
         if (!s.ok) return;
@@ -2105,7 +2136,59 @@ async function retainedDenies(context) {
         check(c.code === 0 && c.json && c.json.committed === true, 'commit succeeds', c.stdout.slice(0, 300));
         check(sameBytes(readBytes(projPath(root, T_SETTINGS)), settingsBytes), 'the settings bytes are unchanged');
         const rec = readManifestFile(root).files[T_SETTINGS];
-        check(rec && !rec.managed['permissions.deny'].includes('Read(**/.env)') && rec.managed['permissions.deny'].length === baseFacts(root).deny.length - 1, 'only the ownership metadata lost the selected string', rec && rec.managed['permissions.deny'].length);
+        check(rec && !rec.managed['permissions.deny'].includes('Read(**/.env)') && rec.managed['permissions.deny'].length === denyCountBefore - 1, 'only the ownership metadata lost the selected string', rec && rec.managed['permissions.deny'].length);
+      });
+      // C3-P3-5: denyOmissions is the complete requested settings deny-omission list. A prior entry missing from it is a requested removal, which C2 refuses
+      // without the settings path approval; an equal list requests no omission change.
+      await step('C3-P3-5 a migration that starts with deny omissions: removing an entry needs the settings approval (reason: approved omission records change) and is removed after approval; an equal list requests no omission change', async () => {
+        const HT = { anchor: 'any', glob: '**/.htpasswd' };
+        const CE = { anchor: 'any', glob: '**/*.cert' };
+        const seed = (label) => {
+          const root = clean(label);
+          const m = readManifestFile(root);
+          m.files[T_SETTINGS].omissions = { 'permissions.deny': [HT, CE] };
+          putFile(manifestPath(root), jsonText(m));
+          commitAll(context, root, 'settings deny omissions on record');
+          return root;
+        };
+        // an equal list
+        const eqRoot = seed('omit-equal');
+        const es = startMigration(kit, check, eqRoot, 'run-c3-om1', { decide: (r) => decisionsFile(r, { coverage: coverAll(r), denyOmissions: [HT, CE] }) });
+        check(es.ok === true, 'stage succeeds with an equal omission list', es.st && es.st.stdout.slice(0, 300));
+        if (es.ok) {
+          const ep = kit.prepare(eqRoot, 'run-c3-om1', { approve: [T_POLICY] });
+          check(ep.code === 0 && ep.json && ep.json.ok === true, 'prepare needs no settings approval for an equal list', ep.stdout.slice(0, 300));
+          const unrelated = kit.prepare(eqRoot, 'run-c3-om1', { approve: [T_POLICY, T_SETTINGS] });
+          expectPEntry(check, 'an approval of the settings path is refused as unneeded', unrelated, { target: T_SETTINGS, code: 'APPLY_APPROVAL_UNRELATED', error: '--approve-user-content names files that do not need it; refusing broad approvals' });
+          const eplan = readPlan(eqRoot, 'run-c3-om1');
+          const eop = eplan && eplan.metadataOps.find((m) => m.kind === 'file' && m.target === T_SETTINGS);
+          check(!eop || !eop.reasons.includes(R_OMIT), 'the settings metadata operation, if any, has no omission reason', eop && eop.reasons);
+          const ec = kit.commit(eqRoot, 'run-c3-om1', ep.json && ep.json.planSha256);
+          check(ec.code === 0 && ec.json && ec.json.committed === true, 'commit succeeds', ec.stdout.slice(0, 300));
+          const rec = readManifestFile(eqRoot).files[T_SETTINGS];
+          check(rec && rec.omissions && eq(idKeys(rec.omissions['permissions.deny']), idKeys([HT, CE])), 'the recorded deny omissions are unchanged', rec && rec.omissions);
+        }
+        // a removed entry
+        const rmRoot = seed('omit-removed');
+        const rs = startMigration(kit, check, rmRoot, 'run-c3-om2', { decide: (r) => decisionsFile(r, { coverage: coverAll(r), denyOmissions: [HT] }) });
+        check(rs.ok === true, 'stage succeeds with an omission removed', rs.st && rs.st.stdout.slice(0, 300));
+        if (rs.ok) {
+          const refused = kit.prepare(rmRoot, 'run-c3-om2', { approve: [T_POLICY] });
+          const entry = ((refused.json && refused.json.errors) || []).find((e) => e.target === T_SETTINGS);
+          check(refused.code === 3 && refused.json && refused.json.code === 'APPLY_PLAN_REJECTED' && entry && entry.code === 'APPLY_APPROVAL_REQUIRED' && (entry.error === metaApprovalError(T_SETTINGS) || (entry.error.endsWith(approvalSuffix(T_SETTINGS)) && entry.error.includes(R_OMIT))), 'without the settings approval prepare refuses the settings path (APPLY_APPROVAL_REQUIRED)', { code: refused.code, entry });
+          check(!exists(runFile(rmRoot, 'run-c3-om2', 'plan.json')), 'a refused prepare writes no plan');
+          const approved = kit.prepare(rmRoot, 'run-c3-om2', { approve: [T_POLICY, T_SETTINGS] });
+          check(approved.code === 0 && approved.json && approved.json.ok === true, 'prepare succeeds once the settings path is approved', approved.stdout.slice(0, 300));
+          const rplan = readPlan(rmRoot, 'run-c3-om2');
+          const rop = rplan && rplan.metadataOps.find((m) => m.kind === 'file' && m.target === T_SETTINGS);
+          check(rop && rop.requiresApproval === true && rop.reasons.includes(R_OMIT) && eq(idKeys(rop.after.omissions && rop.after.omissions['permissions.deny']), idKeys([HT])), 'the settings metadata operation carries the omission reason and the shortened list', rop);
+          const rc = kit.commit(rmRoot, 'run-c3-om2', approved.json && approved.json.planSha256);
+          check(rc.code === 0 && rc.json && rc.json.committed === true, 'commit succeeds', rc.stdout.slice(0, 300));
+          const rec = readManifestFile(rmRoot).files[T_SETTINGS];
+          check(rec && rec.omissions && eq(idKeys(rec.omissions['permissions.deny']), idKeys([HT])), 'the removed entry is gone from the recorded omissions after approval', rec && rec.omissions);
+          const deny = readJson(projPath(rmRoot, T_SETTINGS)).permissions.deny;
+          check(deny.includes('Read(**/*.cert)') && !deny.includes('Read(**/.htpasswd)'), 'the rule whose omission was removed is now generated; the one still omitted is not', deny.slice(-4));
+        }
       });
       await step('an absent retired string keeps its ownership and is not restored: nothing is removed because the renderer list lacks it', async () => {
         const root = clean('absent');
@@ -2128,7 +2211,7 @@ async function retainedDenies(context) {
 // ============================================== R80/C3/snapshot ====
 // Plan 3.7, 3.8 and 4.6: one prepared migration snapshot binds the staged outputs; the review recomputes its evidence; drift and refusals are exact.
 const DOC_API = 'docs/api-conventions.md';
-const DIFF_KEYS = ['files', 'metadataOps', 'metadataRequests', 'planSha256', 'prepared', 'root', 'runId', 'vault'];
+const DIFF_KEYS = ['files', 'metadataOps', 'metadataRequests', 'ok', 'planSha256', 'prepared', 'root', 'runId', 'vault'];
 async function cleanPrepared(context) {
   return cached(context, 'mig-clean-v2b', async () => {
     const fails = [];
@@ -2261,7 +2344,7 @@ async function snapshot(context) {
         check(eq(sorted(Object.keys(sc.p.prep.json)), PREPARE_KEYS) && sc.p.prep.json.review === reviewText(id), 'prepare keeps its existing success keys and its review instruction', Object.keys(sc.p.prep.json));
         const key = ['toolUnit', 'report', 'policy', 'controls', 'deny', 'skillInputs', 'securityDecisionsSha256'].filter((k) => hasOwn(plan, k));
         check(key.length === 0, 'there is no stored toolUnit, report, policy, controls, deny report, skill-input map or top-level securityDecisionsSha256', key);
-        const ord = clone1('ord');
+        const ord = cloneBase(dir, v2, 'ord'); // not a clone of the prepared migration: that one still holds the lock of its own run
         const o = runSpec(kit, ord, 'run-c3-ord', { drafts: { [DOC_API]: '# api-conventions\n\nchanged\n' } });
         check(o.ok === true && eq(Object.keys(o.plan).sort(), ORDINARY_PLAN_KEYS), 'an ordinary prepared plan retains exactly the 15 keys of C2', o.plan && Object.keys(o.plan));
         const od = kit.diff(ord, 'run-c3-ord');
@@ -2298,7 +2381,7 @@ async function snapshot(context) {
       await step('decisions: changing or removing them after prepare is one trailing security-decisions row; adding them after an ordinary prepare is the same row', async () => {
         driftBoth('changed decisions', (r) => ws(runFile(r, id, T_DECISIONS)), [dr(T_DECISIONS, DRIFT_WHAT.DECISIONS)]);
         driftBoth('removed decisions', (r) => fs.rmSync(runFile(r, id, T_DECISIONS)), [dr(T_DECISIONS, DRIFT_WHAT.DECISIONS)]);
-        const ord = clone1('ordd');
+        const ord = cloneBase(dir, v2, 'ordd'); // a fresh v2 clone: the prepared migration's clone holds the lock of run-c3-clean
         const o = runSpec(kit, ord, 'run-c3-ord2', { drafts: { [DOC_API]: '# api-conventions\n\nchanged\n' } });
         check(o.ok === true && !hasOwn(o.plan, 'security'), 'an ordinary prepare binds no decisions file');
         if (!o.ok) return;
@@ -2415,6 +2498,9 @@ async function snapshot(context) {
         check(d.json && d.json.security && eq(d.json.security.report, s.report) && eq(d.json.security.toolUnit.map((r) => r.target), [T_READER, T_HELPER]), 'the evidence is the one of the report and the staged tools', d.json && d.json.security && d.json.security.toolUnit.map((r) => r.target));
         check(projectSnapshot(u) === before && !exists(runFile(u, 'run-c3-up1', 'plan.json')) && !exists(runFile(u, 'run-c3-up1', 'journal.json')), 'it creates no plan, journal or directory');
         check(shim.records().length === 0, 'it invokes zero Git commands', shim.records());
+        const controlRoot = cloneBase(dir, v2, 'up-control');
+        kit.prepare(controlRoot, 'run-c3-upc', { env: shim.env });
+        check(shim.records().length > 0, 'control: this shim does intercept the Git use of another command', shim.records().length);
         const badHash = cloneTree(u, path.join(dir, 'up-hash'));
         putRequest(badHash, 'run-c3-up1', T_DECISIONS, { ...s.decisions, reportSha256: H64('d') });
         expectF(check, 'unprepared diff with a changed report hash', kit.diff(badHash, 'run-c3-up1'), { code: 'MIGRATION_REPORT_CHANGED', exit: 3, error: MSG.REPORT_CHANGED, target: T_DECISIONS });
@@ -2427,6 +2513,49 @@ async function snapshot(context) {
         const rs = startMigration(realKit, check, real, 'run-c3-up2');
         check(rs.ok === true, 'the real skill stages a genuine v2 migration', rs.st && rs.st.stdout.slice(0, 300));
         if (rs.ok) expectF(check, 'unprepared diff with the real catalog', realKit.diff(real, 'run-c3-up2'), { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
+      });
+      // I3-3 (docs/plans/2026-10-18-project-setup-v3-rc1-c3-decisions.md): migration reads respect the refusal set. A settings file or an installed runtime
+      // target that the installed policy protects is never read and never staged; stage, prepare and the unprepared review refuse it by name.
+      await step('I3-3 a protected settings file or runtime target is never read: stage fails MIGRATION_PROTECTED_INPUT (exit 3) with nothing staged; the unprepared review fails the same code with its target; prepare refuses it too', async () => {
+        const text = (rel) => `migration input is protected by the security policy: ${rel}`;
+        // control: without the protection the same stage reads the settings file (the read-recording preload sees it)
+        const open = cloneBase(dir, v2, 'prot-control');
+        kit.begin(open, 'run-c3-pc1');
+        const openReport = kit.report(open).json;
+        if (openReport && openReport.report) {
+          putRequest(open, 'run-c3-pc1', T_DECISIONS, decisionsFile(openReport.report, { coverage: coverAll(openReport.report) }));
+          const gc = makeGuard(dir, [projPath(open, T_SETTINGS)], 'record');
+          const sc1 = kit.stage(open, 'run-c3-pc1', { preload: gc.file });
+          check(sc1.code === 0 && gc.hits().length > 0, 'control: an unprotected settings file is read by stage (the guard sees the read)', { code: sc1.code, reads: gc.hits().length });
+        } else check(false, 'control: the report succeeds');
+        for (const [label, rel, rid] of [['the settings file', T_SETTINGS, 'run-c3-ps1'], ['an installed runtime target', T_READER, 'run-c3-pr1']]) {
+          const root3 = cloneBase(dir, v2, `prot-${rid}`);
+          editPolicy(context, root3, (p) => { p.projectPatterns = [...(p.projectPatterns || []), { anchor: 'root', glob: rel }]; });
+          check(kit.begin(root3, rid), `${label}: the run starts`);
+          const rep3 = kit.report(root3).json;
+          if (!rep3 || !rep3.report) { check(false, `${label}: the report succeeds`); continue; }
+          putRequest(root3, rid, T_DECISIONS, decisionsFile(rep3.report, { coverage: coverAll(rep3.report) }));
+          const runBefore = snapshotTree(runDirOf(root3, rid));
+          const g1 = makeGuard(dir, [projPath(root3, rel)], 'record');
+          const st = kit.stage(root3, rid, { preload: g1.file });
+          // PLAN-GAP: the decision gives the text without saying whether stage's own envelope carries the code prefix; both spellings are accepted there.
+          check(st.code === 3 && st.stderr === '' && st.json && st.json.ok === false && st.json.code === 'MIGRATION_PROTECTED_INPUT' && (st.json.error === text(rel) || st.json.error === `MIGRATION_PROTECTED_INPUT: ${text(rel)}`) && eq(sorted(Object.keys(st.json)), ['code', 'error', 'ok']), `${label}: stage fails MIGRATION_PROTECTED_INPUT naming the path (F, exit 3)`, { code: st.code, out: st.stdout.slice(0, 300), err: st.stderr.slice(0, 120) });
+          check(g1.hits().length === 0, `${label}: stage never read the protected path`, g1.hits().slice(0, 3));
+          check(snapshotTree(runDirOf(root3, rid)) === runBefore, `${label}: nothing was staged or written in the run`);
+          // The decision pins the review and prepare regressions for the settings file. For an installed runtime target nothing is staged here (stage refused
+          // it), so the evaluation may legitimately fail earlier on the missing staged policy projection (section 3.12 puts projections before the tool phase,
+          // where installed runtime targets are read); its stage regression above is what is asserted for it.
+          if (rel !== T_SETTINGS) continue;
+          const g2 = makeGuard(dir, [projPath(root3, rel)], 'record');
+          const df = kit.diff(root3, rid, { preload: g2.file });
+          expectF(check, `${label}: unprepared review`, df, { code: 'MIGRATION_PROTECTED_INPUT', exit: 3, error: text(rel), target: rel });
+          check(g2.hits().length === 0, `${label}: the unprepared review never read the protected path`, g2.hits().slice(0, 3));
+          const g3 = makeGuard(dir, [projPath(root3, rel)], 'record');
+          const pr = kit.prepare(root3, rid, { approve: [T_POLICY], preload: g3.file });
+          // PLAN-GAP: the decision pins prepare's evaluation only as "checks the path"; its P entry target and text are not pinned, so only the code is.
+          check(pr.code === 3 && pr.stderr === '' && pr.json && pr.json.code === 'APPLY_PLAN_REJECTED' && Array.isArray(pr.json.errors) && pr.json.errors.some((e) => e.code === 'MIGRATION_PROTECTED_INPUT'), `${label}: prepare refuses with MIGRATION_PROTECTED_INPUT (P, exit 3)`, { code: pr.code, out: pr.stdout.slice(0, 300) });
+          check(!exists(runFile(root3, rid, 'plan.json')) && g3.hits().length === 0, `${label}: prepare wrote no plan and never read the protected path`, g3.hits().slice(0, 3));
+        }
       });
       await step('a decisions file that cannot be read maps exactly: prepare names security-decisions.json with the path-bearing message; diff is APPLY_DIFF_IO; commit refuses without writing', async () => {
         const rel = `.ai/.run/${id}/${T_DECISIONS}`;
@@ -2544,7 +2673,7 @@ async function toolUnit(context) {
         await expectErr(check, 'an incompatible a is reported before an unreviewed b', call([trow({ source: 'assets/tools/b.mjs', target: '.ai/tools/b.mjs', reviewedSha256: A }), trow({ source: 'assets/tools/a.mjs', target: '.ai/tools/a.mjs', policySchemas: [1] })]), 'TOOL_UNIT_INCOMPATIBLE', MSG.TOOL_INCOMPATIBLE('.ai/tools/a.mjs'));
       });
       await step('malformed rows, duplicate targets, malformed hashes and a non-integer policy schema are TOOL_UNIT_INPUT', async () => {
-        const A = H64('1');
+        const A = H64('a'); // hex letters, so that A.toUpperCase() differs from A
         const good = trow({ reviewedSha256: A, plannedSha256: A });
         const bad = [
           ['rows not an array', 'x', 2], ['rows null', null, 2], ['a row that is not an object', [null], 2], ['a missing field', [(() => { const r = clone(good); delete r.role; return r; })()], 2], ['a missing hash field', [(() => { const r = clone(good); delete r.installedSha256; return r; })()], 2],
@@ -2780,6 +2909,73 @@ async function toolUnit(context) {
         expectF(check, 'a missing bound reader role', rc, { code: 'TOOL_UNIT_UNREVIEWED', exit: 3, error: MSG.TOOL_UNREVIEWED(T_READER), target: T_READER });
         check(guard.hits().length === 0, 'the unbound reader was not read', guard.hits().slice(0, 3));
         checkNoWrite(check, 'a missing bound reader role', u, 'run-c3-r1', before);
+      });
+      // I3-2: a runtime target's planned candidate is its op's draft only when the op's action is create or modify. A forged, hash-approved plan that marks a
+      // runtime op unchanged (commit writes only create and modify ops) is refused by the tool-unit check of that target with the plan's own failure.
+      await step('I3-2 a forged hash-approved plan whose helper op, or reader op, is unchanged is refused at commit with TOOL_UNIT_UNREVIEWED (F, exit 3) and its target, before heartbeat, journal or write', async () => {
+        const prior = readManifestFile(clean.v2.root).files;
+        for (const [label, target] of [['a new helper (no installed bytes)', T_HELPER], ['a replaced reader (installed bytes are the old v2 reader)', T_READER]]) {
+          const r = pre('i32');
+          const forgedSha = forgePlan(r, clean.id, (plan) => {
+            plan.ops.find((o) => o.target === target).action = 'unchanged';
+            // the derived manifest of an unchanged op has no automatic record: the helper's is removed, the reader keeps its prior one
+            if (target === T_HELPER) delete plan.manifestAfter.files[T_HELPER];
+            else plan.manifestAfter.files[T_READER] = clone(prior[T_READER]);
+          });
+          const before = noWriteState(r, clean.id);
+          const rc = synthKit.commit(r, clean.id, forgedSha);
+          expectF(check, `${label}: unchanged op`, rc, { code: 'TOOL_UNIT_UNREVIEWED', exit: 3, error: MSG.TOOL_UNREVIEWED(target), target });
+          checkNoWrite(check, `${label}: unchanged op`, r, clean.id, before);
+          check(!exists(projPath(r, T_HELPER)) || target !== T_HELPER, `${label}: the helper was not installed without its operation`);
+        }
+      });
+      // I3-4: section 3.12 orders the checks decisions, report and action consistency, staged projections, catalog and tools, approvals; a malformed catalog
+      // never hides a decision error.
+      await step('I3-4 invalid decisions together with a malformed catalog report the decision error, not TOOL_CATALOG, in stage, the unprepared review and prepare', async () => {
+        const skillBad = deriveSkill(synth, dir, `skill-i34-${++n}`, (s) => putFile(path.join(s, 'data', 'runtime-units.json'), jsonText({ schema: 1, units: [CATALOG_COMPAT.units[0]] })));
+        const badKit = kit.withSkill(skillBad);
+        const variants = [
+          ['a changed report hash', (d) => ({ ...d, reportSha256: H64('d') }), 'MIGRATION_REPORT_CHANGED', MSG.REPORT_CHANGED],
+          ['a missing required decision', (d) => ({ ...d, coverage: d.coverage.filter((c) => c.id !== 'coverage:7') }), 'MIGRATION_DECISION_REQUIRED', MSG.DECISION_REQUIRED('coverage:7')],
+        ];
+        for (const [label, alter, code, message] of variants) {
+          const root = cloneBase(dir, v2, `i34-${++n}`);
+          const rid = `run-c3-i34-${n}`;
+          kit.begin(root, rid);
+          const rep = kit.report(root).json;
+          if (!rep || !rep.report) { check(false, `${label}: the report succeeds`); continue; }
+          putRequest(root, rid, T_DECISIONS, alter(decisionsFile(rep.report, { coverage: coverAll(rep.report) })));
+          expectF(check, `${label}: stage`, badKit.stage(root, rid), { code, exit: 3, error: message });
+          expectF(check, `${label}: unprepared review`, badKit.diff(root, rid), { code, exit: 3, error: message, target: T_DECISIONS });
+          const pr = badKit.prepare(root, rid, { approve: [T_POLICY] });
+          expectPEntry(check, `${label}: prepare`, pr, { target: T_DECISIONS, code, error: message });
+          check(!((pr.json && pr.json.errors) || []).some((e) => e.code === 'TOOL_CATALOG'), `${label}: prepare does not report the catalog`, pr.json && pr.json.errors);
+        }
+      });
+      // C3-P3-1: a filesystem failure during commit's runtime tool-unit check is APPLY_INPUT_IO / 2 with the project-relative path, like derivation I/O.
+      await step('C3-P3-1 a read failure of a bound runtime target during commit is APPLY_INPUT_IO (F, exit 2) with its project-relative path, empty stderr, before heartbeat, journal or write', async () => {
+        const u = cloneBase(dir, v2, 'io-unit');
+        putFile(projPath(u, T_READER), SYNTH_READER);
+        commitAll(context, u, 'the compatible reader is already installed');
+        const s = startMigration(synthKit, check, u, 'run-c3-io1');
+        const p = s.ok ? prepareApproving(synthKit, u, 'run-c3-io1') : { ok: false };
+        check(p.ok === true, 'the migration with an unchanged installed reader prepares', p.prep && p.prep.stdout.slice(0, 300));
+        if (!p.ok) return;
+        // how many logical reads of the reader does a whole successful commit make? the last one is the tool-unit check's (derivation reads no target body)
+        const counting = cloneTree(u, path.join(dir, `io-count${++n}`));
+        const cl = makeReadLimit(dir, [projPath(counting, T_READER)], Infinity);
+        const c0 = synthKit.commit(counting, 'run-c3-io1', p.sha, { preload: cl.file });
+        check(c0.code === 0 && c0.json && c0.json.committed === true, 'the counting commit succeeds', c0.stdout.slice(0, 200));
+        const total = cl.reads();
+        // PLAN-GAP: if the check reuses the hash the binding recheck read (a single read in all), there is no filesystem read of its own to fail and the
+        // clause has nothing to apply to; only the commit result is then asserted.
+        if (total < 2) { check(total === 1, 'the reader is read at least by the binding recheck', total); return; }
+        const failing = cloneTree(u, path.join(dir, `io-fail${++n}`));
+        const fl = makeReadLimit(dir, [projPath(failing, T_READER)], total - 1);
+        const before = noWriteState(failing, 'run-c3-io1');
+        const rc = synthKit.commit(failing, 'run-c3-io1', p.sha, { preload: fl.file });
+        expectF(check, 'the reader read fails after the binding recheck', rc, { code: 'APPLY_INPUT_IO', exit: 2, error: `cannot read transaction input: ${T_READER}` });
+        checkNoWrite(check, 'the reader read fails after the binding recheck', failing, 'run-c3-io1', before);
       });
     });
   });

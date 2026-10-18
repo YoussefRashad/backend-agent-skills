@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { matchesPolicyPath, readSecurityPolicy } from '../assets/tools/security-policy.mjs';
+import { matchesPolicyPath, parseSecurityPolicy, readSecurityPolicy } from '../assets/tools/security-policy.mjs';
 
 export const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const IS_WINDOWS = process.platform === 'win32';
@@ -133,6 +133,23 @@ export function matchesAny(relPosix, globs) {
 
 export function loadSecretSpec() {
   return JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths.json'), 'utf8'));
+}
+
+/**
+ * The effective secret-path policy (plan C3 section 2.4): the shipped defaults for root null, otherwise the installed
+ * <root>/.ai/security-paths.json of an explicit filesystem root (no Git lookup). Only an ABSENT installed policy falls back
+ * to the skill; a present malformed one throws C1's own error and an unreadable one POLICY_IO, never the defaults.
+ * Returns C1's validated snapshot (source references included) as fresh data.
+ */
+export function loadEffectivePolicy(root = null) {
+  const io = (source) => Object.assign(new Error(`POLICY_IO: cannot read security policy: ${source}`), { code: 'POLICY_IO' });
+  const read = (abs, source) => { try { return fs.readFileSync(abs, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return null; throw io(source); } };
+  let text = root === null ? null : read(path.join(path.resolve(String(root)), '.ai', 'security-paths.json'), '.ai/security-paths.json');
+  const source = text === null ? 'skill' : 'project';
+  if (text === null) text = read(path.join(SKILL_DIR, 'data', 'secret-paths.json'), 'data/secret-paths.json');
+  if (text === null) throw io('data/secret-paths.json');
+  const { sourceSchema, policy, effectivePatterns } = parseSecurityPolicy(text);
+  return { source, sourceSchema, policy, effectivePatterns };
 }
 
 /**
