@@ -96,7 +96,7 @@ const test = (id, name, fn) => {
 };
 
 // ============================================================ regressions ====
-test('R01', 'git-safe blocks object forms that bypass pathspec excludes', () => {
+test('R01', 'git-safe blocks object forms that bypass pathspec excludes', async () => {
   const d = repo({ '.env': 'DUMMY_SECRET=NOT_REAL_1\n', 'safe.txt': 'safe-1\n' });
   put(path.join(d, '.ai', 'security-paths.json'), read(path.join(SKILL, 'data', 'secret-paths.json')));
   const gs = (...a) => node('assets/tools/git-safe.mjs', a, d);
@@ -113,6 +113,12 @@ test('R01', 'git-safe blocks object forms that bypass pathspec excludes', () => 
   const up = gs('show', 'HEAD'); check(up.code === 0 && !up.stdout.includes('DUMMY_SECRET') && up.stdout.includes('safe-2'), 'show HEAD works with secret diff excluded', up);
   const rng = gs('log', '-p', 'HEAD~1..HEAD'); check(rng.code === 0 && !rng.stdout.includes('DUMMY_SECRET'), 'ranges allowed, secret excluded', rng);
   const c = gs('diff', '-c'); check(c.code === 2, '-c stays blocked', c);
+  // C4 component assertions (git object commands and bounded argument builders) run inside R01. Their sub-assertion records are not printed here and do
+  // not inflate the case counts; R01 fails unless the whole C4 report is ok.
+  const c4context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c4'), env: { ...ENV } };
+  fs.mkdirSync(c4context.tmp, { recursive: true });
+  const rep4 = await runComponentAssertions('C4', c4context);
+  check(rep4.ok === true, 'C4 component assertions pass', { errors: rep4.errors, failed: rep4.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R02', 'commit rejects drafts changed after prepare and unapproved plans', () => {
@@ -1152,6 +1158,9 @@ function freshSetup(d, id = 'run-0001') {
   put(path.join(D, '.codex', 'agents', 'reviewer.toml'), read(path.join(A, 'wrappers', 'codex-reviewer.toml')));
   put(path.join(D, '.codex', 'agents', 'docs_sync.toml'), read(path.join(A, 'wrappers', 'codex-docs_sync.toml')));
   put(path.join(D, '.ai', 'security-paths.json'), read(path.join(SKILL, 'data', 'secret-paths.json')));
+  // The complete reviewed runtime unit (C4 plan 4.15): the shared policy helper, the core and the entrypoint, exactly as the trusted catalog lists them.
+  put(path.join(D, '.ai', 'tools', 'security-policy.mjs'), read(path.join(A, 'tools', 'security-policy.mjs')));
+  put(path.join(D, '.ai', 'tools', 'git-safe-core.mjs'), read(path.join(A, 'tools', 'git-safe-core.mjs')));
   put(path.join(D, '.ai', 'tools', 'git-safe.mjs'), read(path.join(A, 'tools', 'git-safe.mjs')));
   for (const f of ['project-tree', 'critical-modules', 'code-patterns', 'error-contract', 'configuration', 'glossary']) put(path.join(D, '.ai', 'context', `${f}.md`), `# ${f}\n`);
   put(path.join(D, '.ai', 'decisions', 'README.md'), '# Decisions\n');

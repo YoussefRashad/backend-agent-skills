@@ -399,7 +399,10 @@ const COMMAND_DENY = [
   'PowerShell(git clean *)', 'PowerShell(git push --force*)', 'PowerShell(git push -f*)', 'PowerShell(npm publish*)', 'PowerShell(Invoke-Expression *)',
   'PowerShell(iex *)',
 ];
-// Plan 3.9: the initial trusted runtime-unit catalog.
+// Plan 3.9: the initial trusted runtime-unit catalog. At C4 the shipped catalog changed (docs/plans/2026-10-18-project-setup-v3-rc1-c4.md section 2.3: the
+// git-safe-core helper was added and the reader now declares [1, 2]), so this literal is no longer the shipped file. It is kept as the synthetic INCOMPATIBLE
+// catalog of these tests (the entrypoint declares schema 1 only) and every test that needs an incompatible reader uses it in a scratch skill copy.
+// The exact production catalog is asserted by R78/C4/reader-unit.
 const CATALOG_INITIAL = {
   schema: 1,
   units: [
@@ -2507,12 +2510,12 @@ async function snapshot(context) {
         const missing = cloneTree(u, path.join(dir, 'up-missing'));
         putRequest(missing, 'run-c3-up1', T_DECISIONS, { ...s.decisions, coverage: s.decisions.coverage.filter((c) => c.id !== 'coverage:7') });
         expectF(check, 'unprepared diff with a missing required decision', kit.diff(missing, 'run-c3-up1'), { code: 'MIGRATION_DECISION_REQUIRED', exit: 3, error: MSG.DECISION_REQUIRED('coverage:7'), target: T_DECISIONS });
-        // incompatible tools: the real skill's catalog still says the reader reads schema 1 only
+        // incompatible tools: a scratch catalog whose reader declares schema 1 only (the production catalog became compatible at C4; no production assumption here)
         const real = cloneBase(dir, v2, 'up-real');
-        const realKit = makeKit(context, check);
+        const realKit = kit.withSkill(deriveSkill(synth, dir, 'skill-incompat-up', (s) => putFile(path.join(s, 'data', 'runtime-units.json'), jsonText(CATALOG_INITIAL))));
         const rs = startMigration(realKit, check, real, 'run-c3-up2');
-        check(rs.ok === true, 'the real skill stages a genuine v2 migration', rs.st && rs.st.stdout.slice(0, 300));
-        if (rs.ok) expectF(check, 'unprepared diff with the real catalog', realKit.diff(real, 'run-c3-up2'), { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
+        check(rs.ok === true, 'a scratch skill with an incompatible reader catalog stages a genuine v2 migration', rs.st && rs.st.stdout.slice(0, 300));
+        if (rs.ok) expectF(check, 'unprepared diff with an incompatible reader catalog', realKit.diff(real, 'run-c3-up2'), { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
       });
       // I3-3 (docs/plans/2026-10-18-project-setup-v3-rc1-c3-decisions.md): migration reads respect the refusal set. A settings file or an installed runtime
       // target that the installed policy protects is never read and never staged; stage, prepare and the unprepared review refuse it by name.
@@ -2612,7 +2615,10 @@ async function toolUnit(context) {
     if (mig && needFns(failures, mig, ['readRuntimeUnits', 'checkSecurityToolUnit'])) {
       await step('data/runtime-units.json is the catalog of plan 3.9 and passes its own reader; later entries and unusual names are accepted (no basename or capability enumeration)', async () => {
         const file = readJson(path.join(context.skillRoot, 'data', 'runtime-units.json'));
-        check(eq(file, CATALOG_INITIAL), 'the shipped catalog holds exactly the security-policy helper [1, 2] and the git-safe entrypoint [1]', file);
+        // The shipped catalog is extended by later components (C4 added the git-safe-core helper and made the reader [1, 2]); its exact production content is
+        // asserted by R78/C4/reader-unit. Here it must pass its own reader and keep the two entries C3 defined, without pinning the reader's capabilities.
+        const shipped = await runPure(check, 'the shipped catalog', mig.readRuntimeUnits, file);
+        check(shipped && file && Array.isArray(file.units) && file.units.some((u) => u.target === T_HELPER && u.source === 'assets/tools/security-policy.mjs' && u.role === 'helper' && eq(u.policySchemas, [1, 2])) && file.units.some((u) => u.target === T_READER && u.source === 'assets/tools/git-safe.mjs' && u.role === 'entrypoint'), 'the shipped catalog passes its own reader and keeps the security-policy helper [1, 2] and the git-safe entrypoint', file);
         const r = await runPure(check, 'the initial catalog', mig.readRuntimeUnits, CATALOG_INITIAL);
         const text = JSON.stringify(r);
         check(r && typeof r === 'object' && [T_HELPER, T_READER, 'assets/tools/security-policy.mjs', 'assets/tools/git-safe.mjs', 'helper', 'entrypoint'].every((s) => text.includes(s)), 'the result carries every unit', text && text.slice(0, 200));
@@ -2693,10 +2699,11 @@ async function toolUnit(context) {
     await withScratch(context, 'r80t', async (dir) => {
       let n = 0;
       const synthKit = makeKit(context, check, synth.root);
-      await step('a genuine v2 stage succeeds with the missing security-policy helper; prepare then refuses at .ai/tools/git-safe.mjs with TOOL_UNIT_INCOMPATIBLE (P, exit 3), before approvals, without a plan', async () => {
+      await step('a genuine v2 stage succeeds with the missing security-policy helper; prepare then refuses at .ai/tools/git-safe.mjs with TOOL_UNIT_INCOMPATIBLE (P, exit 3), before approvals, without a plan (a scratch catalog whose reader declares [1] only)', async () => {
         const root = cloneBase(dir, v2, 'real');
-        const s = startMigration(kit, check, root, 'run-c3-t1');
-        check(s.ok === true, 'stage succeeds against the real catalog', s.st && s.st.stdout.slice(0, 300));
+        const incompatKit = kit.withSkill(deriveSkill(synth, dir, 'skill-incompat-t1', (s) => putFile(path.join(s, 'data', 'runtime-units.json'), jsonText(CATALOG_INITIAL))));
+        const s = startMigration(incompatKit, check, root, 'run-c3-t1');
+        check(s.ok === true, 'stage succeeds against the scratch incompatible catalog', s.st && s.st.stdout.slice(0, 300));
         if (!s.ok) return;
         check((s.st.json.staged || []).includes(`drafts/${T_HELPER}`), 'the absent security-policy helper is staged', s.st.json.staged);
         const helperAsset = readBytes(path.join(context.skillRoot, 'assets', 'tools', 'security-policy.mjs'));
@@ -2704,8 +2711,8 @@ async function toolUnit(context) {
         const before = projectSnapshot(root);
         const lockBefore = readBytes(lockOwnerPath(root));
         const entry = { target: T_READER, code: 'TOOL_UNIT_INCOMPATIBLE', error: MSG.TOOL_INCOMPATIBLE(T_READER) };
-        expectP(check, 'prepare without approvals', kit.prepare(root, 'run-c3-t1'), [entry]);
-        expectP(check, 'prepare with the policy approval', kit.prepare(root, 'run-c3-t1', { approve: [T_POLICY] }), [entry]);
+        expectP(check, 'prepare without approvals', incompatKit.prepare(root, 'run-c3-t1'), [entry]);
+        expectP(check, 'prepare with the policy approval', incompatKit.prepare(root, 'run-c3-t1', { approve: [T_POLICY] }), [entry]);
         check(!exists(runFile(root, 'run-c3-t1', 'plan.json')) && projectSnapshot(root) === before && sameBytes(readBytes(lockOwnerPath(root)), lockBefore), 'a refused prepare writes no plan and touches nothing');
       });
       await step('a synthetic compatible reader and the shared helper succeed; the catalog writes precede the policy and the manifest, the helper precedes the reader', async () => {
@@ -2821,12 +2828,13 @@ async function toolUnit(context) {
       // ------------------------------------------------ the commit rebuild ----
       if (!clean || !clean.p.ok) return;
       const pre = (label) => cloneTree(clean.root, path.join(dir, `${label}${++n}`));
-      await step('commit rebuilds trusted capabilities: the real catalog (reader [1]) refuses the same plan with TOOL_UNIT_INCOMPATIBLE (F, exit 3) and its target, before heartbeat, journal or write', async () => {
+      await step('commit rebuilds trusted capabilities: a catalog whose reader declares [1] refuses the same plan with TOOL_UNIT_INCOMPATIBLE (F, exit 3) and its target, before heartbeat, journal or write', async () => {
+        const incompatKit = kit.withSkill(deriveSkill(synth, dir, `skill-incompat-x${++n}`, (s) => putFile(path.join(s, 'data', 'runtime-units.json'), jsonText(CATALOG_INITIAL))));
         const r = pre('xskill');
         const before = noWriteState(r, clean.id);
-        const rc = kit.commit(r, clean.id, clean.p.sha);
-        expectF(check, 'commit by the real skill', rc, { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
-        checkNoWrite(check, 'commit by the real skill', r, clean.id, before);
+        const rc = incompatKit.commit(r, clean.id, clean.p.sha);
+        expectF(check, 'commit by a skill with an incompatible reader catalog', rc, { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
+        checkNoWrite(check, 'commit by a skill with an incompatible reader catalog', r, clean.id, before);
         // a forged hash-approved plan that keeps the old reader (no reader operation, draft or binding at all) cannot make it acceptable either: the
         // trusted capability list is rebuilt and takes precedence over the missing candidate role
         const f = pre('forged-old-reader');
@@ -2837,7 +2845,7 @@ async function toolUnit(context) {
           plan.inputs = plan.inputs.filter((i) => i.target !== T_READER);
         });
         const fb = noWriteState(f, clean.id);
-        const fc = kit.commit(f, clean.id, forgedSha);
+        const fc = incompatKit.commit(f, clean.id, forgedSha);
         expectF(check, 'a forged plan that keeps the old reader', fc, { code: 'TOOL_UNIT_INCOMPATIBLE', exit: 3, error: MSG.TOOL_INCOMPATIBLE(T_READER), target: T_READER });
         checkNoWrite(check, 'a forged plan that keeps the old reader', f, clean.id, fb);
       });

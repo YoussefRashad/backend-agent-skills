@@ -10,6 +10,7 @@ import { C11A_IMPLEMENTATIONS } from './c11a.test.mjs';
 import { C1_IMPLEMENTATIONS } from './c1.test.mjs';
 import { C2_IMPLEMENTATIONS } from './c2.test.mjs';
 import { C3_IMPLEMENTATIONS } from './c3.test.mjs';
+import { C4_IMPLEMENTATIONS } from './c4.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -97,6 +98,26 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'V2/C3/recovery', name: 'coupled migration rolls back through one journal' },
     { id: 'V2/C3/module-contract', name: 'C3 exports errors and component contracts' },
   ],
+  // C4 plan (docs/plans/2026-10-18-project-setup-v3-rc1-c4.md) section 4.1, in its exact order.
+  C4: [
+    { id: 'R41/C4/cat', name: 'commit blob reads and secret refusals' },
+    { id: 'R42/C4/ls', name: 'literal tree listings omit protected paths' },
+    { id: 'R42/C4/grep', name: 'tree grep filters secrets and distinguishes no match' },
+    { id: 'R43/C4/history', name: 'historical secret paths remain protected' },
+    { id: 'R47/C4/project-policy', name: 'project additions reach Git commands' },
+    { id: 'R74/C4/corpus', name: 'shared policy corpus reaches Git consumers' },
+    { id: 'R75/C4/exact-case', name: 'Git lookup preserves exact path case' },
+    { id: 'R75/C4/nul-records', name: 'NUL records preserve unusual path names' },
+    { id: 'R76/C4/arguments', name: 'explicit command grammars and literal selectors' },
+    { id: 'R76/C4/revisions', name: 'content commands receive resolved commits' },
+    { id: 'R76/C4/isolation', name: 'Git configuration and executable filters are isolated' },
+    { id: 'R76/C4/failures', name: 'policy and Git failures emit no content' },
+    { id: 'R76/C4/limits', name: 'whole results obey the exact byte limit' },
+    { id: 'R76/C4/narrowing', name: 'limit diagnostics preserve incomplete review scope' },
+    { id: 'R97/C4/environment-names', name: 'environment name variants stay protected' },
+    { id: 'R80/C4/runtime-targets', name: 'every plan requires a complete reviewed runtime unit' },
+    { id: 'R78/C4/reader-unit', name: 'reviewed reader opens schema two migration' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -104,6 +125,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C1: Object.freeze([...C1_IMPLEMENTATIONS]),
   C2: Object.freeze([...C2_IMPLEMENTATIONS]),
   C3: Object.freeze([...C3_IMPLEMENTATIONS]),
+  C4: Object.freeze([...C4_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
