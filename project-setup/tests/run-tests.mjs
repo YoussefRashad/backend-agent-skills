@@ -954,6 +954,13 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c6context.tmp, { recursive: true });
   const rep6 = await runComponentAssertions('C6', c6context);
   check(rep6.ok === true, 'C6 component assertions pass', { errors: rep6.errors, failed: rep6.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C7 component assertions (allow classification, discovery, refusal and retirement) run once, after the C6 aggregation, inside the same case: R29 is the case that
+  // guards settings.json approvals. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the
+  // whole C7 report is ok.
+  const c7context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c7'), env: { ...ENV } };
+  fs.mkdirSync(c7context.tmp, { recursive: true });
+  const rep7 = await runComponentAssertions('C7', c7context);
+  check(rep7.ok === true, 'C7 component assertions pass', { errors: rep7.errors, failed: rep7.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {

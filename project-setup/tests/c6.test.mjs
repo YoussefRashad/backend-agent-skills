@@ -211,7 +211,8 @@ const SELFTEST_REL = 'assets/tools/hooks-selftest.mjs';
 const MERGE_REL = 'scripts/merge-claude-settings.mjs';
 const CORE_EXPORTS = ['BLOCKED_SUBCOMMANDS', 'RAW_GIT_HOOK', 'evaluateHookInput', 'inspectCommand'];
 const SELFTEST_EXPORTS = ['runHooksSelfTest'];
-const MERGE_EXPORTS = ['mergeManagedDenies', 'mergeManagedHooks'];
+// C7 plan 2.4 and 4.11: the merge module's exact export set gains retireManagedAllows (mergeManagedDenies and mergeManagedHooks are unchanged).
+const MERGE_EXPORTS = ['mergeManagedDenies', 'mergeManagedHooks', 'retireManagedAllows'];
 const FIXTURE_REL = 'tests/fixtures/guard-raw-git-cases.json';
 
 // Targets (project-relative) and the production catalog of plan 2.7, exactly (rows in order).
@@ -1041,7 +1042,7 @@ async function mergeGroup(context) {
   return runAssertion(async ({ failures, check, step }) => {
     const m = await loadMerge(failures, context);
     if (!m) return;
-    await step('scripts/merge-claude-settings.mjs exports exactly mergeManagedDenies and mergeManagedHooks and stays import safe', async () => {
+    await step('scripts/merge-claude-settings.mjs exports exactly mergeManagedDenies, mergeManagedHooks and retireManagedAllows and stays import safe', async () => {
       await withScratch(context, 'probe-merge', async (dir) => { checkImportSafe(check, MERGE_REL, context, dir, scriptUrl(context, 'merge-claude-settings.mjs'), MERGE_EXPORTS); });
     });
     await pureMergeChecks(check, step, m);

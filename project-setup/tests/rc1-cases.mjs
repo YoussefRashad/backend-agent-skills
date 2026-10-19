@@ -13,6 +13,7 @@ import { C3_IMPLEMENTATIONS } from './c3.test.mjs';
 import { C4_IMPLEMENTATIONS } from './c4.test.mjs';
 import { C5_IMPLEMENTATIONS } from './c5.test.mjs';
 import { C6_IMPLEMENTATIONS } from './c6.test.mjs';
+import { C7_IMPLEMENTATIONS } from './c7.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -156,6 +157,21 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'V2/C6/runtime-unit', name: 'hook assets extend the reviewed runtime unit' },
     { id: 'R84/C6/arguments', name: 'stash patch and alias rules preserve orchestrator commands' },
   ],
+  // C7 plan (docs/plans/2026-10-19-project-setup-v3-rc1-c7.md) section 4.1, in its exact order.
+  C7: [
+    { id: 'R53/C7/classifier', name: 'shared allows receive exact classes and severities' },
+    { id: 'R53/C7/ownership', name: 'validated exact ownership controls classification' },
+    { id: 'R53/C7/discovery', name: 'discovery reports shared rules and personal settings guidance' },
+    { id: 'R54/C7/refusal', name: 'merge refuses new managed execution permissions' },
+    { id: 'R85/C7/inventory', name: 'every installed managed allow is listed' },
+    { id: 'R85/C7/retirement', name: 'retirement removes only selected managed identities' },
+    { id: 'R85/C7/staging', name: 'allow staging preserves deny and hook projections' },
+    { id: 'R85/C7/preservation', name: 'unselected rules and unchanged bytes survive' },
+    { id: 'R85/C7/transaction', name: 'approved retirement commits content and omissions together' },
+    { id: 'R86/C7/reconciliation', name: 'absent allows reconcile through metadata operations' },
+    { id: 'R86/C7/binding-rollback', name: 'retirement bindings and rollback preserve reviewed state' },
+    { id: 'V2/C7/contracts', name: 'C7 exports errors and component contracts are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -166,6 +182,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C4: Object.freeze([...C4_IMPLEMENTATIONS]),
   C5: Object.freeze([...C5_IMPLEMENTATIONS]),
   C6: Object.freeze([...C6_IMPLEMENTATIONS]),
+  C7: Object.freeze([...C7_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

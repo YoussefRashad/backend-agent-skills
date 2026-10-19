@@ -331,8 +331,8 @@ const PLAN6_RECORDS = [
 const LIB_OLD_EXPORTS = ['ENV_TEMPLATE_RE', 'IS_WINDOWS', 'SKILL_DIR', 'WRITE_ALLOWLIST', 'WRITE_DENYLIST', 'assertNotLink', 'assertNotSecretInput', 'assertWritable', 'atomicWrite', 'canonicalPath', 'classifyEnvTemplate', 'detectEol', 'fail', 'git', 'globToRegExp', 'hostId', 'isSecretPath', 'loadSecretSpec', 'matchesAny', 'normalizeText', 'normalizedHash', 'ok', 'parseArgs', 'rawFileHash', 'readInRepo', 'readJsonFile', 'repoRoot', 'run', 'safeResolve', 'secretGlobs', 'secureDir', 'secureDirRel', 'setFilesystemRoot', 'sha256', 'skillVersion', 'toPosix', 'validateRunId', 'writeInRepo'];
 const LIB_NEW_EXPORTS = ['loadEffectivePolicy'];
 const RENDER_EXPORTS = ['CLAUDE_COMMAND_DENY', 'renderSecurityControls'];
-// C6 plan 2.5 and 4.8: the merge module adds exactly one export, mergeManagedHooks; mergeManagedDenies keeps its signature and behavior.
-const MERGE_EXPORTS = ['mergeManagedDenies', 'mergeManagedHooks'];
+// C6 plan 2.5 and 4.8 and C7 plan 2.4 and 4.11: the merge module exports exactly mergeManagedDenies, mergeManagedHooks (C6) and retireManagedAllows (C7); the first two keep their signatures and behavior.
+const MERGE_EXPORTS = ['mergeManagedDenies', 'mergeManagedHooks', 'retireManagedAllows'];
 const MIGRATE_EXPORTS = ['checkSecurityToolUnit', 'classifySecurityMigration', 'inspectSecurityState', 'readRuntimeUnits', 'resolveSecurityMigration'];
 const SCAN_EXPORTS = ['labelScanFindings'];
 const CASE_EXPORTS = ['C3_IMPLEMENTATIONS'];
@@ -1801,17 +1801,17 @@ async function userDenies(context) {
       };
       const runMerge = (root, id, args = [], o = {}) => { kit.begin(root, id); return kit.script('merge-claude-settings', root, ['--run-id', id, ...args], o); };
       const reqOf = (root, id, name) => readJson(runFile(root, id, name));
-      await step('the CLI report maps the pure result: legacy added/alreadyPresent, conflicts, heldBack, alreadyCovered, retainedManagedDenies, ownershipDropped and the unchanged diagnostics', async () => {
+      await step('the CLI report maps the pure result: legacy added/alreadyPresent, conflicts, heldBack, alreadyCovered, retainedManagedDenies, ownershipDropped, the unchanged diagnostics and the C7 allows report', async () => {
         const settings = { permissions: { deny: ['Read(**/.npmrc)', 'Read(!docs/README.md)', 'Bash(DROP TABLE x)'], allow: ['Bash(other)'] }, hooks: { PreToolUse: [{ matcher: 'Bash', command: 'x' }] } };
         const root = mk('map', settings);
-        putFile(path.join(dir, 'allow.json'), jsonText(['Bash(other)', 'Bash(npm test)']));
-        const r = runMerge(root, 'run-c3-m1', ['--allow-file', path.join(dir, 'allow.json')]);
+        // C7 plan 4.11 item 2: no nonempty allow file (every nonempty --allow-file is refused, R54/C7/refusal); the report maps the deny results only.
+        const r = runMerge(root, 'run-c3-m1');
         check(r.code === 0 && r.json && r.json.ok === true, 'the merge succeeds', { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
         const rep = (r.json && r.json.report) || {};
         const shippedDesired = expectedControls(shipped).claude.permissionsDeny;
         const addedDeny = shippedDesired.filter((x) => !settings.permissions.deny.includes(x));
-        check(eq(rep.added, { deny: addedDeny, allow: ['Bash(npm test)'] }), 'added is the legacy { deny, allow } object', rep.added && { deny: rep.added.deny && rep.added.deny.length, allow: rep.added.allow });
-        check(eq(rep.alreadyPresent, ['Read(**/.npmrc)', 'Bash(other)']), 'alreadyPresent: the deny results, then the legacy allow results', rep.alreadyPresent);
+        check(eq(rep.added, { deny: addedDeny, allow: [] }), 'added is the legacy { deny, allow } object and its allow list is always empty (C7 adds no allow)', rep.added && { deny: rep.added.deny && rep.added.deny.length, allow: rep.added.allow });
+        check(eq(rep.alreadyPresent, ['Read(**/.npmrc)']), 'alreadyPresent: the deny results only', rep.alreadyPresent);
         check(eq(rep.alreadyCovered, ['Read(**/.npmrc)']), 'alreadyCovered: the identical user rule', rep.alreadyCovered);
         check(eq(rep.heldBack, []) && eq(rep.retainedManagedDenies, []) && eq(rep.ownershipDropped, []), 'heldBack, retainedManagedDenies and ownershipDropped are empty here', { held: rep.heldBack, ret: rep.retainedManagedDenies, drop: rep.ownershipDropped });
         check(rep.conflicts && rep.conflicts.some((c) => eq(c, CONFLICT_CARVED('Read(**/.npmrc)', ['Read(!docs/README.md)']))), 'the legacy carvedBy conflict is reported', rep.conflicts);
@@ -1820,27 +1820,36 @@ async function userDenies(context) {
         check(Array.isArray(rep.info) && rep.info.some((x) => eq(x, { userNegations: ['Read(!docs/README.md)'] })), 'the info diagnostic lists the user negations', rep.info);
         check(r.json.needsDecision === true && r.json.changed === true, 'a conflict needs a decision; the settings changed');
         const draft = readJson(draftPath(root, 'run-c3-m1', T_SETTINGS));
-        check(draft && eq(draft.permissions.deny, [...settings.permissions.deny, ...addedDeny]) && eq(draft.permissions.allow, ['Bash(other)', 'Bash(npm test)']) && eq(draft.hooks, settings.hooks), 'the draft keeps every user entry in place and appends the missing rules', draft && draft.permissions.deny.length);
+        check(draft && eq(draft.permissions.deny, [...settings.permissions.deny, ...addedDeny]) && eq(draft.permissions.allow, ['Bash(other)']) && eq(draft.hooks, settings.hooks), 'the draft keeps every user entry in place and appends the missing deny rules; the allow list is untouched', draft && draft.permissions.deny.length);
         const mk2 = reqOf(root, 'run-c3-m1', 'managed-keys.json');
-        // PLAN-GAP: whether an allow rule that is already present (and so user-owned) is part of the managed allow request is not pinned (C7 owns allow
-        // handling), so the allow list of the request is not asserted here.
+        check(mk2 && !hasOwn(mk2[T_SETTINGS], 'permissions.allow'), 'no permissions.allow field is introduced in the managed request', mk2 && Object.keys(mk2[T_SETTINGS]));
+        check(eq(Object.keys(rep), ['added', 'alreadyPresent', 'conflicts', 'ineffective', 'malformedHooks', 'info', 'heldBack', 'alreadyCovered', 'retainedManagedDenies', 'ownershipDropped', 'hooks', 'allows']), 'the report keys are the legacy keys, then hooks, then allows last (C7 plan 4.11)', Object.keys(rep));
+        check(eq(rep.allows, { rules: [{ rule: 'Bash(other)', ownership: 'user', classification: 'other', level: 'none', detail: null }], managed: [], omitted: [], results: [{ level: 'info', check: 'allow-local', detail: '.claude/settings.local.json is personal and is not managed by project-setup; permissions there do not protect the team.' }] }), 'report.allows classifies the user-owned allow as other and carries only the personal-settings row', rep.allows);
         check(mk2 && eq(mk2[T_SETTINGS]['permissions.deny'], addedDeny) && eq(mk2[T_SETTINGS].heldBack, []), 'the managed-keys request owns the appended denies only (the user-owned Read(**/.npmrc) is not claimed), heldBack []', mk2 && mk2[T_SETTINGS]);
         check(mk2 && !mk2[T_SETTINGS]['permissions.deny'].includes('Read(**/.npmrc)'), 'the identical user rule is not in the managed request');
         check(eq(reqOf(root, 'run-c3-m1', 'ownership.json'), { [T_SETTINGS]: 'keys' }), 'the ownership request declares keys');
       });
-      await step('with no --allow-file the managed-keys request has no permissions.allow; staged allow ownership is not replaced by []', async () => {
-        const root = mk('allow', { permissions: { deny: [], allow: [] } });
-        putFile(path.join(dir, 'allow2.json'), jsonText(['Bash(npm test)']));
-        const first = runMerge(root, 'run-c3-m2', ['--allow-file', path.join(dir, 'allow2.json')]);
-        const staged = reqOf(root, 'run-c3-m2', 'managed-keys.json');
-        check(first.code === 0 && staged && eq(staged[T_SETTINGS]['permissions.allow'], ['Bash(npm test)']), 'with an allow file the request names the allow rule', staged && staged[T_SETTINGS]);
-        const second = kit.script('merge-claude-settings', root, ['--run-id', 'run-c3-m2']);
-        const again = reqOf(root, 'run-c3-m2', 'managed-keys.json');
-        check(second.code === 0 && again && eq(again[T_SETTINGS]['permissions.allow'], ['Bash(npm test)']), 'a later run without an allow file keeps the already staged allow ownership', again && again[T_SETTINGS]);
-        const fresh = mk('allow-none', { permissions: { deny: [] } });
-        const none = runMerge(fresh, 'run-c3-m3');
-        const req = reqOf(fresh, 'run-c3-m3', 'managed-keys.json');
-        check(none.code === 0 && req && !hasOwn(req[T_SETTINGS], 'permissions.allow'), 'no allow file and nothing staged: permissions.allow is omitted from the request', req && Object.keys(req[T_SETTINGS]));
+      // C7 plan 4.11 item 3: no allow file and an empty one each introduce no permissions.allow; a valid staged allow field is preserved by both; every nonempty
+      // allow-file refusal expectation moved to R54/C7/refusal (tests/c7.test.mjs).
+      await step('with no --allow-file and with an empty one the managed-keys request has no permissions.allow; a staged allow field is preserved by both', async () => {
+        putFile(path.join(dir, 'allow-empty.json'), jsonText([]));
+        const none = mk('allow-none', { permissions: { deny: [] } });
+        const n1 = runMerge(none, 'run-c3-m3');
+        const r1 = reqOf(none, 'run-c3-m3', 'managed-keys.json');
+        check(n1.code === 0 && r1 && !hasOwn(r1[T_SETTINGS], 'permissions.allow'), 'no allow file and nothing staged: permissions.allow is omitted from the request', r1 && Object.keys(r1[T_SETTINGS]));
+        const empty = mk('allow-empty', { permissions: { deny: [] } });
+        const n2 = runMerge(empty, 'run-c3-m2', ['--allow-file', path.join(dir, 'allow-empty.json')]);
+        const r2 = reqOf(empty, 'run-c3-m2', 'managed-keys.json');
+        check(n2.code === 0 && r2 && !hasOwn(r2[T_SETTINGS], 'permissions.allow'), 'an empty allow file: permissions.allow is not requested either (not [])', r2 && Object.keys(r2[T_SETTINGS]));
+        const staged = mk('allow-staged', { permissions: { deny: [], allow: [] } });
+        kit.begin(staged, 'run-c3-m6');
+        putRequest(staged, 'run-c3-m6', 'managed-keys.json', { [T_SETTINGS]: { 'permissions.allow': ['Bash(npm test)'] } });
+        const withNone = kit.script('merge-claude-settings', staged, ['--run-id', 'run-c3-m6']);
+        const k1 = reqOf(staged, 'run-c3-m6', 'managed-keys.json');
+        check(withNone.code === 0 && k1 && eq(k1[T_SETTINGS]['permissions.allow'], ['Bash(npm test)']), 'a later run without an allow file keeps the already staged allow field', k1 && k1[T_SETTINGS]);
+        const withEmpty = kit.script('merge-claude-settings', staged, ['--run-id', 'run-c3-m6', '--allow-file', path.join(dir, 'allow-empty.json')]);
+        const k2 = reqOf(staged, 'run-c3-m6', 'managed-keys.json');
+        check(withEmpty.code === 0 && k2 && eq(k2[T_SETTINGS]['permissions.allow'], ['Bash(npm test)']), 'a run with an empty allow file keeps the already staged allow field too', k2 && k2[T_SETTINGS]);
       });
       await step('settings values that do not change keep the original bytes and create no settings draft', async () => {
         const all = expectedControls(shipped).claude.permissionsDeny;
