@@ -37,3 +37,18 @@ the maintainer as a residual.
   filesystem seam returning results without identity fields can make two such results compare
   equal; the default Node filesystem always provides them, and no CLI or environment variable
   exposes the seam. Accepted test-seam residual: no code change, and no test change.
+
+## Post-commit security review (2026-10-19): I5-4
+
+An automated security review of commit 8c46d14 reported that an untracked file which is a hard link
+to a protected file (for example `notes.txt` linked to `.env`) passes the name-based path policy,
+so `review-diff` would render its content. The maintainer accepted it as part of the existing
+documented limit, with no code change.
+
+- I5-4. A hard link is another way to place protected content under an allowed name: creating one
+  needs the same capability as copying the file, which the frozen design and the C5 plan already
+  accept as the copied-secret-content limit (R66). The deny rules on protected paths remain the last
+  line of defense. Refusing `nlink > 1` is not adopted: it would change the frozen contract, refuse
+  legitimate hard-linked files, and Node's `nlink` on Windows is not reliable without extra calls.
+  C8, which owns the README and instruction text, states that hard links fall under the same
+  copied-content limit as copies.
