@@ -84,6 +84,20 @@ preflight, not evidence for L01–L16.
 Expected on Windows native (to confirm, not to assume): Claude passes the file-tool and recognised-command layers
 and fails the subprocess layer (no OS sandbox). Codex results depend on the version and sandbox backend.
 
+### C5 review-diff procedure (host evidence pending)
+
+Run the reviewer from a trusted checkout. The maintainer supplies base and head refs. Do not check out the reviewed branch.
+
+Use git --no-optional-locks status for status observations. Do not use ordinary git status, which can refresh the index. Record status and stash observations, then capture the raw index hash and .git file inventory immediately before review. Capture the post-review index and .git snapshot before any verification status command.
+
+From a separate orchestrator step, run git-safe review-diff with --base, --head and an unused --out path under .ai/.run/review/. Pass that path to the reviewer. Require the reviewer to record the mode and resolved IDs from the artifact header. The reviewer makes no artifact write.
+
+Repeat with stdout-only review-diff. Require identical review bytes and no review-helper filesystem write. A dirty trusted checkout must not contribute staged, unstaged or untracked content to the committed-head result.
+
+Separately exercise local-worktree mode on a branch the maintainer authored. Require staged, unstaged and ordinary non-ignored untracked changes, protected paths absent, and index bytes unchanged. Use a fixture with no configured content filters for the full .git byte comparison. Record any configured filter and its side effects separately; filter writes are not evidence that diff-index refreshed the index.
+
+Record versions, commands, exit codes, artifact hash and observed changes. Fixture preparation and component tests are preflight, not live host proof. C8 supplies canonical reviewer instructions and the self-review warning; C10 supplies host-control reporting.
+
 ## 2. Stop conditions
 
 Stop and report (do not work around) if: two `project-setup` copies are visible in one tool; any step writes

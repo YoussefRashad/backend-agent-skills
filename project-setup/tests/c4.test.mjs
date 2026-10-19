@@ -237,7 +237,8 @@ const argvUnits = (argv) => argv.reduce((sum, a) => sum + 2 * a.length + 3, 0);
 // Plan 3.9: every error line. A core error is an Error with an own string code and a message that starts with "<CODE>: ".
 const E = {
   INPUT: 'GIT_SAFE_INPUT: invalid Git helper input',
-  COMMAND: 'GIT_SAFE_COMMAND: supported commands: diff, log, show, cat, ls, grep',
+  // C5 plan 2.7 changes this one detail of the frozen C4 contract: the diagnostic now also names review-diff. It is the only C4 message that changes.
+  COMMAND: 'GIT_SAFE_COMMAND: supported commands: diff, log, show, cat, ls, grep, review-diff',
   ARGUMENT: (cmd) => `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`,
   VERSION: 'GIT_SAFE_VERSION: Git 2.31 or later is required',
   REPOSITORY: 'GIT_SAFE_REPOSITORY: not inside a Git repository',
@@ -2381,20 +2382,24 @@ const T_SETTINGS = '.claude/settings.json';
 const T_MANIFEST = '.ai/manifest.json';
 const T_HELPER = '.ai/tools/security-policy.mjs';
 const T_CORE = '.ai/tools/git-safe-core.mjs';
+const T_REVIEW = '.ai/tools/review-diff.mjs';
 const T_ENTRY = '.ai/tools/git-safe.mjs';
 const T_CATALOG = 'data/runtime-units.json';
 const T_DECISIONS = 'security-decisions.json';
-const UNIT = [T_HELPER, T_CORE, T_ENTRY];
-const SRC_OF = { [T_HELPER]: 'assets/tools/security-policy.mjs', [T_CORE]: 'assets/tools/git-safe-core.mjs', [T_ENTRY]: 'assets/tools/git-safe.mjs' };
-// Plan 2.3: the production catalog, exactly.
+const UNIT = [T_HELPER, T_CORE, T_REVIEW, T_ENTRY];
+const SRC_OF = { [T_HELPER]: 'assets/tools/security-policy.mjs', [T_CORE]: 'assets/tools/git-safe-core.mjs', [T_REVIEW]: 'assets/tools/review-diff.mjs', [T_ENTRY]: 'assets/tools/git-safe.mjs' };
+// C4 plan 2.3 as extended by C5 plan 2.4: the production catalog, exactly (the review helper is the third member, before the entrypoint).
 const CATALOG_PRODUCTION = {
   schema: 1,
   units: [
     { source: 'assets/tools/security-policy.mjs', target: T_HELPER, role: 'helper', policySchemas: [1, 2] },
     { source: 'assets/tools/git-safe-core.mjs', target: T_CORE, role: 'helper', policySchemas: [1, 2] },
+    { source: 'assets/tools/review-diff.mjs', target: T_REVIEW, role: 'helper', policySchemas: [1, 2] },
     { source: 'assets/tools/git-safe.mjs', target: T_ENTRY, role: 'entrypoint', policySchemas: [1, 2] },
   ],
 };
+// Target lookup: the synthetic three-member catalogs below never depend on a position in the production catalog.
+const unitOf = (target) => CATALOG_PRODUCTION.units.find((u) => u.target === target);
 const MSG = {
   PLAN_REJECTED: 'plan rejected',
   TOOL_UNREVIEWED: (t) => `TOOL_UNIT_UNREVIEWED: reviewed tool bytes required: ${t}`,
@@ -2625,10 +2630,10 @@ async function getRt(context, failures, variant) {
     switch (variant) {
       case 'none': break;
       case 's2full': files[T_POLICY] = s2policy; for (const t of UNIT) files[t] = trusted[t]; break;
-      case 's2old': files[T_POLICY] = s2policy; files[T_HELPER] = trusted[T_HELPER]; files[T_CORE] = trusted[T_CORE]; files[T_ENTRY] = oldReader; break;
+      case 's2old': files[T_POLICY] = s2policy; files[T_HELPER] = trusted[T_HELPER]; files[T_CORE] = trusted[T_CORE]; files[T_REVIEW] = trusted[T_REVIEW]; files[T_ENTRY] = oldReader; break;
       case 's1old': files[T_POLICY] = shippedPolicy; files[T_ENTRY] = oldReader; break;
       case 'userentry': files[T_ENTRY] = Buffer.from('// a reader the user wrote\n'); break;
-      case 'protcore': files[T_POLICY] = jsonText(pol2([], [{ anchor: 'root', glob: T_CORE }])); files[T_HELPER] = trusted[T_HELPER]; files[T_CORE] = trusted[T_CORE]; files[T_ENTRY] = oldReader; break;
+      case 'protcore': files[T_POLICY] = jsonText(pol2([], [{ anchor: 'root', glob: T_CORE }])); files[T_HELPER] = trusted[T_HELPER]; files[T_CORE] = trusted[T_CORE]; files[T_REVIEW] = trusted[T_REVIEW]; files[T_ENTRY] = oldReader; break;
       default: throw new Error(`unknown variant ${variant}`);
     }
     makeRepo(context, root, files);
@@ -2738,17 +2743,17 @@ async function runtimeTargets(context) {
     let seq = 0;
     await withScratch(context, 'r80', async (dir) => {
       await step('a bad or missing runtime candidate is TOOL_UNIT_UNREVIEWED with the canonical target in the exact P envelope at prepare and the exact F envelope at both reviews and commit, with no write', async () => {
-        await refusal('already-schema-2 downgrade', dir, { base: 's2full', drafts: { [T_ENTRY]: OLD }, declared: [T_HELPER, T_CORE], expect: T_ENTRY });
+        await refusal('already-schema-2 downgrade', dir, { base: 's2full', drafts: { [T_ENTRY]: OLD }, declared: [T_HELPER, T_CORE, T_REVIEW], expect: T_ENTRY });
         await refusal('schema-1 plan with an arbitrary core', dir, { base: 's1old', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: ARB, [T_ENTRY]: T[T_ENTRY] }, expect: T_CORE });
         await refusal('correct entrypoint with a missing core', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_ENTRY]: T[T_ENTRY] }, expect: T_CORE });
         await refusal('one matching target, another member missing', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER] }, expect: T_CORE });
-        await refusal('correct helper and core with an outdated reader', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [T_ENTRY]: OLD }, expect: T_ENTRY });
+        await refusal('correct helpers (including the review helper) with an outdated reader', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [T_REVIEW]: T[T_REVIEW], [T_ENTRY]: OLD }, expect: T_ENTRY });
         await refusal('helper trusted, core and entrypoint arbitrary: the core first', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: ARB, [T_ENTRY]: ARB }, expect: T_CORE });
         await refusal('unchanged members without declarations, the first is named and unread', dir, { base: 's2old', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [], expect: T_HELPER, noRead: [T_HELPER, T_CORE] });
         await refusal('only the helper declared: the core is the first without a role', dir, { base: 's2old', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [T_HELPER], expect: T_CORE, noRead: [T_CORE] });
         // PLAN-GAP: 3.10 says an alias operation does not satisfy a missing canonical member 'on a host where it is a different file', and also prescribes lexical recognition
         // with no realpath lookup. The two alias scenarios assert the lexical behavior on every host: an alias never stands in for the canonical member and must itself be trusted.
-        await refusal('a trusted case alias does not satisfy the missing canonical entrypoint', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [ALIAS]: T[T_ENTRY] }, expect: T_ENTRY });
+        await refusal('a trusted case alias does not satisfy the missing canonical entrypoint', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [T_REVIEW]: T[T_REVIEW], [ALIAS]: T[T_ENTRY] }, expect: T_ENTRY });
         await refusal('an arbitrary case alias is refused and the canonical target is named', dir, { base: 's2full', drafts: { [ALIAS]: ARB }, declared: UNIT, expect: T_ENTRY });
         // PLAN-GAP: the code for a protected unchanged member (UNREVIEWED or the migration protected-input refusal) is not pinned for ordinary plans; the target and the absence of a read are.
         await refusal('a protected unchanged member is never read', dir, { base: 'protcore', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [T_HELPER], expect: T_CORE, noRead: [T_CORE], lenient: ['TOOL_UNIT_UNREVIEWED', 'MIGRATION_PROTECTED_INPUT'] });
@@ -2775,7 +2780,7 @@ async function runtimeTargets(context) {
         }
         // capability: a scratch catalog whose entrypoint declares [1] keeps TOOL_UNIT_INCOMPATIBLE before any candidate comparison
         const skillDir = scratchDir(context, 'cap-skill');
-        const catalog = { schema: 1, units: [CATALOG_PRODUCTION.units[0], CATALOG_PRODUCTION.units[1], { ...CATALOG_PRODUCTION.units[2], policySchemas: [1] }] };
+        const catalog = { schema: 1, units: [unitOf(T_HELPER), unitOf(T_CORE), { ...unitOf(T_ENTRY), policySchemas: [1] }] };
         const skill = copySkill(context, path.join(skillDir, 'project-setup'), { catalog });
         const k2 = kit.withSkill(skill);
         const mig = cloneTree(v2.root, path.join(dir, `cap-${++seq}`));
@@ -2784,7 +2789,7 @@ async function runtimeTargets(context) {
         if (st.ok) expectP(check, 'an entrypoint catalog entry without schema 2 stays TOOL_UNIT_INCOMPATIBLE', k2.prepare(mig, 'run-c4-cap', { approve: [T_POLICY] }), [{ target: T_ENTRY, code: 'TOOL_UNIT_INCOMPATIBLE', error: MSG.TOOL_INCOMPATIBLE(T_ENTRY) }]);
       });
       await step('a malformed trusted catalog is TOOL_CATALOG with target data/runtime-units.json: P at prepare, F at both reviews and commit', async () => {
-        const catalog = { schema: 1, units: [CATALOG_PRODUCTION.units[0]] };
+        const catalog = { schema: 1, units: [unitOf(T_HELPER)] };
         const skill = copySkill(context, path.join(scratchDir(context, 'bad-catalog'), 'project-setup'), { catalog });
         const kb = kit.withSkill(skill);
         const entry = { code: 'TOOL_CATALOG', error: 'TOOL_CATALOG: invalid runtime unit catalog', target: T_CATALOG };
@@ -2877,11 +2882,11 @@ async function runtimeTargets(context) {
         if (so) {
           const root = cloneTree(so.root, path.join(dir, `partial-${++seq}`));
           putDraft(root, CID, T_ENTRY, T[T_ENTRY]);
-          putRequest(root, CID, 'transaction-inputs.json', [T_HELPER, T_CORE]);
+          putRequest(root, CID, 'transaction-inputs.json', [T_HELPER, T_CORE, T_REVIEW]);
           const ud = kit.diff(root, CID);
           check(ud.code === 0 && ud.json && ud.json.ok === true, 'partial update: the unprepared review passes', ud.stdout.slice(0, 300));
           const p = prepareApproving(kit, root, CID, [T_ENTRY]);
-          check(p.ok === true && p.plan.metadata.transactionInputs.includes(T_HELPER) && p.plan.metadata.transactionInputs.includes(T_CORE), 'partial update: prepare passes with the helper and the core declared and bound', p.prep && p.prep.stdout.slice(0, 300));
+          check(p.ok === true && p.plan.metadata.transactionInputs.includes(T_HELPER) && p.plan.metadata.transactionInputs.includes(T_CORE) && p.plan.metadata.transactionInputs.includes(T_REVIEW), 'partial update: prepare passes with the helper, the core and the review helper declared and bound', p.prep && p.prep.stdout.slice(0, 300));
           if (p.ok) {
             const pd = kit.diff(root, CID);
             check(pd.code === 0 && pd.json && pd.json.ok === true && pd.json.prepared === true, 'partial update: the prepared review passes', pd.stdout.slice(0, 200));
@@ -2895,7 +2900,7 @@ async function runtimeTargets(context) {
           const root = cloneTree(nn.root, path.join(dir, `norm-${++seq}`));
           const bom = (b) => Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(normText(b).replace(/\n/g, '\r\n'), 'utf8')]);
           const lone = (b) => Buffer.from(normText(b).replace(/\n/g, '\r'), 'utf8');
-          putDraft(root, CID, T_HELPER, bom(T[T_HELPER])); putDraft(root, CID, T_CORE, lone(T[T_CORE])); putDraft(root, CID, T_ENTRY, bom(T[T_ENTRY]));
+          putDraft(root, CID, T_HELPER, bom(T[T_HELPER])); putDraft(root, CID, T_CORE, lone(T[T_CORE])); putDraft(root, CID, T_REVIEW, bom(T[T_REVIEW])); putDraft(root, CID, T_ENTRY, bom(T[T_ENTRY]));
           // I4-4: the unprepared review accepts the normalized-equal drafts too (it never prepares, so this is its own boundary)
           const nud = kit.diff(root, CID);
           check(nud.code === 0 && nud.json && nud.json.ok === true && nud.json.prepared === false, 'normalized-equal drafts (BOM and CRLF, lone CR, BOM) pass the unprepared review (C4-P3-5)', nud.stdout.slice(0, 300));
@@ -2905,7 +2910,7 @@ async function runtimeTargets(context) {
             const sha1 = p.json.planSha256;
             const npd = kit.diff(root, CID);
             check(npd.code === 0 && npd.json && npd.json.ok === true && npd.json.prepared === true && npd.json.planSha256 === sha1, 'the same drafts pass the prepared review of that plan (C4-P3-5)', npd.stdout.slice(0, 300));
-            check(UNIT.every((t) => npd.json && Array.isArray(npd.json.files) && npd.json.files.some((x) => x.target === t)), 'the prepared review lists all three normalized-equal runtime targets', npd.json && npd.json.files && npd.json.files.map((x) => x.target));
+            check(UNIT.every((t) => npd.json && Array.isArray(npd.json.files) && npd.json.files.some((x) => x.target === t)), 'the prepared review lists all four normalized-equal runtime targets', npd.json && npd.json.files && npd.json.files.map((x) => x.target));
             // raw input drift is still detected although the LF version is normalized-equal
             const drift = cloneTree(root, path.join(dir, `drift-${seq}`));
             putDraft(drift, CID, T_HELPER, T[T_HELPER]);
@@ -2994,12 +2999,12 @@ const getProdMigration = (context, failures) => cached(context, 'prod-migration'
 async function readerUnit(context) {
   return runAssertion(async ({ failures, check, step }) => {
     const kit = makeKit(context, check);
-    await step('the production catalog is exactly the three-unit catalog with roles, order and [1, 2] capabilities', async () => {
+    await step('the production catalog is exactly the four-unit catalog (C5 plan 2.4) with roles, order and [1, 2] capabilities', async () => {
       const file = readJson(path.join(context.skillRoot, T_CATALOG));
-      check(eq(file, CATALOG_PRODUCTION), 'data/runtime-units.json holds exactly security-policy.mjs, git-safe-core.mjs (helpers) and git-safe.mjs (entrypoint), each [1, 2]', file);
+      check(eq(file, CATALOG_PRODUCTION), 'data/runtime-units.json holds exactly security-policy.mjs, git-safe-core.mjs, review-diff.mjs (helpers) and git-safe.mjs (entrypoint), in that order, each [1, 2]', file);
       for (const t of UNIT) check(readBytes(path.join(context.skillRoot, ...SRC_OF[t].split('/'))) !== null, `${SRC_OF[t]} exists`);
     });
-    await step('the installed three-file reader works with schema 1 and schema 2 policies and refuses schema 3 with the exact line, before any resolution or content operation', async () => {
+    await step('the installed four-file reader unit works with schema 1 and schema 2 policies and refuses schema 3 with the exact line, before any resolution or content operation', async () => {
       await withScratch(context, 'inst', async (dir) => {
         const root = makeRepo(context, path.join(dir, 'proj'), { 'safe.txt': 'needle\n', '.env': 'C4-DUMMY-INSTALLED\n', 'src/a.txt': 'a\n' });
         for (const t of UNIT) {
@@ -3042,14 +3047,14 @@ async function readerUnit(context) {
       for (const t of UNIT) check(staged.includes(`drafts/${t}`), `${t} is staged`, staged);
       check(mig.p.ok === true, 'the production migration prepares (it no longer fails with TOOL_UNIT_INCOMPATIBLE)', mig.p.prep && mig.p.prep.stdout.slice(0, 400));
       if (!mig.p.ok) return;
-      check(eq(mig.p.plan.ops.map((o) => o.target), [T_HELPER, T_CORE, T_ENTRY, T_SETTINGS, T_POLICY]), 'plan operations: the runtime unit in catalog write order, then settings, the dependent policy last', mig.p.plan.ops.map((o) => o.target));
+      check(eq(mig.p.plan.ops.map((o) => o.target), [T_HELPER, T_CORE, T_REVIEW, T_ENTRY, T_SETTINGS, T_POLICY]), 'plan operations: the runtime unit in catalog write order, then settings, the dependent policy last', mig.p.plan.ops.map((o) => o.target));
       await withScratch(context, 'prodrun', async (dir) => {
         const r = cloneTree(mig.root, path.join(dir, 'r'));
         const original = (rel) => readBytes(projPath(mig.v2.root, rel));
         const c = kit.commit(r, mig.id, mig.p.sha);
-        check(c.code === 0 && c.json && c.json.committed === true && eq(c.json.written, [{ target: T_HELPER, created: true }, { target: T_CORE, created: true }, { target: T_ENTRY, created: false }, { target: T_SETTINGS, created: false }, { target: T_POLICY, created: false }, { target: T_MANIFEST, created: false }]), 'commit writes the helper and the core (created), the entrypoint, the settings, the policy, then the manifest last', c.json && c.json.written);
+        check(c.code === 0 && c.json && c.json.committed === true && eq(c.json.written, [{ target: T_HELPER, created: true }, { target: T_CORE, created: true }, { target: T_REVIEW, created: true }, { target: T_ENTRY, created: false }, { target: T_SETTINGS, created: false }, { target: T_POLICY, created: false }, { target: T_MANIFEST, created: false }]), 'commit writes the helper, the core and the review helper (created), the entrypoint, the settings, the policy, then the manifest last', c.json && c.json.written);
         const j = readJournal(r, mig.id);
-        check(j && eq(j.entries.map((e) => e.target), [T_HELPER, T_CORE, T_ENTRY, T_SETTINGS, T_POLICY, T_MANIFEST]) && j.entries.every((e) => e.state === 'applied'), 'one journal lists every entry applied in that order', j && j.entries.map((e) => `${e.target}:${e.state}`));
+        check(j && eq(j.entries.map((e) => e.target), [T_HELPER, T_CORE, T_REVIEW, T_ENTRY, T_SETTINGS, T_POLICY, T_MANIFEST]) && j.entries.every((e) => e.state === 'applied'), 'one journal lists every entry applied in that order', j && j.entries.map((e) => `${e.target}:${e.state}`));
         for (const t of UNIT) check(NH(readBytes(projPath(r, t)) || '') === NH(trustedBytes(context, t) || ''), `${t}: installed equal to its trusted source`);
         const rec = readJson(manifestPath(r)).files;
         check(UNIT.every((t) => rec[t] && rec[t].ownership === 'full' && rec[t].sha256 === NH(readBytes(projPath(r, t)))), 'the helper, the core and the reader are recorded as full with the hash of their installed bytes', UNIT.map((t) => rec[t]));
@@ -3068,7 +3073,7 @@ async function readerUnit(context) {
         const rb = kit.rollback(r, mig.id);
         check(rb.code === 0 && rb.json && rb.json.complete === true, 'rollback completes through the same journal', rb.stdout.slice(0, 300));
         for (const t of [T_POLICY, T_SETTINGS, T_ENTRY, T_MANIFEST]) check(sameBytes(readBytes(projPath(r, t)), original(t)), `${t}: the exact genuine v2 bytes are back`);
-        check(!exists(projPath(r, T_HELPER)) && !exists(projPath(r, T_CORE)), 'the newly created helper and core are removed');
+        check(!exists(projPath(r, T_HELPER)) && !exists(projPath(r, T_CORE)) && !exists(projPath(r, T_REVIEW)), 'the newly created helper, core and review helper are removed');
       });
     });
   });

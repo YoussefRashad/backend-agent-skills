@@ -119,6 +119,12 @@ test('R01', 'git-safe blocks object forms that bypass pathspec excludes', async 
   fs.mkdirSync(c4context.tmp, { recursive: true });
   const rep4 = await runComponentAssertions('C4', c4context);
   check(rep4.ok === true, 'C4 component assertions pass', { errors: rep4.errors, failed: rep4.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C5 component assertions (review-diff and the artifact lifecycle) run once inside R01, after C4, under the same rule: no nested record is printed and
+  // R01 fails unless the whole C5 report is ok.
+  const c5context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c5'), env: { ...ENV } };
+  fs.mkdirSync(c5context.tmp, { recursive: true });
+  const rep5 = await runComponentAssertions('C5', c5context);
+  check(rep5.ok === true, 'C5 component assertions pass', { errors: rep5.errors, failed: rep5.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R02', 'commit rejects drafts changed after prepare and unapproved plans', () => {
@@ -1158,9 +1164,10 @@ function freshSetup(d, id = 'run-0001') {
   put(path.join(D, '.codex', 'agents', 'reviewer.toml'), read(path.join(A, 'wrappers', 'codex-reviewer.toml')));
   put(path.join(D, '.codex', 'agents', 'docs_sync.toml'), read(path.join(A, 'wrappers', 'codex-docs_sync.toml')));
   put(path.join(D, '.ai', 'security-paths.json'), read(path.join(SKILL, 'data', 'secret-paths.json')));
-  // The complete reviewed runtime unit (C4 plan 4.15): the shared policy helper, the core and the entrypoint, exactly as the trusted catalog lists them.
+  // The complete reviewed runtime unit (C4 plan 4.15, extended by C5 plan 2.4 with the review helper): the shared policy helper, the core, the review helper and the entrypoint, exactly as the trusted catalog lists them.
   put(path.join(D, '.ai', 'tools', 'security-policy.mjs'), read(path.join(A, 'tools', 'security-policy.mjs')));
   put(path.join(D, '.ai', 'tools', 'git-safe-core.mjs'), read(path.join(A, 'tools', 'git-safe-core.mjs')));
+  put(path.join(D, '.ai', 'tools', 'review-diff.mjs'), read(path.join(A, 'tools', 'review-diff.mjs')));
   put(path.join(D, '.ai', 'tools', 'git-safe.mjs'), read(path.join(A, 'tools', 'git-safe.mjs')));
   for (const f of ['project-tree', 'critical-modules', 'code-patterns', 'error-contract', 'configuration', 'glossary']) put(path.join(D, '.ai', 'context', `${f}.md`), `# ${f}\n`);
   put(path.join(D, '.ai', 'decisions', 'README.md'), '# Decisions\n');

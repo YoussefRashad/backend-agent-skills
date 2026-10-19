@@ -11,6 +11,7 @@ import { C1_IMPLEMENTATIONS } from './c1.test.mjs';
 import { C2_IMPLEMENTATIONS } from './c2.test.mjs';
 import { C3_IMPLEMENTATIONS } from './c3.test.mjs';
 import { C4_IMPLEMENTATIONS } from './c4.test.mjs';
+import { C5_IMPLEMENTATIONS } from './c5.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -118,6 +119,27 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'R80/C4/runtime-targets', name: 'every plan requires a complete reviewed runtime unit' },
     { id: 'R78/C4/reader-unit', name: 'reviewed reader opens schema two migration' },
   ],
+  // C5 plan (docs/plans/2026-10-19-project-setup-v3-rc1-c5.md) section 4.1, in its exact order.
+  C5: [
+    { id: 'R65/C5/local', name: 'local review includes safe working changes' },
+    { id: 'R65/C5/index', name: 'local review leaves the index and Git state unchanged' },
+    { id: 'R66/C5/limits-documentation', name: 'copied secret content limitation is documented' },
+    { id: 'R90/C5/committed', name: 'committed review excludes trusted checkout changes' },
+    { id: 'R90/C5/identity', name: 'review headers record resolved comparison identity' },
+    { id: 'R91/C5/inputs', name: 'disk inputs are checked before content reads' },
+    { id: 'R91/C5/artifacts', name: 'artifact paths and names are confined' },
+    { id: 'R91/C5/links', name: 'links junctions and escapes are refused' },
+    { id: 'R91/C5/publication', name: 'exclusive publication preserves existing files' },
+    { id: 'R92/C5/reserved', name: 'setup lifecycle rejects reserved review aliases' },
+    { id: 'R92/C5/cleanup', name: 'setup cleanup preserves review artifacts' },
+    { id: 'R92/C5/stdout', name: 'stdout review creates no artifacts' },
+    { id: 'R74/C5/corpus', name: 'shared policy corpus reaches both review modes' },
+    { id: 'R76/C5/arguments', name: 'review grammar and Git vectors are pinned' },
+    { id: 'R76/C5/failures', name: 'review failures emit no partial content' },
+    { id: 'R97/C5/environment-names', name: 'environment name variants stay excluded' },
+    { id: 'R100/C5/limits', name: 'complete review results obey the byte limit' },
+    { id: 'R100/C5/narrowing', name: 'literal narrowing covers safe review subsets' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -126,6 +148,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C2: Object.freeze([...C2_IMPLEMENTATIONS]),
   C3: Object.freeze([...C3_IMPLEMENTATIONS]),
   C4: Object.freeze([...C4_IMPLEMENTATIONS]),
+  C5: Object.freeze([...C5_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
