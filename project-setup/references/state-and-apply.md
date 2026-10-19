@@ -25,6 +25,11 @@ Approved omissions are stored in the record's `omissions` field, separately from
 anchor and case-insensitive glob they name. New manifests are schema 3; a valid schema-2 manifest is migration input
 that detect and validate report as "needs update".
 
+Allow omissions identify exact permission strings. They are separate from managed ownership.
+Retiring an allow removes only its selected managed identity and records its omission in the
+same reviewed transaction. An already-absent allow uses an explicit metadata operation and
+still requires approval for `.claude/settings.json`. Unselected and user-owned rules remain.
+
 ## Hashing
 
 Hashes are SHA-256 of normalised text (BOM stripped, CRLF→LF, trailing newline), so `core.autocrlf` on Windows does
@@ -61,6 +66,22 @@ reordering, or omission change needs `--approve-user-content <target>` even when
 commit and one journal apply both, the manifest last, exactly as approved. Every bound input (targets, drafts, declared
 `transaction-inputs.json` consumers, the installed policy, the manifest) is rechecked before anything is written. Run
 ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
+
+Stage policy and deny changes first, hooks second, and allow retirement last. Use
+`merge-claude-settings.mjs --run-id <id> --retire-allow-file <path>` with a selection file inside
+the project and outside setup draft and vault directories. Normal merge refuses a pending
+allow-omission request. Start a new run to amend a pending retirement selection.
+
+The selection file is a JSON array of exact strings, each a recorded managed allow or an existing allow omission of
+the INSTALLED manifest (a staged request never makes a rule eligible); `.ai/.run/<id>/retire-allows.json` is the
+recommended place. Staging patches only `ownership.json`, the `permissions.allow` field of `managed-keys.json` and of
+`omissions.json`, and the settings draft. A pending result can be repeated in the same run; a different result is
+`ALLOW_STAGE_CONFLICT`.
+
+Staging is not approval. Review both content and metadata with apply diff, prepare with the
+required path approvals, and approve the resulting plan hash. Metadata-only retirement leaves
+settings bytes unchanged. Rollback restores ownership and omissions through the same journal,
+subject to protection for later edits. An already-omitted identity is not restored on rerun.
 
 Review drafts with the apply command. It renders target-versus-draft differences in-process
 without invoking Git, including during root discovery. The explicit project root is checked

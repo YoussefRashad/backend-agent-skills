@@ -51,6 +51,28 @@ the version from `detect.mjs` in the report, and verify at runtime rather than t
   `deny`/`ask` apply immediately.
 - On Windows, `.claude/settings.local.json` may live in the starting directory rather than the repo root.
 
+### Shared allows (classification and retirement)
+
+Shared allow rules can run repository code without another prompt. Project-setup classifies
+package runners, interpreters and local executable paths as repository-code execution. These
+rules produce warnings whether managed or user-owned. Broad shell allows fail classification
+when managed and warn when user-owned. Other rules produce no classification finding; that is
+not a safety certification.
+
+If a developer accepts a warned permission on their own machine, move it to
+`.claude/settings.local.json`. That file is personal and is not managed by project-setup.
+Its permissions do not protect the team. The classifier is a lexical warning mechanism, not
+a sandbox.
+
+Project-setup MUST NOT add managed allows through the v3 merge workflow. Existing managed
+allows MUST remain unchanged unless selected for retirement and approved through apply.
+
+`detect.mjs` reports the classification as `claude.allows` (every shared rule, every installed managed allow including
+absent and repeated ones, the exact allow omissions, and the result rows) and appends each warn and fail detail to
+`warnings`. The normal merge reports the same inspection of its resulting settings as `report.allows` and refuses every
+nonempty `--allow-file` (`ALLOW_BROAD`, `ALLOW_REPO_CODE` or `ALLOW_NEW`, exit 3) before writing anything; an empty
+array is accepted and requests nothing. Retirement staging is described in `state-and-apply.md`.
+
 ## Sandbox
 
 The OS-level sandbox (filesystem/network limits for Bash/PowerShell commands and their children) is what turns a

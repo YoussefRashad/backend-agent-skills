@@ -13,6 +13,7 @@ import {
 import { parseToml } from './toml.mjs';
 import { readManifest } from './ownership.mjs';
 import { inspectSecurityState } from './migrate-security-paths.mjs';
+import { inspectAllows } from './classify-allows.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const root = args.root ? path.resolve(args.root) : repoRoot();
@@ -111,6 +112,60 @@ if (exists('.ai/manifest.json')) {
   manifest = { schema: field('schema', 'number'), skillVersion: field('skillVersion', 'string'), mode: field('mode', 'string'), status, needsUpdate: status === 'needs update', errors };
   manifestValue = status === 'invalid' ? undefined : data;
 }
+
+// ---- shared allows (C7 plan 3.5) ---------------------------------------------
+// The shared settings are read once, through checks in this order: unsafe path (a link or junction on .claude or the
+// file, or a real path outside the project), protection (a malformed policy protects everything, so nothing is read even
+// when the file is absent), read, parse. Override discovery reuses this result: a file refused here is not reopened.
+const SETTINGS_REL = '.claude/settings.json';
+function readSharedSettings() {
+  const dir = path.join(root, '.claude');
+  const file = path.join(dir, 'settings.json');
+  const lstat = (p) => { try { return fs.lstatSync(p); } catch (e) { if (e && e.code === 'ENOENT') return null; throw e; } };
+  let present = false;
+  let statFailed = false;
+  try {
+    const d = lstat(dir);
+    if (d && (d.isSymbolicLink() || !d.isDirectory())) return { state: 'unsafe' };
+    const f = d ? lstat(file) : null;
+    if (f && (f.isSymbolicLink() || !f.isFile())) return { state: 'unsafe' };
+    if (d) {
+      const rel = path.relative(fs.realpathSync.native(root), fs.realpathSync.native(dir));
+      if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return { state: 'unsafe' };
+    }
+    present = Boolean(f);
+  } catch { statFailed = true; }
+  if (isProtected(SETTINGS_REL)) return { state: 'protected' };
+  if (statFailed) return { state: 'io' };
+  if (!present) return { state: 'absent', value: {} };
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { return e && e.code === 'ENOENT' ? { state: 'absent', value: {} } : { state: 'io' }; }
+  try { return { state: 'ok', value: JSON.parse(text.replace(/^\uFEFF/, '')) }; } catch { return { state: 'json' }; }
+}
+const sharedSettings = readSharedSettings();
+
+function sharedAllows() {
+  const local = inspectAllows({ settings: {}, managed: {}, omissions: {} }).results.pop();
+  const failed = (detail) => ({ rules: null, managed: null, omitted: null, results: [{ level: 'fail', check: 'allow-input', detail }, local] });
+  if (manifestValue === undefined) return failed('invalid .ai/manifest.json; allow ownership was not classified');
+  const refused = {
+    unsafe: 'unsafe .claude/settings.json; shared allows were not classified',
+    protected: '.claude/settings.json is protected; shared allows were not classified',
+    io: 'cannot read .claude/settings.json; shared allows were not classified',
+    json: 'invalid .claude/settings.json; shared allows were not classified',
+  }[sharedSettings.state];
+  if (refused) return failed(refused);
+  // Ownership comes only from a validated keys record of the installed manifest; anything else owns nothing.
+  const rec = manifestValue && manifestValue.files && typeof manifestValue.files === 'object' ? manifestValue.files[SETTINGS_REL] : null;
+  const keyed = Boolean(rec) && rec.ownership === 'keys';
+  try {
+    return inspectAllows({ settings: sharedSettings.value, managed: keyed ? rec.managed : {}, omissions: keyed && rec.omissions ? rec.omissions : {} });
+  } catch (e) {
+    if (!(e instanceof Error) || typeof e.code !== 'string') throw e;
+    return failed(e.message);
+  }
+}
+const allows = sharedAllows();
 // Plan 3.11 and C3-P3-2: the recorded-pattern and snippet rows; null for an invalid manifest (its ownership data is
 // untrusted and never inspected); the single policy-schema row for a malformed installed policy.
 function securityPolicyRows() {
@@ -243,12 +298,16 @@ const invalidOverrides = [];
  * user-invocable-only, exact spelling). Invalid values (null, booleans, numbers, objects, other strings, other case or
  * whitespace) are skipped, so the lower valid value stays in effect, and they are reported in invalidOverrides.
  * Managed policy and command-line settings are not visible to this script and are not inferred.
+ * The shared project layer is the value of the one checked read above (C7 plan 3.5): unsafe, protected, unreadable or
+ * invalid shared settings contribute nothing and are never reopened here.
  */
 function claudeOffOverrides() {
   const effective = new Map();
-  const layers = [['user', path.join(claudeHome, 'settings.json')], ['shared project', path.join(root, '.claude', 'settings.json')], ['project-local', path.join(root, '.claude', 'settings.local.json')]];
-  for (const [layer, p] of layers) {
-    const o = readJsonQuiet(p)?.skillOverrides;
+  const shared = sharedSettings.state === 'ok' ? sharedSettings.value : null;
+  const layers = [['user', () => readJsonQuiet(path.join(claudeHome, 'settings.json'))], ['shared project', () => shared], ['project-local', () => readJsonQuiet(path.join(root, '.claude', 'settings.local.json'))]];
+  for (const [layer, load] of layers) {
+    const v = load();
+    const o = v !== null && typeof v === 'object' ? v.skillOverrides : undefined;
     if (!o || typeof o !== 'object' || Array.isArray(o)) continue;
     for (const [k, v] of Object.entries(o)) {
       if (typeof v === 'string' && OVERRIDE_STATES.has(v)) effective.set(k, v);
@@ -360,6 +419,9 @@ for (const i of installs.filter((x) => x.scope === 'repo' && x.disabled)) {
 for (const [tool, list] of Object.entries(installConflicts)) {
   warnings.push(`${tool}: ${list.length} project-setup copies are visible to the same tool (${list.join('; ')}); keep exactly one`);
 }
+// C7 plan 3.5: the allow warn and fail details last, in result order; the personal-settings info row is never a warning.
+// Discovery stays an inventory: a fail row does not change its exit code.
+for (const r of allows.results) if (r.level === 'warn' || r.level === 'fail') warnings.push(r.detail);
 
 ok({
   skillVersion: skillVersion(),
@@ -369,7 +431,7 @@ ok({
   git: { branch, head, isLinkedWorktree, dirtyPaths: porcelain },
   mode, evidence, warnings,
   instructionFiles,
-  claude: { ...claude, userInstructionFilesMode: claudeInstructionFilesMode() },
+  claude: { ...claude, userInstructionFilesMode: claudeInstructionFilesMode(), allows },
   codex: { ...codex, userConfig: cuf },
   ai: { manifest, lockHeld, runs, v1Docs, securityPolicy: securityPolicyRows() },
   project: { package: pkg, lockfiles, sourceFileCount, docsDir: exists('docs'), readme: exists('README.md'), todo: exists('TODO.md') },
