@@ -14,6 +14,12 @@
       "policySchemas": [1, 2]
     },
     {
+      "source": "assets/tools/guard-raw-git-core.mjs",
+      "target": ".ai/tools/guard-raw-git-core.mjs",
+      "role": "helper",
+      "policySchemas": [1, 2]
+    },
+    {
       "source": "assets/tools/review-diff.mjs",
       "target": ".ai/tools/review-diff.mjs",
       "role": "helper",
@@ -22,6 +28,18 @@
     {
       "source": "assets/tools/git-safe.mjs",
       "target": ".ai/tools/git-safe.mjs",
+      "role": "entrypoint",
+      "policySchemas": [1, 2]
+    },
+    {
+      "source": "assets/tools/guard-raw-git.mjs",
+      "target": ".ai/tools/guard-raw-git.mjs",
+      "role": "entrypoint",
+      "policySchemas": [1, 2]
+    },
+    {
+      "source": "assets/tools/hooks-selftest.mjs",
+      "target": ".ai/tools/hooks-selftest.mjs",
       "role": "entrypoint",
       "policySchemas": [1, 2]
     }

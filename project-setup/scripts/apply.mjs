@@ -52,6 +52,7 @@ import { matchesPolicyPath, parseSecurityPolicy, validateRepoPath } from '../ass
 import { renderSecurityControls } from './render-permissions.mjs';
 import { mergeManagedDenies } from './merge-claude-settings.mjs';
 import { checkSecurityToolUnit, classifySecurityMigration, readRuntimeUnits, resolveSecurityMigration } from './migrate-security-paths.mjs';
+import { RAW_GIT_HOOK } from '../assets/tools/guard-raw-git-core.mjs';
 
 const MANIFEST_REL = '.ai/manifest.json';
 const POLICY_REL = '.ai/security-paths.json';
@@ -303,8 +304,27 @@ function onlyAddsBlocks(curText, draftText) {
   return sameJson(trimTrailingBlank(kept), before) ? null : 'draft changes content outside managed blocks';
 }
 
-/** null if the settings draft keeps every user key/value and only appends to permissions.allow/deny. */
-function settingsPreserved(curText, draftText) {
+/**
+ * C6 plan 3.11: true when the draft's hooks value is the current one plus exactly the canonical managed entry E, last in
+ * PreToolUse. Order-sensitive throughout (sameJson): E's own key order, its one inner hook, the position of a created
+ * PreToolUse or hooks key, and every user hook, option, matcher and event must be exactly as before. Anything else,
+ * including a second E, E elsewhere or E with an option, is an ordinary hooks change.
+ */
+function canonicalHookAppend(cur, nxt) {
+  const entry = { matcher: RAW_GIT_HOOK.matcher, hooks: [{ type: 'command', command: RAW_GIT_HOOK.command }] };
+  if (!hasOwn(nxt, 'hooks')) return false;
+  if (!hasOwn(cur, 'hooks')) return sameJson(nxt.hooks, { PreToolUse: [entry] });
+  if (!isPlainObj(cur.hooks) || !isPlainObj(nxt.hooks)) return false;
+  if (hasOwn(cur.hooks, 'PreToolUse') && !Array.isArray(cur.hooks.PreToolUse)) return false;
+  const expected = { ...cur.hooks, PreToolUse: [...(cur.hooks.PreToolUse || []), entry] };
+  return sameJson(nxt.hooks, expected);
+}
+
+/**
+ * null if the settings draft keeps every user key/value and only appends to permissions.allow/deny. With hookExempt
+ * (evaluated only after the reviewed guard is established), the exact canonical hook append is not a user change.
+ */
+function settingsPreserved(curText, draftText, hookExempt = false) {
   let cur; let nxt;
   try { cur = JSON.parse(curText.replace(/^\uFEFF/, '')); } catch { return 'current .claude/settings.json is not valid JSON'; }
   try { nxt = JSON.parse(draftText.replace(/^\uFEFF/, '')); } catch { return 'draft .claude/settings.json is not valid JSON'; }
@@ -312,6 +332,7 @@ function settingsPreserved(curText, draftText) {
   for (const k of new Set([...Object.keys(cur), ...Object.keys(nxt)])) {
     if (k === 'permissions') continue;
     if (k === '$schema' && !('$schema' in cur)) continue; // the merge may add $schema to a file that had none
+    if (k === 'hooks' && hookExempt && canonicalHookAppend(cur, nxt)) continue;
     if (!sameJson(cur[k], nxt[k])) return `draft changes user settings key "${k}"`;
   }
   // A present-but-malformed value is still the user's content: replacing or "repairing" it needs approval.
@@ -339,12 +360,12 @@ function settingsPreserved(curText, draftText) {
  * User content protection. Anything the skill does not own may only GAIN new managed blocks; every other change to it
  * (including replacing a pre-existing file) needs the user's explicit --approve-user-content.
  */
-function contentReasons(rel, curBuf, draftBuf, entry) {
+function contentReasons(rel, curBuf, draftBuf, entry, hookExempt = false) {
   const reasons = [];
   const curText = curBuf.toString('utf8'); // in-process only; never printed (secret paths included)
   const draft = draftBuf.toString('utf8');
   if (rel === SETTINGS_REL) {
-    const why = settingsPreserved(curText, draft);
+    const why = settingsPreserved(curText, draft, hookExempt);
     if (why) reasons.push(why);
   } else if (entry?.ownership === 'full') {
     if (normalizedHash(curText) !== entry.sha256) reasons.push('fully managed file was edited by the user since install');
@@ -724,6 +745,28 @@ function checkCompleteUnit(ops, { draftOf, curOf, hasInput, isSecret }) {
 }
 
 /**
+ * C6 plan 3.11 and C6-P2-4: the guard entrypoint and its core both equal their CURRENT trusted sources under the
+ * normalized hash. The candidate is the content op (an unchanged op is judged by its installed bytes); without an op,
+ * only an already declared transaction input outside the refusal set is read: no role or binding is added silently.
+ * An unsafe path keeps its precedence (throws); any other failure just leaves the exemption unavailable.
+ */
+const GUARD_FILES = [['.ai/tools/guard-raw-git.mjs', 'assets/tools/guard-raw-git.mjs'], ['.ai/tools/guard-raw-git-core.mjs', 'assets/tools/guard-raw-git-core.mjs']];
+function hookGuardReviewed(ops, declared, isSecret) {
+  for (const [target, source] of GUARD_FILES) {
+    let trusted;
+    try { trusted = fs.readFileSync(path.join(SKILL_DIR, ...source.split('/'))); } catch { return false; }
+    const op = ops.find((o) => o.target === target);
+    let candidate = null;
+    if (op) candidate = op.action === 'unchanged' ? op.cur : op.draft;
+    else if (declared.has(target) && !isSecret(target)) {
+      try { candidate = projectBytes(target); } catch (e) { if (isUnsafe(e)) throw e; return false; }
+    }
+    if (candidate === null || normalizedHash(candidate) !== normalizedHash(trusted)) return false;
+  }
+  return true;
+}
+
+/**
  * Plan 3.9: a plan with any catalog runtime content target writes the runtime units first (the security-policy helper,
  * other helpers sorted, entrypoints sorted), then the other content targets in target order, the policy last; the
  * manifest stays last. Any other plan, a policy-only one included, keeps C2's order.
@@ -921,6 +964,8 @@ function analyze(mode, approvals = new Set()) {
   // Bodies and content operations.
   const dirty = mode === 'prepare' ? dirtyPaths() : new Set();
   const ops = [];
+  // C6 plan 3.11: the settings reasons with the canonical hook append exempt, applied only once the guard is reviewed.
+  let hookExemptReasons = null;
   for (const s of sources) {
     const t = s.target;
     if (entries.has(t) || !s.abs) continue;
@@ -931,6 +976,10 @@ function analyze(mode, approvals = new Set()) {
     const secret = isSecret(t);
     const action = cur === null ? 'create' : normalizeText(cur) === normalizeText(draft) ? 'unchanged' : 'modify';
     const reasons = action === 'modify' ? contentReasons(t, cur, draft, priorFiles[t]) : [];
+    if (t === SETTINGS_REL && reasons.length) {
+      const exempt = contentReasons(t, cur, draft, priorFiles[t], true);
+      if (!sameJson(exempt, reasons)) hookExemptReasons = exempt;
+    }
     ops.push({
       target: t,
       origin: s.origin,
@@ -976,6 +1025,13 @@ function analyze(mode, approvals = new Set()) {
       if (!e || !e.c3) throw e;
       reject(e.c3.target, e.c3.code, e.c3.error, { control: true, ...(e.c3.ioPath ? { ioPath: e.c3.ioPath } : {}) });
       return done();
+    }
+    // C6 plan 3.11: after the safe body reads and the C3/C4 checks, before approvals. The exact canonical hook append is
+    // no user change only when the guard it points at is reviewed; otherwise the normal hooks reason stays.
+    const settingsOp = ops.find((o) => o.target === SETTINGS_REL);
+    if (mode === 'prepare' && hookExemptReasons && settingsOp && hookGuardReviewed(ops, new Set(declared), isSecret)) {
+      settingsOp.userContentReasons = hookExemptReasons;
+      settingsOp.userContentChange = hookExemptReasons.length > 0;
     }
   }
 

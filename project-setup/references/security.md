@@ -20,9 +20,10 @@ content in-process, by design, and never emit it: `env-keys.mjs` (templates only
 
 Read diffs, history and committed files only through `node .ai/tools/git-safe.mjs <command>` (before
 installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0
-use `git diff --name-status` only, which prints paths, not content). The installed reader is one reviewed unit of
-four files: `git-safe.mjs`, `git-safe-core.mjs`, `review-diff.mjs` and `security-policy.mjs`. It accepts exactly these
-six object forms and the review form:
+use `git diff --name-status` only, which prints paths, not content). The installed reader belongs to one reviewed
+unit of seven files: `security-policy.mjs`, `git-safe-core.mjs`, `guard-raw-git-core.mjs`, `review-diff.mjs`,
+`git-safe.mjs`, `guard-raw-git.mjs` and `hooks-selftest.mjs`. The reader accepts exactly these six object forms and
+the review form:
 
 ```text
 diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]

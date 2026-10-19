@@ -1008,6 +1008,42 @@
       "toolName": "Bash",
       "command": "echo {a,b}",
       "expected": "allow"
+    },
+    {
+      "id": "X11",
+      "toolName": "PowerShell",
+      "command": "$x = git log -p",
+      "expected": "block"
+    },
+    {
+      "id": "X12",
+      "toolName": "PowerShell",
+      "command": "$x=git log",
+      "expected": "block"
+    },
+    {
+      "id": "X13",
+      "toolName": "PowerShell",
+      "command": "$env:X = git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "X14",
+      "toolName": "PowerShell",
+      "command": "$x = git status",
+      "expected": "allow"
+    },
+    {
+      "id": "X15",
+      "toolName": "PowerShell",
+      "command": "$x = \"git log\"",
+      "expected": "allow"
+    },
+    {
+      "id": "X16",
+      "toolName": "PowerShell",
+      "command": "$x += git log",
+      "expected": "allow"
     }
   ]
 }

@@ -281,7 +281,8 @@ async function loadSelftest(failures, context) {
   return m;
 }
 // The fixture of plan 4.2: schema 1, four keys per row, unique IDs. The 158 plan rows (P01-P113, H01-H09, S01-S16, G01-G08, the eight raw followers,
-// L01-L04) are all required; the ten X rows pin behavior stated by the C6-P2-2 and C6-P2-3 addendum items.
+// L01-L04) are all required; the ten X rows X01-X10 pin behavior stated by the C6-P2-2 and C6-P2-3 addendum items, and X11-X16 pin the six PowerShell
+// assignment rows of decision I6-5 (docs/plans/2026-10-19-project-setup-v3-rc1-c6-decisions.md).
 const PLAN_ROW_IDS = (() => {
   const ids = [];
   for (let i = 1; i <= 113; i++) ids.push(`P${String(i).padStart(2, '0')}`);
@@ -292,7 +293,7 @@ const PLAN_ROW_IDS = (() => {
   for (let i = 1; i <= 4; i++) ids.push(`L0${i}`);
   return ids;
 })();
-const EXTRA_ROW_IDS = Array.from({ length: 10 }, (_, i) => `X${String(i + 1).padStart(2, '0')}`);
+const EXTRA_ROW_IDS = Array.from({ length: 16 }, (_, i) => `X${String(i + 1).padStart(2, '0')}`);
 function loadRows(check, context) {
   const file = readJson(path.join(context.skillRoot, ...FIXTURE_REL.split('/')));
   if (!file) { check(false, `${FIXTURE_REL} is readable JSON`); return null; }
@@ -301,7 +302,7 @@ function loadRows(check, context) {
   const ids = file.cases.map((c) => c && c.id);
   check(new Set(ids).size === ids.length, 'fixture row IDs are unique');
   check(file.cases.every((c) => c && eq(keysOf(c), ['id', 'toolName', 'command', 'expected']) && typeof c.id === 'string' && ['Bash', 'PowerShell'].includes(c.toolName) && typeof c.command === 'string' && ['allow', 'block', 'malformed'].includes(c.expected)), 'every fixture row is { id, toolName, command, expected } with the pinned domains');
-  check(eq(ids, [...PLAN_ROW_IDS, ...EXTRA_ROW_IDS]), `the fixture holds the 158 plan rows then the ten addendum rows (${PLAN_ROW_IDS.length + EXTRA_ROW_IDS.length} in all), in order`, { count: ids.length });
+  check(eq(ids, [...PLAN_ROW_IDS, ...EXTRA_ROW_IDS]), `the fixture holds the 158 plan rows then the sixteen addendum and decision rows (${PLAN_ROW_IDS.length + EXTRA_ROW_IDS.length} in all), in order`, { count: ids.length });
   return file.cases;
 }
 // Which descriptor owns a row: every row runs in exactly one group.
@@ -386,7 +387,7 @@ async function parserGroup(context) {
     });
     await step('the parser rows of plan 4.2 (the P, H, L and X rows not owned by the other two groups)', async () => {
       const mine = rows.filter((r) => groupOf(r.id) === 'parser');
-      check(mine.length === 97, 'the parser group owns the 97 remaining rows', mine.length);
+      check(mine.length === 103, 'the parser group owns the 103 remaining rows', mine.length);
       runRows(check, core, mine);
     });
     await step('plan 3.2 and 3.3: invalid types are malformed rather than thrown; lexical failures anywhere win over a block; NUL, dangling escapes and unmatched constructs are malformed', async () => {
@@ -512,6 +513,10 @@ const README_PARAGRAPHS = [
   `The installed candidate is ${HOOK_COMMAND}. Host portability is TO VERIFY. Direct Node self-tests do not establish host launch, matcher, input-envelope or exit-handling behavior.`,
   'The hook executes project code and therefore depends on the trusted-checkout boundary.',
 ];
+// Decision I6-6: one new README paragraph, directly after the unchanged "Known gaps" paragraph (README_PARAGRAPHS[1]).
+const CASE_PARAGRAPH = 'Bash case statements are not parsed: a command containing one is reported as unparseable and allowed with the malformed-input warning.';
+// Decision I6-7: the seven installed runtime files that references/security.md section 2 names as one reviewed unit (file names only, in catalog order).
+const UNIT_FILE_NAMES = ['security-policy.mjs', 'git-safe-core.mjs', 'guard-raw-git-core.mjs', 'review-diff.mjs', 'git-safe.mjs', 'guard-raw-git.mjs', 'hooks-selftest.mjs'];
 const SELFTEST_TRANSCRIPT = 'PASS  guard-raw-git/allowed\nPASS  guard-raw-git/blocked\nPASS  guard-raw-git/malformed\n3 PASS / 0 FAIL\n';
 const CLAUDE_TABLE = ['| Exit | stdout | stderr | Intended host result |', '| --- | --- | --- | --- |', '| 0 | empty | empty | permit |', '| 2 | empty | blocked message | deny |', '| 1 | empty | malformed message | continue with warning |'];
 async function documentationGroup(context) {
@@ -539,6 +544,38 @@ async function documentationGroup(context) {
       // exact wording. Only stable tokens are asserted: the tool_input.command field, backslash and non-ASCII path uncertainties, and C10.
       for (const s of ['tool_input.command', 'C10']) check(doc.includes(s), `the document names ${s}`);
       check(/backslash/i.test(doc) && /non-ASCII/i.test(doc), 'the Git Bash backslash and non-ASCII project path uncertainties are named');
+    });
+    await step('I6-6: README.md carries the Bash case-statement paragraph directly after the unchanged Known gaps paragraph, and the other three hook paragraphs still match in place', async () => {
+      const doc = readText(path.join(context.skillRoot, 'README.md'));
+      if (doc === null) { check(false, 'README.md is readable'); return; }
+      const flat = squash(doc);
+      check(flat.includes(squash(`${README_PARAGRAPHS[1]} ${CASE_PARAGRAPH}`)), 'the whitespace-normalized text has the case-statement paragraph immediately after the Known gaps paragraph', CASE_PARAGRAPH.slice(0, 80));
+      const blocks = doc.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n/).map(squash);
+      const at = blocks.indexOf(squash(README_PARAGRAPHS[1]));
+      check(at >= 0, 'the Known gaps paragraph is still a paragraph of its own, unchanged', at);
+      if (at < 0) return;
+      check(blocks[at + 1] === squash(CASE_PARAGRAPH), 'the next paragraph is exactly the case-statement paragraph', blocks[at + 1]);
+      check(blocks[at - 1] === squash(README_PARAGRAPHS[0]) && blocks[at + 2] === squash(README_PARAGRAPHS[2]) && blocks[at + 3] === squash(README_PARAGRAPHS[3]), 'the first paragraph still precedes Known gaps, and the candidate and trusted-checkout paragraphs still follow the new one, unchanged', blocks.slice(Math.max(0, at - 1), at + 4).map((b) => b.slice(0, 40)));
+    });
+    await step('I6-7: references/security.md section 2 names all seven runtime files in the reviewed-unit sentence and no longer says four files', async () => {
+      const raw = readText(path.join(context.skillRoot, 'references', 'security.md'));
+      if (raw === null) { check(false, 'references/security.md is readable'); return; }
+      const doc = raw.replace(/\r\n?/g, '\n');
+      check(!/four files/i.test(squash(doc)), 'the document no longer says "four files"');
+      const from = doc.search(/^## 2\. /m);
+      const to = doc.search(/^## 3\. /m);
+      check(from >= 0 && to > from, 'section 2 (Diffs, history and committed files) is present and precedes section 3', { from, to });
+      if (!(from >= 0 && to > from)) return;
+      const flat = squash(doc.slice(from, to));
+      const hit = flat.indexOf('reviewed unit');
+      check(hit >= 0, 'section 2 has the sentence that names the installed reviewed unit', flat.slice(0, 80));
+      if (hit < 0) return;
+      // The sentence runs from the previous full stop to the first full stop that is followed by a capital letter (file names carry dots, never ". X").
+      const prev = flat.lastIndexOf('. ', hit);
+      const start = prev < 0 ? 0 : prev + 2;
+      const tail = /\.\s+[A-Z]/.exec(flat.slice(hit));
+      const sentence = flat.slice(start, tail ? hit + tail.index + 1 : flat.length);
+      for (const name of UNIT_FILE_NAMES) check(sentence.includes(name), `the reviewed-unit sentence names ${name}`, clip(sentence));
     });
   });
 }
@@ -1489,6 +1526,109 @@ async function stagingGroup(context) {
         const t = r.json && r.json.target;
         check(r.code === 2 && r.stderr === '' && r.json && r.json.ok === false && r.json.code === 'HOOK_STAGE_WRITE' && typeof t === 'string' && t.startsWith(`.ai/.run/${RID}/`) && r.json.error === `cannot write hook staging output: ${t}` && r.stdout === jsonText({ ok: false, code: 'HOOK_STAGE_WRITE', error: `cannot write hook staging output: ${t}`, target: t }), 'HOOK_STAGE_WRITE, exit 2, the exact envelope naming a run-local output', { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
         check(outsideRunSnapshot(root) === before, 'no project file, manifest or lock changed');
+      });
+
+      // ---------------------------------- review decisions I6-1, I6-3 and I6-4 ----
+      // docs/plans/2026-10-19-project-setup-v3-rc1-c6-decisions.md: where an item and the frozen plan differ, the item wins.
+      await step('I6-1: the normal merge reads installed settings through the guarded reader: a settings path protected by a project policy pattern is HOOK_STAGE_PROTECTED (exit 3) with no read of the file and nothing written', async () => {
+        const protectSettings = jsonText({ schema: 2, patterns: [{ anchor: 'any', glob: '**/.env*' }], projectPatterns: [{ anchor: 'root', glob: T_SETTINGS }] });
+        // control: an unprotected settings file IS read by the normal merge, so the zero-read assertion below is meaningful
+        const ctl = errorRoot('i61-ctl', (r) => settingsAt(r, S0));
+        const cw = readGuard(dir, [projPath(ctl, T_SETTINGS)]);
+        const cr = kit.merge(ctl, ['--run-id', RID], { preload: cw.file });
+        check(cr.code === 0 && cr.stderr === '' && cr.json && cr.json.ok === true, 'control: the normal merge of an unprotected settings file succeeds', { code: cr.code, out: cr.stdout.slice(0, 300), err: cr.stderr.slice(0, 200) });
+        check(cw.hits().length > 0, 'control: the read recorder observes the normal merge reading the settings file', cw.hits().length);
+        const root = errorRoot('i61-prot', (r) => { putFile(projPath(r, T_POLICY), protectSettings); settingsAt(r, S0); });
+        const watch = readGuard(dir, [projPath(root, T_SETTINGS)]);
+        const before = projectSnapshot(root);
+        const r = kit.merge(root, ['--run-id', RID], { preload: watch.file });
+        expectStageErr(check, 'normal merge with protected settings', r, { code: 'HOOK_STAGE_PROTECTED', exit: 3, error: `hook staging input is protected: ${T_SETTINGS}`, target: T_SETTINGS });
+        check(watch.hits().length === 0, 'normal merge with protected settings: the protected file was never read', watch.hits().slice(0, 3));
+        check(projectSnapshot(root) === before, 'normal merge with protected settings: no project file and no run file changed');
+      });
+      await step('I6-1: the normal merge does not follow a junctioned .claude directory: HOOK_STAGE_PATH (exit 2) with no read through the link and nothing written', async () => {
+        const root = errorRoot('i61-link');
+        const ext = path.join(dir, `ext-i61-link-${n}`);
+        putFile(path.join(ext, 'settings.json'), ser(S0));
+        fs.rmSync(projPath(root, '.claude'), { recursive: true, force: true });
+        if (!linkDir(ext, projPath(root, '.claude'))) { check(false, `cannot create the ${WIN ? 'junction' : 'directory symlink'}`); return; }
+        const watch = readGuard(dir, [projPath(root, T_SETTINGS), path.join(ext, 'settings.json')]);
+        const before = projectSnapshot(root);
+        const r = kit.merge(root, ['--run-id', RID], { preload: watch.file });
+        const t = r.json && r.json.target;
+        const exact = r.code === 2 && r.stderr === '' && r.json && r.json.ok === false && r.json.code === 'HOOK_STAGE_PATH' && ['.claude', T_SETTINGS].includes(t) && r.json.error === `unsafe hook staging path: ${t}` && eq(keysOf(r.json), ['ok', 'code', 'error', 'target']) && r.stdout === jsonText(r.json);
+        check(exact, 'normal merge with a junctioned .claude: HOOK_STAGE_PATH, exit 2, the exact envelope naming the target path', { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
+        check(watch.hits().length === 0, 'normal merge with a junctioned .claude: nothing was read through the link', watch.hits().slice(0, 3));
+        check(projectSnapshot(root) === before, 'normal merge with a junctioned .claude: no project file and no run file changed');
+      });
+      await step('I6-1: pre-existing normal-merge failures keep their established envelopes (invalid settings JSON and DENY_SETTINGS are not HOOK_STAGE_* failures)', async () => {
+        const cases = [
+          ['settings that are not JSON', '{', (e) => e.startsWith('.claude/settings.json is not valid JSON; refusing to merge (')],
+          ['settings whose permissions.deny is not a string array', ser({ permissions: { deny: 'x' } }), (e) => e === 'DENY_SETTINGS: settings permissions must contain string arrays'],
+        ];
+        for (const [label, body, okError] of cases) {
+          const root = errorRoot('i61-old', (r) => putFile(projPath(r, T_SETTINGS), body));
+          const before = projectSnapshot(root);
+          const r = kit.merge(root, ['--run-id', RID]);
+          check(r.code === 3 && r.stderr === '' && r.json && r.json.ok === false && !hasOwn(r.json, 'code') && eq(keysOf(r.json), ['ok', 'error']) && okError(r.json.error) && r.stdout === jsonText(r.json), `normal merge with ${label}: exit 3 and the established { ok, error } envelope`, { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
+          check(projectSnapshot(root) === before, `normal merge with ${label}: nothing was written`);
+        }
+      });
+      await step('I6-3: a skill copy without the guard core source is HOOK_STAGE_SOURCE (exit 3) in both modes, for a staged and for an installed guard, naming the core path with nothing written; a normal merge with no hook work still succeeds without the core', async () => {
+        const skill = copySkill(context, path.join(scratchDir(context, 'nocore'), 'project-setup'), { mutate: (s) => rmrf(path.join(s, ...GUARD_CORE_REL.split('/'))) });
+        check(!exists(path.join(skill, ...GUARD_CORE_REL.split('/'))) && exists(path.join(skill, ...GUARD_REL.split('/'))), 'the scratch skill copy lacks only the guard core source (the guard entrypoint source is present)');
+        const k = kit.withSkill(skill);
+        const stagedSetup = (r) => settingsAt(r, S0);
+        const installedSetup = (r) => { rmrf(draftPath(r, RID, T_GUARD)); rmrf(draftPath(r, RID, T_GUARD_CORE)); installGuard(r, tb); settingsAt(r, S0); };
+        const modes = [['hooks-only', (root) => k.hooksOnly(root, RID)], ['normal merge', (root) => k.merge(root, ['--run-id', RID])]];
+        const candidates = [['staged guard', stagedSetup], ['installed guard', installedSetup]];
+        for (const [mode, run] of modes) {
+          for (const [candidate, setup] of candidates) {
+            const root = errorRoot('i63', setup);
+            const before = projectSnapshot(root);
+            expectStageErr(check, `${mode}, ${candidate}, no core source`, run(root), { code: 'HOOK_STAGE_SOURCE', exit: 3, error: `trusted hook source is unavailable: ${GUARD_CORE_REL}`, target: GUARD_CORE_REL });
+            check(projectSnapshot(root) === before, `${mode}, ${candidate}, no core source: nothing was written`);
+          }
+        }
+        // control: no guard staged or installed means no hook work (readiness is the skip), and the core is not needed
+        const idle = fresh('i63-idle');
+        settingsAt(idle, S0);
+        const r = k.merge(idle, ['--run-id', RID]);
+        check(r.code === 0 && r.stderr === '' && r.json && r.json.ok === true, 'control: a normal merge with no guard staged or installed succeeds without the core source', { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
+        const draft = readJson(draftPath(idle, RID, T_SETTINGS));
+        check(draft && eq(draft.hooks, S0.hooks) && Array.isArray(draft.permissions && draft.permissions.deny), 'control: the deny merge ran and the hooks stayed exactly as the user wrote them', draft && Object.keys(draft));
+      });
+      await step('I6-4: the normal merge reports metadataChanged true when it changes transaction-inputs.json (installed-guard append), false on the unchanged rerun, false with a staged guard and false with no guard; changed keeps its meaning', async () => {
+        const inputsOf = (root) => runFile(root, RID, 'transaction-inputs.json');
+        const flagOf = (j) => (j === null ? 'no JSON envelope' : hasOwn(j, 'metadataChanged') ? j.metadataChanged : 'metadataChanged key absent');
+        const run = (label, root) => {
+          const r = kit.merge(root, ['--run-id', RID]);
+          check(r.code === 0 && r.stderr === '' && r.json && r.json.ok === true, `${label}: the normal merge succeeds`, { code: r.code, out: r.stdout.slice(0, 300), err: r.stderr.slice(0, 200) });
+          return r.json;
+        };
+        const installed = fresh('i64-installed');
+        installGuard(installed, tb);
+        putFile(projPath(installed, 'docs/x.md'), '# x\n');
+        settingsAt(installed, S0);
+        putRequest(installed, RID, 'transaction-inputs.json', ['docs/x.md']);
+        const first = run('installed guard, first run', installed);
+        check(first !== null && hasOwn(first, 'metadataChanged') && first.metadataChanged === true, 'installed guard, first run: metadataChanged is true (transaction-inputs.json gained the guard and its core)', flagOf(first));
+        check(readText(inputsOf(installed)) === jsonText(['docs/x.md', T_GUARD, T_GUARD_CORE]), 'installed guard, first run: the old entry, then the guard, then its core', readText(inputsOf(installed)));
+        check(first !== null && first.changed === true, 'installed guard, first run: changed keeps its meaning (the draft differs from the installed settings)', first && first.changed);
+        const kept = readBytes(inputsOf(installed));
+        const again = run('installed guard, unchanged rerun', installed);
+        check(again !== null && hasOwn(again, 'metadataChanged') && again.metadataChanged === false, 'installed guard, unchanged rerun: metadataChanged is false', flagOf(again));
+        check(sameBytes(readBytes(inputsOf(installed)), kept), 'installed guard, unchanged rerun: transaction-inputs.json is byte for byte unchanged');
+        check(again !== null && again.changed === true, 'installed guard, unchanged rerun: changed keeps its meaning (the installed settings still differ from the draft)', again && again.changed);
+        const staged = fresh('i64-staged');
+        stageGuard(staged, RID, tb);
+        settingsAt(staged, S0);
+        const sj = run('staged guard', staged);
+        check(sj !== null && hasOwn(sj, 'metadataChanged') && sj.metadataChanged === false && !exists(inputsOf(staged)), 'staged guard: metadataChanged is false and no transaction-inputs.json was created', { flag: flagOf(sj), inputs: exists(inputsOf(staged)) });
+        const idle = fresh('i64-idle');
+        settingsAt(idle, S0);
+        const ij = run('no guard', idle);
+        check(ij !== null && hasOwn(ij, 'metadataChanged') && ij.metadataChanged === false && !exists(inputsOf(idle)), 'no guard: metadataChanged is false and no transaction-inputs.json was created', { flag: flagOf(ij), inputs: exists(inputsOf(idle)) });
       });
     });
     flushProcessCount(context, 'R52/C6/staging (before the genuine v2 run)');

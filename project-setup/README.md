@@ -18,6 +18,29 @@ tests/run-tests.mjs regression + success-path suite (not copied into installs)
 evals/              agent-level scenarios (not copied into installs)
 ```
 
+## Claude raw-Git hook
+
+The Claude raw-Git hook is a guardrail, not a sandbox. It blocks the documented raw-history
+commands and standalone patch arguments while permitting ordinary orchestrator commands and
+the seven git-safe commands. A separate raw-Git command after git-safe is still checked.
+Setup draft review uses apply.mjs diff; git diff --no-index has no exemption.
+
+Known gaps include sh -c, aliases, scripts that spawn Git and node -e. PowerShell gaps include
+indirect or computed invocation, dynamically constructed command names, script blocks and
+encoded commands. Backtick handling does not make this a complete shell parser.
+
+Bash case statements are not parsed: a command containing one is reported as unparseable and
+allowed with the malformed-input warning.
+
+The installed candidate is node "$CLAUDE_PROJECT_DIR/.ai/tools/guard-raw-git.mjs".
+Host portability is TO VERIFY. Direct Node self-tests do not establish host launch,
+matcher, input-envelope or exit-handling behavior.
+
+The hook executes project code and therefore depends on the trusted-checkout boundary.
+
+The hook contract, the conditional insertion, `--hooks-only` staging and the installed self-test are described in
+`references/claude.md` ("Hooks").
+
 ## Test first (no installation, no real config touched)
 
 ```
