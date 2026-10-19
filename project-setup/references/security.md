@@ -21,7 +21,8 @@ content in-process, by design, and never emit it: `env-keys.mjs` (templates only
 Read diffs, history and committed files only through `node .ai/tools/git-safe.mjs <command>` (before
 installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0
 use `git diff --name-status` only, which prints paths, not content). The installed reader is one reviewed unit of
-three files: `git-safe.mjs`, `git-safe-core.mjs` and `security-policy.mjs`. It accepts exactly these six forms:
+four files: `git-safe.mjs`, `git-safe-core.mjs`, `review-diff.mjs` and `security-policy.mjs`. It accepts exactly these
+six object forms and the review form:
 
 ```text
 diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]
@@ -30,9 +31,11 @@ show <commit> [--stat|--name-status] [-- <paths>]
 cat <commit> -- <path>
 ls <commit> [-- <paths>]
 grep <commit> <pattern> [-- <paths>]
+review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
 ```
 
-- Every other option or form is refused: worktree and index diffs (`diff <rev>`, `--cached`), formatting and
+- Every other option or form is refused: worktree and index diffs (`diff <rev>`, `--cached`; the local working
+  state is reviewed only through `review-diff` below), formatting and
   traversal options (`--format`, `--reverse`, `--all`, `--follow`), detached values (`-n 5`), object and reflog
   forms (`HEAD:.env`, `:.env`, `^REV`, `@{1}`). Counts are attached: `-n5` or `--max-count=5`.
 - Every revision resolves to a **commit** ID before any content command, so blob and tree IDs are refused and a
@@ -59,6 +62,55 @@ The reader supports policy schemas 1 and 2 and refuses unknown schemas.
 Git 2.31 or later is required. The reader preserves the user's global and system configuration
 sources, including safe.directory, while removing environment-injected keys and overriding
 the execution and output settings used by these commands.
+
+### Review diffs (`review-diff`)
+
+The sanctioned review interface is:
+
+```text
+node .ai/tools/git-safe.mjs review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
+```
+
+With --head, review-diff compares the resolved merge-base to the resolved head commit.
+The trusted checkout's staged, unstaged and untracked changes are excluded. Without --head,
+it compares the merge-base of base and current HEAD with the local working state, including
+staged, unstaged and non-ignored untracked changes.
+
+Tracked local changes use Git's diff-index plumbing, preserving Git's normalization and
+skip-worktree behavior without refreshing the index. Configured clean/process filters may
+run for selected safe tracked files. Such filters are trusted configuration and may have
+their own side effects, including Git LFS object-cache writes.
+
+Untracked files are checked before reading and rendered in-process as new files. Their bytes
+are raw: CRLF is preserved, unlike tracked content normalized by Git. An untracked file whose
+first 8,000 bytes contain a NUL byte is shown as one binary line, whatever its size, and the
+rest of it is not read. An untracked text file larger than 1,048,576 bytes is refused after
+at most its first 8,000 bytes are read. Only that NUL check decides binary for untracked files;
+their .gitattributes (binary, -diff, diff=) are not consulted. A selected embedded repository is
+refused as a nonregular input. A path removed from the index but still present as untracked
+content appears twice: a tracked deletion followed by an untracked new-file patch.
+
+The result header records the mode, resolved base, resolved head and merge-base IDs.
+Selectors are literal repository-relative paths. A protected selector is refused; protected
+descendants of a selected directory are omitted.
+
+Stdout is the default. Reviewers use stdout or an artifact supplied by the orchestrator.
+They do not use --out. The orchestrator may create a new artifact directly under
+.ai/.run/review/ and pass its path to the reviewer. Output paths are repository-root-relative,
+even when invoked from a subdirectory. Artifact creation is exclusive. The default name is
+a Windows-safe UTC timestamp, for example 20261019T123456789Z.diff.
+
+The setup run ID review and its case or trailing-dot/space aliases are reserved. Older setup
+runs with those names require manual resolution. A reserved setup-lock owner can be removed
+with lock.mjs break --confirm-unknown-owner after the existing human recovery decision.
+That operation removes the lock, not the review directory.
+
+Review output, including its header, is limited to 1,048,576 bytes. An oversized result is
+refused whole. Narrow with -- <paths>, then record both the reviewed subset and the scope
+still unreviewed. A narrowed result does not establish that the full change was reviewed.
+
+Path rules cannot detect secret content copied to an unrelated allowed path. They are not
+a content scanner and cannot guarantee that a review diff is secret-free.
 
 `.gitignore` does not protect files that are already tracked; tracked secret files are a stop condition (detect
 warns), not something to work around.

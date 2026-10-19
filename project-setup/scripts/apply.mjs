@@ -93,6 +93,14 @@ function failCode(code, error, exit, extra = {}) {
 }
 
 const rawArgs = process.argv.slice(2);
+// C5 plan 3.12: a reserved run id (review and its aliases) is refused before root discovery or any project access, for
+// every command, and diff keeps this error instead of APPLY_DIFF_USAGE. Every --run-id / --confirm-run-id value is
+// scanned, duplicates included; a following token that starts with -- is not a value.
+rawArgs.forEach((a, i) => {
+  const v = rawArgs[i + 1];
+  if ((a !== '--run-id' && a !== '--confirm-run-id') || v === undefined || v.startsWith('--')) return;
+  try { validateRunId(v); } catch (e) { if (e.code === 'RUN_ID_RESERVED') failCode('RUN_ID_RESERVED', 'run id is reserved for review artifacts', 1); }
+});
 const args = parseArgs(rawArgs);
 const cmd = args._[0];
 

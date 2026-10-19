@@ -258,9 +258,20 @@ export function classifyEnvTemplate(text) {
   return entries;
 }
 
-/** Run ids become directory names. Strict charset, no separators, no dot-only segments. */
+/**
+ * Run ids become directory names. Strict charset, no separators, no dot-only segments.
+ * C5 plan 3.12: `review` names the review-artifact directory .ai/.run/review, so it and every alias that reaches the same
+ * directory on a case-insensitive or Windows filesystem (any case, trailing dots and spaces) are reserved before the
+ * ordinary check. Otherwise a setup run could adopt, clean up or journal the review artifacts. The comparison never
+ * turns an invalid id into an accepted one.
+ */
 export function validateRunId(id) {
   const s = id === undefined || id === null || id === true ? '' : String(id);
+  if (s.replace(/[. ]+$/g, '').toLowerCase() === 'review') {
+    const e = new Error('RUN_ID_RESERVED: run id is reserved for review artifacts');
+    e.code = 'RUN_ID_RESERVED';
+    throw e;
+  }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/.test(s) || s.includes('..')) {
     throw new Error(`invalid run id "${s}": use 4-64 chars [A-Za-z0-9._-], starting alphanumeric, no ".."`);
   }

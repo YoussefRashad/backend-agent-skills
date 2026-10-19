@@ -1590,6 +1590,28 @@ async function inputsGroup(context) {
         if (r.sw.seam.ops('readSync').length > 0) expectRes(check, `readSync returns ${label}`, r.s.r, failRes(E.IO));
       }
     });
+    // I5-2 (decisions of record): the dev and ino of every lstatSync and fstatSync result used for the plan 3.7 same-file check are validated before the comparison (plan 2.6: malformed return values give REVIEW_IO).
+    await step('the identity fields of the same-file check are validated (I5-2): a missing or non-numeric dev or ino on the untracked path is REVIEW_IO before any body read; a large integer identity is accepted', async () => {
+      const MISSING = Symbol('missing');
+      const leaf = (a) => path.basename(String(a[0])) === 'f.txt';
+      // a copy of the stat result that keeps its methods through the prototype (as sizeOf does) with one identity field removed or replaced
+      const idOf = (op, field, value, when) => ({ op, ...(when ? { when } : {}), mutate: (st) => { const c = Object.assign(Object.create(Object.getPrototypeOf(st)), st); if (value === MISSING) delete c[field]; else c[field] = value; return c; } });
+      const idBase = { others: ['f.txt'], setup: (v) => v.file('f.txt', 'f\n'), opens: true };
+      for (const [label, fault] of [
+        ['lstat result without dev', idOf('lstatSync', 'dev', MISSING, leaf)], ['lstat result without ino', idOf('lstatSync', 'ino', MISSING, leaf)],
+        ['fstat result without dev', idOf('fstatSync', 'dev', MISSING)], ['fstat result without ino', idOf('fstatSync', 'ino', MISSING)], ['fstat result with a non-numeric ino', idOf('fstatSync', 'ino', '1')],
+      ]) {
+        const r = await scen(label, { ...idBase, want: failRes(E.IO), faults: [{ ...fault, once: true }] });
+        check(r.sw.seam.log.some((e) => e.fault === 'mutate'), `${label}: the malformed identity was served to the review`, r.sw.seam.log.map((e) => e.op));
+        check(r.sw.seam.ops('readFileSync', 'readSync').length === 0 && r.sw.seam.bytesRead() === 0, `${label}: the untracked body was never read`, { reads: r.sw.seam.ops('readFileSync', 'readSync').length, bytes: r.sw.seam.bytesRead() });
+      }
+      // positive control: Windows file IDs can exceed 2^53, so an integer-valued identity above the safe integers is valid when lstat and fstat agree (the same value on every call, so no repeat check can disagree)
+      const large = 2 ** 60;
+      const ctl = await scen('a large integer identity (2 ** 60) that lstat and fstat agree on renders the file', { ...idBase, want: { exit: 0, stdout: cat(HDR_L, refSection({ 'f.txt': 'f\n' })) }, faults: [idOf('lstatSync', 'ino', large, leaf), idOf('fstatSync', 'ino', large)] });
+      check(!Number.isSafeInteger(large) && Number.isInteger(large), 'the control identity is integer-valued and above the safe integers', large);
+      const served = new Set(ctl.sw.seam.log.filter((e) => e.fault === 'mutate').map((e) => e.op));
+      check(served.has('lstatSync') && served.has('fstatSync'), 'the large identity was served on both the lstat and the fstat of the untracked file', [...served]);
+    });
     await step('a file replaced between the check and the open is refused before its body is read (identity must match)', async () => {
       // PLAN-GAP: plan 3.7 requires fstatSync to identify the same regular file checked before open but names no code; any handled failure without a body read is accepted.
       const r = await scen('replacement between lstat and open', { others: ['swap.txt'], setup: (v) => v.file('swap.txt', 'ORIGINAL-MARKER\n'), faults: (v) => [{ op: 'openSync', once: true, hook: () => { v.file('swap.txt', 'REPLACEMENT-MARKER\n'); } }], opens: true });

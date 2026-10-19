@@ -1,5 +1,6 @@
 // git-safe core: read-only Git object commands with secret paths omitted or refused, shell-free and bounded. Installed
-// as .ai/tools/git-safe-core.mjs beside security-policy.mjs and the thin git-safe.mjs CLI: one reviewed catalog unit.
+// as .ai/tools/git-safe-core.mjs beside security-policy.mjs, review-diff.mjs (C5) and the thin git-safe.mjs CLI: one
+// reviewed catalog unit.
 //
 // Plan: docs/plans/2026-10-18-project-setup-v3-rc1-c4.md sections 2.5 and 3, with the freeze addendum C4-P3-1..7.
 //
@@ -48,7 +49,7 @@ export const NARROWING_GUIDANCE = Object.freeze({
 // exception or Git output is ever interpolated.
 const DETAIL = {
   GIT_SAFE_INPUT: 'invalid Git helper input',
-  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep',
+  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, review-diff', // C5 plan 2.7 adds review-diff
   GIT_SAFE_VERSION: 'Git 2.31 or later is required',
   GIT_SAFE_REPOSITORY: 'not inside a Git repository',
   GIT_SAFE_POLICY_IO: 'cannot read .ai/security-paths.json; refusing to run without a valid policy',
@@ -485,9 +486,20 @@ export async function executeGitSafe(request, session) {
 }
 
 // ------------------------------------------------------------------- main ----
-/** Plan 2.5 and 3.9: arguments before any session; streams and the exit code are the caller's (git-safe.mjs). */
+/**
+ * Plan 2.5 and 3.9: arguments before any session; streams and the exit code are the caller's (git-safe.mjs).
+ * C5 plan 2.7: after the container check, review-diff is delegated to the lazily imported review helper, which owns
+ * its grammar, dependency keys and result. The six object commands never import it, so they keep working without it;
+ * a missing or broken helper is GIT_SAFE_INTERNAL for review-diff only.
+ */
 export async function main(argv, dependencies = {}) {
   try {
+    if (!denseStrings(argv)) throw inputError();
+    if (argv[0] === 'review-diff') {
+      let helper;
+      try { helper = await import('./review-diff.mjs'); } catch { throw gsError('GIT_SAFE_INTERNAL'); }
+      return await helper.reviewMain(argv, dependencies);
+    }
     const request = parseGitSafeArgs(argv);
     const session = await createGitSession(dependencies);
     return { exitCode: 0, stdout: await executeGitSafe(request, session), stderr: '' };
