@@ -331,7 +331,8 @@ const PLAN6_RECORDS = [
 const LIB_OLD_EXPORTS = ['ENV_TEMPLATE_RE', 'IS_WINDOWS', 'SKILL_DIR', 'WRITE_ALLOWLIST', 'WRITE_DENYLIST', 'assertNotLink', 'assertNotSecretInput', 'assertWritable', 'atomicWrite', 'canonicalPath', 'classifyEnvTemplate', 'detectEol', 'fail', 'git', 'globToRegExp', 'hostId', 'isSecretPath', 'loadSecretSpec', 'matchesAny', 'normalizeText', 'normalizedHash', 'ok', 'parseArgs', 'rawFileHash', 'readInRepo', 'readJsonFile', 'repoRoot', 'run', 'safeResolve', 'secretGlobs', 'secureDir', 'secureDirRel', 'setFilesystemRoot', 'sha256', 'skillVersion', 'toPosix', 'validateRunId', 'writeInRepo'];
 const LIB_NEW_EXPORTS = ['loadEffectivePolicy'];
 const RENDER_EXPORTS = ['CLAUDE_COMMAND_DENY', 'renderSecurityControls'];
-const MERGE_EXPORTS = ['mergeManagedDenies'];
+// C6 plan 2.5 and 4.8: the merge module adds exactly one export, mergeManagedHooks; mergeManagedDenies keeps its signature and behavior.
+const MERGE_EXPORTS = ['mergeManagedDenies', 'mergeManagedHooks'];
 const MIGRATE_EXPORTS = ['checkSecurityToolUnit', 'classifySecurityMigration', 'inspectSecurityState', 'readRuntimeUnits', 'resolveSecurityMigration'];
 const SCAN_EXPORTS = ['labelScanFindings'];
 const CASE_EXPORTS = ['C3_IMPLEMENTATIONS'];

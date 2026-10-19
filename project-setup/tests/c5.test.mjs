@@ -2687,10 +2687,10 @@ async function argumentsGroup(context) {
         }
       }
     });
-    await step('the production runtime catalog lists four members in the pinned order and the helper source exists; the installed unit works through the real CLI with and without its helper', async () => {
+    await step('the production runtime catalog lists seven members in the pinned order (C6 plan 2.7) and the helper source exists; the installed unit works through the real CLI with and without its helper', async () => {
       const catalog = readJson(path.join(context.skillRoot, 'data', 'runtime-units.json'));
       const unit = (source, target, role) => ({ source, target, role, policySchemas: [1, 2] });
-      check(eq(catalog, { schema: 1, units: [unit('assets/tools/security-policy.mjs', '.ai/tools/security-policy.mjs', 'helper'), unit('assets/tools/git-safe-core.mjs', '.ai/tools/git-safe-core.mjs', 'helper'), unit(REVIEW_REL, '.ai/tools/review-diff.mjs', 'helper'), unit('assets/tools/git-safe.mjs', '.ai/tools/git-safe.mjs', 'entrypoint')] }), 'data/runtime-units.json is exactly the four-member catalog: policy helper, core, review helper, entrypoint', catalog);
+      check(eq(catalog, { schema: 1, units: [unit('assets/tools/security-policy.mjs', '.ai/tools/security-policy.mjs', 'helper'), unit('assets/tools/git-safe-core.mjs', '.ai/tools/git-safe-core.mjs', 'helper'), unit('assets/tools/guard-raw-git-core.mjs', '.ai/tools/guard-raw-git-core.mjs', 'helper'), unit(REVIEW_REL, '.ai/tools/review-diff.mjs', 'helper'), unit('assets/tools/git-safe.mjs', '.ai/tools/git-safe.mjs', 'entrypoint'), unit('assets/tools/guard-raw-git.mjs', '.ai/tools/guard-raw-git.mjs', 'entrypoint'), unit('assets/tools/hooks-selftest.mjs', '.ai/tools/hooks-selftest.mjs', 'entrypoint')] }), 'data/runtime-units.json is exactly the seven-member catalog: policy helper, git-safe core, guard core, review helper, then the git-safe, guard and self-test entrypoints', catalog);
       check(readBytes(path.join(context.skillRoot, ...REVIEW_REL.split('/'))) !== null, `${REVIEW_REL} exists`);
       await installedCli(context, failures, check, 'complete');
     });

@@ -12,6 +12,7 @@ import { C2_IMPLEMENTATIONS } from './c2.test.mjs';
 import { C3_IMPLEMENTATIONS } from './c3.test.mjs';
 import { C4_IMPLEMENTATIONS } from './c4.test.mjs';
 import { C5_IMPLEMENTATIONS } from './c5.test.mjs';
+import { C6_IMPLEMENTATIONS } from './c6.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -140,6 +141,21 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'R100/C5/limits', name: 'complete review results obey the byte limit' },
     { id: 'R100/C5/narrowing', name: 'literal narrowing covers safe review subsets' },
   ],
+  // C6 plan (docs/plans/2026-10-19-project-setup-v3-rc1-c6.md) section 4.1, in its exact order.
+  C6: [
+    { id: 'R50/C6/parser', name: 'raw Git parser handles frozen command forms' },
+    { id: 'R50/C6/sanctioned', name: 'seven sanctioned commands preserve later raw Git checks' },
+    { id: 'R50/C6/documentation', name: 'hook limitations and host verification remain explicit' },
+    { id: 'R51/C6/process', name: 'hook stdin streams and alternate paths are exact' },
+    { id: 'R51/C6/malformed', name: 'malformed input follows the frozen fail-open contract' },
+    { id: 'R52/C6/merge', name: 'conditional hook merge preserves users and reruns' },
+    { id: 'R52/C6/staging', name: 'hooks-only staging preserves migration projections' },
+    { id: 'R79/C6/identity', name: 'hook identity preserves event matcher options and order' },
+    { id: 'V2/C6/transaction', name: 'hook settings and ownership share existing approval rules' },
+    { id: 'R72/C6/selftest', name: 'installed hook self-test reports exact outcomes' },
+    { id: 'V2/C6/runtime-unit', name: 'hook assets extend the reviewed runtime unit' },
+    { id: 'R84/C6/arguments', name: 'stash patch and alias rules preserve orchestrator commands' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -149,6 +165,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C3: Object.freeze([...C3_IMPLEMENTATIONS]),
   C4: Object.freeze([...C4_IMPLEMENTATIONS]),
   C5: Object.freeze([...C5_IMPLEMENTATIONS]),
+  C6: Object.freeze([...C6_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
