@@ -31,12 +31,17 @@ Read this file fully, then read references only when the step says so.
 2. **Never read secrets.** No tool, command, or script you write may open a path matched by
    `data/secret-paths.json` (`.env`, `.env.*` including `.env.example`, keys, certs, `secrets/`, `credentials/`,
    `.npmrc`, the run vault). Env variable **names** come from config/validation code or from
-   `scripts/env-keys.mjs` (names and value classification only). Read diffs and history only through
+   `scripts/env-keys.mjs` (names and value classifications only). Read diffs and history only through
    `.ai/tools/git-safe.mjs` (or `assets/tools/git-safe.mjs` before it is installed), never raw `git diff/log -p/show`.
    Before any reader and policy exist, Phase 0 uses names-only discovery. If a value surfaces anyway:
    do not repeat it, do not store it, report file and variable name only.
    Files listed under `contentRisk` (compose files, config modules, k8s/helm) may be read for structure; never
    reproduce values from them.
+
+   The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+   `apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+   Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+   changes to user-level denies. Reports contain key names and value classifications, never values.
 3. **Nothing is overwritten silently.** All content goes to drafts first, is reviewed as a diff, and is applied by
    `apply.mjs commit`, which re-verifies every file and writes the manifest last. The skill owns only managed
    blocks (Markdown and `#`-comment files), managed keys (`.claude/settings.json`), and files it created in full.
@@ -72,7 +77,7 @@ All scripts are zero-dependency Node (>=18) and print JSON. Run them from the re
 | `detect.mjs` | Read-only inventory: mode + evidence, instruction files, tool configs, secret paths (names only), installs, tool versions, shared allows (`claude.allows`) |
 | `check-agent-baselines.mjs` | Read-only check of the six shipped v2.0.0 agent and wrapper snapshots under `data/v2.0.0/` against embedded SHA256 pins (no arguments; exit 0 only when all six verify). Run before comparing installed v2 agents or wrappers |
 | `migrate-security-paths.mjs` | `report`/`stage`: the v2 policy migration with explicit, hash-bound decisions; stage writes the policy, settings and runtime drafts |
-| `env-keys.mjs` | `keys`/`merge` for `.env.example`-style templates without exposing values |
+| `env-keys.mjs` | `keys`/`merge` with `--template auto`; names and value classifications only |
 | `render-permissions.mjs` | Renders Claude denies, the Codex snippet (`codex-snippet`, raw TOML on stdout) and git pathspec excludes from the effective policy |
 | `merge-claude-settings.mjs` | Order-preserving merge of managed entries into `.claude/settings.json` (draft + report); `--hooks-only` stages only the raw-Git hook; `--retire-allow-file <path>` stages an approved allow retirement |
 | `blocks.mjs` | `check`/`hashes`/`drift`/`upsert` managed blocks (upsert writes drafts only) |
@@ -268,7 +273,27 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 
    Eligibility comes from installed managed ownership or omissions, not agent-written requests. An already absent
    managed allow can still require metadata approval.
-7. Env template: derive keys from config/validation code, then `env-keys.mjs merge`.
+7. Environment template. Perform template inspection and staging after the agent/wrapper drafts and before
+   `apply diff (unprepared preview)`.
+
+   Derive configuration names from config and validation code using local file tools. Do not
+   emit shell searches containing environment-access expressions. Inspect the permitted template
+   with `env-keys.mjs keys --template auto`; stage missing names with
+   `env-keys.mjs merge --template auto --keys <file> --run-id <id>`.
+
+   ```text
+   node <SKILL_DIR>/scripts/env-keys.mjs keys --template auto
+   node <SKILL_DIR>/scripts/env-keys.mjs merge --template auto --keys <file> --run-id <id>
+   ```
+
+   The key list is a JSON array of `{ name, required, secret, description, group }` objects in a file outside
+   every protected path. The commands address only the root template and print key names and value
+   classifications, never values; merge stages new names as empty assignments in the run vault, where apply
+   reviews them.
+
+   If the template is missing, copy the script's manual step into the final report and continue
+   without template staging. If it contains values, preserve them and copy the script's manual
+   cleanup step into the final report. Never perform an automatic names-only conversion.
 8. Read `references/claude.md` and `references/codex.md` for tool-specific details before drafting wrappers,
    settings, or snippets.
 
@@ -276,7 +301,8 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 
 1. Preview the drafts with `apply.mjs diff --project . --run-id <id>`, together with the settings merge report
    (conflicts, held-back rules, ineffective rules, legacy hooks), the migration decisions and the env-keys report
-   (names only). Before prepare this is an unapproved preview. Never display vault files.
+   (names and value classifications only, plus its manual steps for the final report). Before prepare this is an
+   unapproved preview. Never display vault files.
 2. `apply.mjs prepare --run-id <id> --mode <mode> --agents claude,codex`. It rejects (exit 3) any draft that
    changes user content: anything outside managed blocks, a user-edited fully managed file, any pre-existing file the
    skill does not own (only adding new blocks is free), or a `.claude/settings.json` draft that is not append-only.

@@ -99,8 +99,11 @@ Any changed input requires a new prepare and approval.
 
 If detect reports mode "invalid", repair or restore .ai/manifest.json before running prepare.
 
-The vault accepts only env templates (`.env.example`, `.env.sample`, `.env.template`) produced by `env-keys.mjs`.
-Agent drafts can never target a secret-pattern path.
+The vault accepts only the root `.env.example` produced through the reviewed env-keys/apply
+flow. Agent drafts can never target a secret-pattern path.
+
+Review template changes only through apply's key names and value classifications. Never open
+vault files to inspect or repair them. Preserve the env-keys manual steps in the final report.
 
 Failure handling:
 

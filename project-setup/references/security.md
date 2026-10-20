@@ -9,12 +9,23 @@ change the defaults, edit the skill's file and re-run setup; to protect more in 
 there. Never hand-edit rendered output in a project.
 
 `.env.example` is in the list on purpose: real values end up in templates often enough that no agent reads any
-`.env*` file. `env-keys.mjs` gives you what you need: key names, and per key one of `empty`, `placeholder`,
-`non-placeholder`, `possible-real-secret`. Report `possible-real-secret` names under Security Concerns.
+`.env*` file.
 
-Agent-facing exclusion is not the same as a local tool inspecting content. Two scripts do read protected
-content in-process, by design, and never emit it: `env-keys.mjs` (templates only, never `.env`) and
-`secret-scan.mjs` (gitleaks, redacted, report kept in the vault).
+The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+`apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+changes to user-level denies. Reports contain key names and value classifications, never values.
+
+`env-keys.mjs keys --template auto` gives you what you need: key names, and per key one of `empty`,
+`placeholder`, `non-placeholder`, `possible-real-secret`. It addresses only the root template, never an alternate
+or nested name. A missing template, or a template that contains values, produces an exact manual step for the final
+report (`references/report.md`); values are preserved and never printed, and nothing is reduced automatically.
+Report `possible-real-secret` names under Security Concerns.
+
+The separate `secret-scan.mjs` exception permits in-process inspection of protected content
+through gitleaks. Findings remain in the vault; reports expose file:line:rule and protected-path
+classifications, never values. The effective policy labels findings; it does not exclude
+protected files from the scan.
 
 ## 2. Diffs, history and committed files
 

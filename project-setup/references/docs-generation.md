@@ -76,7 +76,7 @@ review rules do not go into the canonical reviewer; they live in the optional, p
 | `critical-modules.md` | Money/balance/payment/points/auth/PII modules: invariants, locking, idempotency, review notes | Entities, services, guards; user's sensitive-area answers |
 | `code-patterns.md` | How controllers/services/repositories/DTOs/guards are written here | 2–3 real examples of each |
 | `error-contract.md` | Error shapes, exception filters, status mapping | Filters, pipes, handlers. If inconsistent: describe, propose one in `TODO.md` |
-| `configuration.md` | Variable · required · secret/non-secret · used by · description · source | Config/validation code + `env-keys.mjs keys`; never values |
+| `configuration.md` | Variable / required / secret/non-secret / used by / description / source | Config/validation code via local file tools + `env-keys.mjs keys --template auto`; never values |
 | `glossary.md` | Domain terms, enum values, abbreviations | Entity/enum/service names |
 | `development-rules.md` | Scope discipline, backward compatibility, reuse of patterns | Code style + linter config |
 
@@ -130,3 +130,14 @@ permission to replace pre-existing text: existing unowned project-file content s
 approval. If no reviewer customization is approved for movement, do not create the file, and routine later
 updates omit its draft unless the user asked for a project-rule change. Docs-sync has no project file; its
 customizations are preserved in the reviewed replacement or explicitly decided.
+
+### Environment template
+
+Derive configuration names from config and validation code using local file tools. Do not
+emit shell searches containing environment-access expressions. Inspect the permitted template
+with `env-keys.mjs keys --template auto`; stage missing names with
+`env-keys.mjs merge --template auto --keys <file> --run-id <id>`.
+
+If the template is missing, copy the script's manual step into the final report and continue
+without template staging. If it contains values, preserve them and copy the script's manual
+cleanup step into the final report. Never perform an automatic names-only conversion.

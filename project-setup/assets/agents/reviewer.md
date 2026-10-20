@@ -106,7 +106,13 @@ Severity: CRITICAL / HIGH / MEDIUM / LOW / INFO.
 ## 4. Hard rules
 
 - Never print secret values, tokens, or personal data, even if you encounter them; cite file:line and the variable name only.
-- Never read files matching `.ai/security-paths.json`, by any tool, command, or script.
+- Never read files matching `.ai/security-paths.json` directly or through arbitrary scripts.
+- The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+  `apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+  Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+  changes to user-level denies. Reports contain key names and value classifications, never values.
+- Reviewers consume the names and classifications supplied by setup. They do not run template
+  merge or apply writes.
 - Read repository content only with the local file tools and `git-safe.mjs`. If a read or
   command fails or is denied, stop and report it. Never use an MCP server, connector, browser
   or remote service to read repository files or history, and never send repository content

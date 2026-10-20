@@ -28,7 +28,7 @@ stop and report the mismatch.
 | Exception filter / error shape | `.ai/context/error-contract.md` |
 | Logging / metrics / tracing | `docs/observability.md` |
 | Module added, moved, removed | `.ai/context/project-tree.md` |
-| Config / env var | `.ai/context/configuration.md` (names only). Never open or edit `.env*` files; list new keys in `TODO.md` for the next project-setup run, which updates `.env.example` safely |
+| Config / env var | `.ai/context/configuration.md` (names only). Never open or edit `.env*` files; list new keys in `TODO.md` for the next project-setup run, which stages `.env.example` additions through its reviewed template flow |
 | New domain term / enum | `.ai/context/glossary.md` |
 | Proven architecture decision | new ADR in `.ai/decisions/` (see rules) |
 
@@ -57,6 +57,12 @@ stop and report the mismatch.
 - Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch
   the reviewed branch yourself; the user supplies or fetches the ref.
 - Never commit, push, or switch branches.
+- The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+  `apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+  Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+  changes to user-level denies. Reports contain key names and value classifications, never values.
+- Docs-sync never opens or edits environment files. Record new key names in `TODO.md` for the
+  next project-setup run.
 
 ### Bounded reads
 

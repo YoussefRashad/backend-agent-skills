@@ -19,11 +19,13 @@ pass N · warn N · fail N  — list every warn/fail
 
 ### Security findings (names and file:line only)
 - tracked secret files, possible real values in env templates, scanner findings, ineffective rules, legacy hooks
+- Template contains values: .env.example. Existing values were preserved and were not printed. Manually reduce the template to key names with empty assignments.
 
 ### Manual steps for the user
 - Codex profile snippet: paste after removing legacy sandbox settings (only if they want Codex deny-read)
 - verification steps for the tool not run in this session
 - retiring v1 copies, deleting .claudeignore, rotating any secret found in history
+- Template missing: .env.example. Manually create the root .env.example with key names and empty assignments only, then rerun project-setup.
 
 ### TODO.md
 - counts per section; the top 3 items
@@ -31,6 +33,12 @@ pass N · warn N · fail N  — list every warn/fail
 ### Rollback
 node <SKILL_DIR>/scripts/apply.mjs rollback --run-id <id>   (available until cleanup)
 ```
+
+Creating any other environment file is a manual user step outside the agent session; do not
+emit a copy command or read its contents.
+
+The two template bullets are conditional: copy the env-keys values step only when it reported one, and its
+missing-template step only when the template was missing. Copy them exactly; they name no value.
 
 Never write "secure", "protected", or "no secrets" without the scope: which tool, which layer, which version,
 which paths.

@@ -231,7 +231,7 @@ export function detectEol(text) {
   return /\r\n/.test(text) ? '\r\n' : '\n';
 }
 
-export const ENV_TEMPLATE_RE = /(^|\/)\.env\.(example|sample|template)$/;
+export const ENV_TEMPLATE_RE = /^\.env\.example$/;
 
 const ENV_SECRETISH = /(SECRET|TOKEN|PASSWORD|PASSWD|PASS$|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|_KEY$|DSN|SALT|SIGNING|CERT)/i;
 const ENV_PLACEHOLDER = /^(|<[^>]*>|changeme|change_me|xxx+|your[_-].*|example.*|placeholder|todo|redacted|\*+|""|'')$/i;

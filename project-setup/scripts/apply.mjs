@@ -3,7 +3,7 @@
 //
 // Run layout (.ai/.run/<run-id>/, self-gitignored, every segment a real directory inside the repo):
 //   drafts/<repo-rel>          agent-authored content (docs, wrappers, instruction files)
-//   vault/files/<repo-rel>     script-produced env templates only (.env.example/.sample/.template)
+//   vault/files/<repo-rel>     script-produced root template only (.env.example)
 //   vault/backup/<repo-rel>    pre-apply copies; covered by the secret deny list
 //   ownership.json             optional { "<repo-rel>": "full" | "blocks" | "keys" | "merged" }
 //   managed-keys.json          optional { "<repo-rel>": <managed metadata> } (written by merge-claude-settings.mjs)
@@ -467,8 +467,8 @@ function checkSource(s, isSecret, mode) {
   }
   if (matchesAny(t, WRITE_DENYLIST)) return { code: 'APPLY_WRITE_DENIED', error: `write denied by policy: ${t}` };
   if (!matchesAny(t, WRITE_ALLOWLIST)) return { code: 'APPLY_WRITE_SCOPE', error: `write outside documentation scope: ${t}` };
-  // The vault exists for env templates produced by env-keys.mjs. Nothing else may come from it.
-  if (s.origin === 'vault' && !ENV_TEMPLATE_RE.test(t)) return { code: 'APPLY_VAULT_TARGET', error: 'vault files may only target .env.example/.env.sample/.env.template' };
+  // The vault exists only for the permitted root template produced by env-keys.mjs. Nothing else may come from it.
+  if (s.origin === 'vault' && !ENV_TEMPLATE_RE.test(t)) return { code: 'APPLY_VAULT_TARGET', error: 'vault files may only target the permitted root template' };
   let st = null;
   try { st = fs.lstatSync(abs); } catch (e) { if (e.code !== 'ENOENT') throw Object.assign(e, { ioPath: t }); }
   if (st && !st.isFile()) return { code: 'APPLY_TARGET_TYPE', error: 'target is not a regular file' };

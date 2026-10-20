@@ -11,7 +11,11 @@ Package manager: {{PACKAGE_MANAGER}} · Runtime: {{RUNTIME_VERSION}}
 ## Critical rules (apply to every task, every agent)
 
 - Never read, print, copy, or summarize files matching `.ai/security-paths.json`
-  (`.env*`, keys, certificates, `secrets/`, `credentials/`, …), by any tool, command, or script.
+  (`.env*`, keys, certificates, `secrets/`, `credentials/`, …) directly or through arbitrary scripts.
+  The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+  `apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+  Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+  changes to user-level denies. Reports contain key names and value classifications, never values.
   Read diffs and history only via `node .ai/tools/git-safe.mjs diff|log|show …`.
   Env variable names come from config/validation code or the project-setup `env-keys` script, never from env files.
 - Never log or return personal data or secrets. Redact before logging.
