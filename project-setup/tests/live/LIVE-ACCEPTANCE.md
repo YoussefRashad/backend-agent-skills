@@ -98,6 +98,23 @@ Separately exercise local-worktree mode on a branch the maintainer authored. Req
 
 Record versions, commands, exit codes, artifact hash and observed changes. Fixture preparation and component tests are preflight, not live host proof. C8 supplies canonical reviewer instructions and the self-review warning; C10 supplies host-control reporting.
 
+### C8 trusted-review and migration checks
+
+These checks cover the C8 canonical instructions and the customization migration. They are live host procedures, not component assertions: fixture preparation and the component suite are preflight only. Run each one from a trusted base checkout and record versions, commands, exit codes and observed changes as in the C5 procedure. Retain C5's status/index observation order, its filters and its qualification of pending host evidence: nothing below is a pass until the maintainer records it with evidence, and a model's own statement is never evidence.
+
+1. Another head from a trusted base checkout, with object reads at that head: the reviewer reads changed code with git-safe cat, ls and grep at the resolved head, does not check out the branch, fetch it or create a worktree, and does not emit the self-review warning.
+2. Equal resolved head in both review modes, in clean and dirty states of a checkout whose resolved HEAD equals the review head: the report carries the review identity and exactly this warning, because the condition is resolved-head equality and not dirty-state inclusion: instructions loaded from the branch under review: trusted only if you authored it
+3. Reviewer stdout consumption and orchestrator-only artifact creation: the reviewer reads stdout or an artifact the orchestrator supplied and never uses --out; only the orchestrator creates an artifact, directly under .ai/.run/review/.
+4. Failed/denied reads and missing canonical instructions: make a local read fail or be denied, and separately remove the canonical instructions. The agent stops and reports, with no fallback to memory, another tool, an MCP server or connector, a sandbox change or full access.
+5. A Claude subagent's inability to call a parent-session MCP tool: attempt the call from the subagent and record the refusal. Zero observed calls alone is not proof of inability.
+6. Codex negative-capability evidence, recorded separately from config inventory: the launcher flags and the codex mcp list --json check show configuration coverage only. Host tool absence needs its own observation.
+7. All five customization rows A001, A002, A003, A004 and A005 on a genuine v2 installation, with missing-doc rendering (docs/api-conventions.md absent), collision handling against an existing reviewer.project.md that holds a conflicting tenant rule, and keep-file for a kept reviewer.
+8. Both out-of-band and previously reviewed wrapper settings: default_permissions, model and a fixture_extension table in both Codex wrappers, once added by hand and once added through an earlier reviewed transaction.
+9. A routine rerun after the approved update produces no project-file draft and a zero-diff commit.
+10. Missing/altered snapshot preflight stopping the v2 agent comparison: delete or edit one shipped agent snapshot under data/v2.0.0, run the migration, and confirm that the agent runs check-agent-baselines.mjs first, reports the checker error and the stopped line, and does not compare, stage, fetch or invent a baseline.
+
+These checks do not become extra skipped component assertions.
+
 ## 2. Stop conditions
 
 Stop and report (do not work around) if: two `project-setup` copies are visible in one tool; any step writes

@@ -14,6 +14,7 @@ import { C4_IMPLEMENTATIONS } from './c4.test.mjs';
 import { C5_IMPLEMENTATIONS } from './c5.test.mjs';
 import { C6_IMPLEMENTATIONS } from './c6.test.mjs';
 import { C7_IMPLEMENTATIONS } from './c7.test.mjs';
+import { C8_IMPLEMENTATIONS } from './c8.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -172,6 +173,25 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'R86/C7/binding-rollback', name: 'retirement bindings and rollback preserve reviewed state' },
     { id: 'V2/C7/contracts', name: 'C7 exports errors and component contracts are exact' },
   ],
+  // C8 plan (docs/plans/2026-10-19-project-setup-v3-rc1-c8.md) section 4.1, in its exact order.
+  C8: [
+    { id: 'R77/C8/baselines', name: 'shipped agent baselines are verified before comparison' },
+    { id: 'R77/C8/disposition', name: 'every reviewer customization has an explicit disposition' },
+    { id: 'R77/C8/approval', name: 'edited full replacements require exact path approval' },
+    { id: 'R77/C8/wrapper-settings', name: 'Codex wrapper additions survive reviewed migration' },
+    { id: 'R77/C8/rerun-rollback', name: 'customization ownership survives rerun and rollback' },
+    { id: 'R77/C8/installed', name: 'migration uses installed data without distribution history' },
+    { id: 'R66/C8/instructions', name: 'copied content and hard link limits are explicit' },
+    { id: 'R90/C8/instructions', name: 'review identity and conditional self review warning are explicit' },
+    { id: 'R92/C8/instructions', name: 'orchestrators own artifacts and reviewers use stdout' },
+    { id: 'A5-templates/C8/agents', name: 'canonical agents stop on failed reads and forbid connectors' },
+    { id: 'A5-templates/C8/wrappers', name: 'wrappers preserve restrictions and canonical loading' },
+    { id: 'A5-templates/C8/boundary', name: 'trusted checkout and excluded code warnings are explicit' },
+    { id: 'A5-templates/C8/launcher', name: 'launcher isolation is separate from host evidence' },
+    { id: 'A5-templates/C8/setup', name: 'setup stages the complete unit in the approved order' },
+    { id: 'A5-templates/C8/migration', name: 'migration instructions preserve decisions and Q6 boundaries' },
+    { id: 'A5-templates/C8/narrowing', name: 'whole result refusal retains unreviewed scope' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -183,6 +203,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C5: Object.freeze([...C5_IMPLEMENTATIONS]),
   C6: Object.freeze([...C6_IMPLEMENTATIONS]),
   C7: Object.freeze([...C7_IMPLEMENTATIONS]),
+  C8: Object.freeze([...C8_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

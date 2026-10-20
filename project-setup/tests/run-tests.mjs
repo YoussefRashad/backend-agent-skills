@@ -961,6 +961,13 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c7context.tmp, { recursive: true });
   const rep7 = await runComponentAssertions('C7', c7context);
   check(rep7.ok === true, 'C7 component assertions pass', { errors: rep7.errors, failed: rep7.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C8 component assertions (trusted-review instructions, the baseline checker and the customization migration) run once, after the C7 aggregation, inside the same case: R29 is the case
+  // that guards approvals, and C8's transaction cases exercise exact user-content approval. Under the same rule their sub-assertion records are not printed here and do not inflate the
+  // case counts; R29 fails unless the whole C8 report is ok. The run is not also invoked from any other baseline case.
+  const c8context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c8'), env: { ...ENV } };
+  fs.mkdirSync(c8context.tmp, { recursive: true });
+  const rep8 = await runComponentAssertions('C8', c8context);
+  check(rep8.ok === true, 'C8 component assertions pass', { errors: rep8.errors, failed: rep8.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {
