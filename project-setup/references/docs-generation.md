@@ -34,11 +34,39 @@ Never move the critical rules into nested files only; the root keeps the short v
 
 | File | Source |
 |---|---|
-| `.ai/security-paths.json` | Copy of the skill's `data/secret-paths.json` (byte-identical; drift = user edit) |
-| `.ai/tools/git-safe.mjs` | Copy of `assets/tools/git-safe.mjs`: read-only diff/log/show with secret excludes, no shell |
+| `.ai/security-paths.json` | Created from the skill's `data/secret-paths.json`. Afterwards it is the project's effective policy: the managed `patterns` plus, from schema 2, the project's own `projectPatterns`. It legitimately differs from the shipped file; ownership comes from the installed record, never from comparing bytes. A v2 project's policy changes through `references/migration-v2.md` |
+| `.ai/tools/security-policy.mjs` | Copy of `assets/tools/security-policy.mjs`: the shared policy helper |
+| `.ai/tools/git-safe-core.mjs` | Copy of `assets/tools/git-safe-core.mjs`: the bounded reader core |
+| `.ai/tools/guard-raw-git-core.mjs` | Copy of `assets/tools/guard-raw-git-core.mjs`: the raw-Git hook core |
+| `.ai/tools/review-diff.mjs` | Copy of `assets/tools/review-diff.mjs`: the review helper |
+| `.ai/tools/git-safe.mjs` | Copy of `assets/tools/git-safe.mjs`: read-only diff/log/show/cat/ls/grep and review-diff with secret excludes, no shell |
+| `.ai/tools/guard-raw-git.mjs` | Copy of `assets/tools/guard-raw-git.mjs`: the Claude raw-Git hook entrypoint |
+| `.ai/tools/hooks-selftest.mjs` | Copy of `assets/tools/hooks-selftest.mjs`: the installed hook self-test |
 
-The shared agents and AGENTS.md depend on both. They are what lets an agent in the project follow the secret
-rules without knowing where the skill is installed.
+Each `.ai/tools/` member comes from the corresponding `assets/tools/` file of the same skill copy. A complete
+update stages all seven:
+
+```text
+security-policy.mjs
+git-safe-core.mjs
+guard-raw-git-core.mjs
+review-diff.mjs
+git-safe.mjs
+guard-raw-git.mjs
+hooks-selftest.mjs
+```
+
+Stage all seven runtime members as one reviewed compatible unit. Declining replacement of an
+edited member prevents the coupled policy update. Do not install the new policy with old or
+unreviewed readers.
+
+The shared agents and AGENTS.md depend on the policy and the reader. They are what lets an agent in the project
+follow the secret rules without knowing where the skill is installed.
+
+The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed and rendered from
+`assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs you did not generate. Project-specific
+review rules do not go into the canonical reviewer; they live in the optional, project-owned
+".ai/agents/reviewer.project.md" (see "Ownership hints").
 
 ## `.ai/context/`
 
@@ -83,3 +111,22 @@ Cleanup. Every item: file:line where possible, what to confirm, never a secret v
 
 Living docs (`docs/**`, `.ai/context/**`, `.ai/decisions/**`, `TODO.md`) default to `merged`: people and
 docs-sync edit them, and they are not drift-tracked. Write an `ownership.json` in the run dir only to override.
+
+Move approved reviewer-specific text to ".ai/agents/reviewer.project.md". Preserve existing
+project-file bytes and append only the exact approved text. Do not deduplicate, rewrite or
+resolve conflicting rules silently. Present a collision for an explicit decision.
+
+Request its ownership by merging this entry into `.ai/.run/<id>/ownership.json`, preserving the entries the
+migration or merge scripts already wrote, and serialize the merged request as two-space JSON with a final LF:
+
+```json
+{
+  ".ai/agents/reviewer.project.md": "merged"
+}
+```
+
+Without this request a newly created project file would be inferred as `full`. `merged` does not grant
+permission to replace pre-existing text: existing unowned project-file content still needs its applicable
+approval. If no reviewer customization is approved for movement, do not create the file, and routine later
+updates omit its draft unless the user asked for a project-rule change. Docs-sync has no project file; its
+customizations are preserved in the reviewed replacement or explicitly decided.

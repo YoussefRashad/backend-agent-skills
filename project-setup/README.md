@@ -18,6 +18,12 @@ tests/run-tests.mjs regression + success-path suite (not copied into installs)
 evals/              agent-level scenarios (not copied into installs)
 ```
 
+Reviews run from a trusted checkout (see "Trusted-checkout reviews" below), and the review lane has a launcher
+prerequisite that instructions alone cannot meet ("Review-lane launcher prerequisite"). A project installed by
+v2 is updated with `references/migration-v2.md`: `scripts/check-agent-baselines.mjs` first verifies the shipped
+v2.0.0 agent and wrapper snapshots under `data/v2.0.0/`, and every installed customization then gets an
+explicit, reviewed disposition.
+
 ## Claude raw-Git hook
 
 The Claude raw-Git hook is a guardrail, not a sandbox. It blocks the documented raw-history
@@ -40,6 +46,60 @@ The hook executes project code and therefore depends on the trusted-checkout bou
 
 The hook contract, the conditional insertion, `--hooks-only` staging and the installed self-test are described in
 `references/claude.md` ("Hooks").
+
+Additional raw-Git hook gaps include options to the `env`, `exec`, `time` and `command`
+prefixes, which are not interpreted, for example `env -i git log`. Git commands outside the
+frozen blocked list can still print history or file content, including `annotate`,
+`diff-index`, `diff-files`, `difftool`, `fast-export`, `bundle` and `notes`. Patch-producing
+options other than `-p` and `--patch`, including `-U<n>`, `--unified` and `--patch-with-stat`,
+are also gaps. The blocked list remains unchanged; it is a guardrail, not an allowlist.
+
+## Trusted-checkout reviews
+
+Review other people's branches with the reviewer from your base branch, or on GitHub. Never
+open an agent session on someone else's branch.
+
+An untrusted checkout controls agent definitions, instructions, settings, hooks, the security
+policy and executable helpers. Starting an agent there has already given that branch control
+of the session. Project-setup cannot detect or prevent that mistake.
+
+The reviewer keeps the trusted base checkout and reads the other branch through resolved commit objects
+(`review-diff --base <ref> --head <ref>`, then `git-safe.mjs cat`, `ls` and `grep` at the resolved head). It
+never checks out, switches to, fetches or creates a worktree for the reviewed branch.
+
+An excluded file can still be executable, including `.envrc`. Exclusion from agent reads is
+not a safety review; a human must review such code before executing or trusting it.
+
+Path rules cannot detect secret content copied to an unrelated allowed path. They are not
+a content scanner and cannot guarantee that a review diff is secret-free.
+
+Hard links fall under the same copied-content limit as copies: protected content can appear
+under an allowed name. The path policy does not detect that relationship.
+
+## Review-lane launcher prerequisite
+
+The external review-lane launcher must disable apps and plugins with
+`--disable apps --disable plugins`. Disable each configuration-defined MCP server with
+`-c mcp_servers.<name>.enabled=false`. Do not name plugin-provided servers in these overrides;
+disabling plugins removes them, and naming them can make Codex fail to load its configuration.
+
+Run `codex mcp list --json` with the same flags, effective directory, configuration and
+profile as the worker. Refuse to launch unless every listed server has `enabled: false`.
+If discovery or this check fails, the lane is not ready.
+
+Do not read authentication files to perform this check. Preserve the user's profile and
+settings; do not use an ignore-user-config shortcut, request full access or weaken sandbox
+controls to make the lane start.
+
+Configuration coverage and zero observed connector calls do not prove host tool absence.
+Record host negative-capability evidence separately from configuration checks.
+
+The planned doctor audits these prerequisites without starting a model session or sandbox
+probe. Until the doctor component lands, this paragraph describes its required scope, not an
+available command. An unresolved prerequisite means the lane is not ready.
+
+The canonical agents also say this in their own words: instructions are guidance, not a sandbox. See
+`references/codex.md` ("Review-lane launcher prerequisite") for the Codex launcher wording.
 
 ## Test first (no installation, no real config touched)
 

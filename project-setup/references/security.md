@@ -19,11 +19,10 @@ content in-process, by design, and never emit it: `env-keys.mjs` (templates only
 ## 2. Diffs, history and committed files
 
 Read diffs, history and committed files only through `node .ai/tools/git-safe.mjs <command>` (before
-installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0
-use `git diff --name-status` only, which prints paths, not content). The installed reader belongs to one reviewed
-unit of seven files: `security-policy.mjs`, `git-safe-core.mjs`, `guard-raw-git-core.mjs`, `review-diff.mjs`,
-`git-safe.mjs`, `guard-raw-git.mjs` and `hooks-selftest.mjs`. The reader accepts exactly these six object forms and
-the review form:
+installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`). The installed
+reader belongs to one reviewed unit of seven files: `security-policy.mjs`, `git-safe-core.mjs`,
+`guard-raw-git-core.mjs`, `review-diff.mjs`, `git-safe.mjs`, `guard-raw-git.mjs` and `hooks-selftest.mjs`. The
+reader accepts exactly these six object forms and the review form:
 
 ```text
 diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]
@@ -115,6 +114,43 @@ a content scanner and cannot guarantee that a review diff is secret-free.
 
 `.gitignore` does not protect files that are already tracked; tracked secret files are a stop condition (detect
 warns), not something to work around.
+
+### C8 review guidance
+
+This subsection is the orchestrator's side of the trusted-review contract; the canonical reviewer and docs-sync
+definitions carry the agent's side. The supported review grammar is exactly:
+
+```text
+review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
+```
+
+Start every review from a trusted checkout. Review another person's branch through its resolved commit
+objects (`--head`) from the trusted base checkout; never check it out, create a worktree for it or start an
+agent session there. The reviewer copies the helper's identity header
+`# review-diff mode=<mode> base=<B> head=<H> merge-base=<M>` and adds the self-review warning only when the
+resolved head equals the checkout's resolved HEAD, whatever the mode or dirty state.
+
+Reviewers consume review-diff stdout or an artifact the orchestrator supplies; they never use `--out`,
+redirect stdout to a file or create review artifacts.
+
+The orchestrator may create an artifact with review-diff's `--out` option. The destination
+must be a direct child of `.ai/.run/review/`. Use the helper's artifact publication checks;
+do not replace them with shell redirection.
+
+`defaultReviewArtifactPath(now)` in `review-diff.mjs` is a naming helper, not a writer or a retry loop. For
+`new Date('2026-10-19T12:34:56.789Z')` it returns exactly `.ai/.run/review/20261019T123456789Z.diff`. The
+CLI still defaults to stdout. Calling the naming helper does not create directories, reserve a filename or
+overwrite a collision; artifact creation stays exclusive, and a collision is an error, not a retry.
+
+`review` is reserved for review artifacts, including case variants and aliases with
+trailing dots or spaces. Never use it as a setup run ID or clean it as a setup run.
+Review artifacts and their self-ignore entry must survive setup cleanup.
+
+A refused result, an empty or partial artifact, or a narrowed subset is not a completed full review. After
+narrowing, the report records the reviewed subset and the scope still unreviewed.
+
+Hard links fall under the same copied-content limit as copies: protected content can appear
+under an allowed name. The path policy does not detect that relationship.
 
 ## 3. Secret scan (optional, bounded)
 

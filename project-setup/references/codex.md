@@ -29,6 +29,27 @@ location. Never let two copies with the same name be discoverable. An existing c
   `docs-sync`; the canonical definition is the same file.
 - **Never put `sandbox_mode` in a wrapper.** Any loaded `sandbox_mode` makes Codex use legacy sandbox settings
   instead of permission profiles, which silently drops deny-read rules for that agent.
+- Each wrapper loads its canonical definition first (`.ai/agents/reviewer.md` or `.ai/agents/docs-sync.md`). If
+  that file is missing or unreadable, the agent stops and says so; it never falls back to the wrapper description,
+  memory, another wrapper or an agent definition obtained through a connector. The wrapper's
+  `developer_instructions` also carry the local-read, no-connector and no-fallback rules, so they apply even
+  before the canonical file has been read.
+
+Replacing an installed wrapper is a reviewed draft (`references/migration-v2.md` for a v2 project).
+
+Preserve user-added top-level settings and tables, including `default_permissions`. Compare
+both the installed v2 baseline difference and the installed wrapper against the shipped
+replacement. Do not silently drop a setting because it is outside `developer_instructions`.
+
+A wrapper whose installed hash matches its manifest record can still contain settings added
+through an earlier reviewed transaction. Compare the installed wrapper's top-level keys and
+tables with the shipped template; preserve every key or table the template does not define,
+or list it for an explicit decision.
+
+Keep values and TOML structure: added top-level keys go immediately before the `developer_instructions = """`
+line, and added tables after the template's last line. A key both versions define with different values,
+syntax `scripts/toml.mjs` reports as an error or unsupported, or a user-added `sandbox_mode` needs an explicit
+decision; never erase it silently, and do not claim the full-file guard settles its meaning.
 
 ### Read-only reviewer (optional, after verification)
 
@@ -67,6 +88,30 @@ Rules the report must reflect:
 
 The skill does not create or edit `.codex/config.toml`. If one exists, list its relevance in the Phase 0 summary
 (e.g. it sets `sandbox_mode`, which would disable profiles) and leave changes to the user.
+
+### Review-lane launcher prerequisite
+
+The external launcher MUST disable apps and plugins with `--disable apps --disable plugins`
+and disable every config-defined MCP server with
+`-c mcp_servers.<name>.enabled=false` in the worker's effective directory, configuration and
+profile. Do not name plugin-provided servers as config overrides.
+
+Before launch, run `codex mcp list --json` with the same effective lane options. Refuse launch
+if a listed server is enabled, the command fails, its output is invalid, or the effective
+configuration cannot be established. Report identifiers and disable coverage only.
+
+Do not read authentication files to perform this check. Preserve the user's profile and
+settings; do not use an ignore-user-config shortcut, request full access or weaken sandbox
+controls to make the lane start.
+
+Configuration coverage and zero observed connector calls do not prove host tool absence.
+Record host negative-capability evidence separately from configuration checks.
+
+The planned doctor audits these prerequisites without starting a model session or sandbox
+probe. Until the doctor component lands, this paragraph describes its required scope, not an
+available command. An unresolved prerequisite means the lane is not ready.
+
+The skill neither runs nor writes a launcher, and never changes user-level Codex configuration to satisfy this.
 
 ## Live operation notes (Codex 0.160.1, Windows)
 
