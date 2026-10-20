@@ -145,7 +145,7 @@ test('R03a', 'run ids cannot escape the repository', () => {
   const d = repo({ 'a.txt': 'a\n' });
   put(path.join(d, 'keys.json'), JSON.stringify([{ name: 'DUMMY', secret: true }]));
   for (const bad of ['../../../escaped-env', '..', 'a/b', 'a\\b', '.hidden', 'x']) {
-    for (const [script, args] of [['env-keys', ['merge', '--keys', path.join(d, 'keys.json')]], ['apply', ['init']], ['lock', ['acquire']], ['canary', ['setup']], ['merge-claude-settings', []]]) {
+    for (const [script, args] of [['env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'keys.json')]], ['apply', ['init']], ['lock', ['acquire']], ['canary', ['setup']], ['merge-claude-settings', []]]) {
       const r = S(script, [...args, '--run-id', bad], d);
       check(r.code !== 0, `${script} rejects run id "${bad}"`, r);
     }
@@ -934,7 +934,7 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   // e) env template: env-keys block append passes; changing an existing value needs approval and never prints it
   { const d = repo({ '.env.example': 'DB_PASSWORD=Sup3rSecretValue\nPORT=3000\n' }); const r = begin(d);
     put(path.join(d, 'k.json'), JSON.stringify([{ name: 'JWT_SECRET', secret: true }]));
-    check(S('env-keys', ['merge', '--keys', path.join(d, 'k.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
+    check(S('env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'k.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
     check(P(d).code === 0, 'env-keys block append needs no approval');
     put(path.join(r, 'vault', 'files', '.env.example'), 'DB_PASSWORD=ChangedValue123\nPORT=3000\n');
     const p = P(d); check(p.code === 3 && !p.stdout.includes('Sup3rSecretValue') && !p.stdout.includes('ChangedValue123'), 'value change needs approval; values never printed', p.stdout); }
@@ -968,6 +968,13 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c8context.tmp, { recursive: true });
   const rep8 = await runComponentAssertions('C8', c8context);
   check(rep8.ok === true, 'C8 component assertions pass', { errors: rep8.errors, failed: rep8.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C9 component assertions (template resolution, the env-keys report and merge contracts, command hygiene and the root-only vault exception) run once, after the C8 aggregation, inside the same
+  // case: R29 is the case that guards additive-block approval and changed-value refusal for the template. Under the same rule their sub-assertion records are not printed here and do not
+  // inflate the case counts; R29 fails unless the whole C9 report is ok. The run is not also invoked from any other baseline case.
+  const c9context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c9'), env: { ...ENV } };
+  fs.mkdirSync(c9context.tmp, { recursive: true });
+  const rep9 = await runComponentAssertions('C9', c9context);
+  check(rep9.ok === true, 'C9 component assertions pass', { errors: rep9.errors, failed: rep9.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {
@@ -1024,12 +1031,13 @@ test('R33', 'git-safe blocks -L/--contents, which print file content regardless 
 
 test('R34', 'scripts refuse secret-pattern files as input before opening them', () => {
   const d = repo({ '.env': 'DUMMY_SECRET=NOT_REAL_INPUT\n', 'a.txt': 'a\n' }, false); begin(d);
+  put(path.join(d, '.env.example'), ''); // C9: an empty permitted template, so the refusal below tests key-list protection and not the missing-template result
   const outside = path.join(TMP, `outside-secret-${++n}`, '.env.local'); put(outside, 'DUMMY_SECRET=NOT_REAL_OUTSIDE\n');
   for (const [script, args] of [
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', '.env', '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', outside, '--run-id', 'run-0001']],
     ['merge-claude-settings', ['--run-id', 'run-0001', '--allow-file', '.env']],
-    ['env-keys', ['merge', '--keys', outside, '--run-id', 'run-0001']],
+    ['env-keys', ['merge', '--template', 'auto', '--keys', outside, '--run-id', 'run-0001']],
   ]) {
     const r = S(script, args, d);
     check(r.code !== 0 && !/NOT_REAL_(INPUT|OUTSIDE)/.test(r.stdout + r.stderr), `${script} ${args.join(' ')} refused without leaking`, r);
@@ -1040,6 +1048,7 @@ test('R34', 'scripts refuse secret-pattern files as input before opening them', 
 // ======================================================= rc.10 review (R35+) ====
 test('R35', 'secret-input guard checks the resolved destination (junction/symlink aliases inside and outside the repo)', () => {
   const d = repo({ 'secrets/input.txt': 'SYNTHETIC_SECRET_R35\n', 'a.txt': 'a\n' }, false); begin(d);
+  put(path.join(d, '.env.example'), ''); // C9: an empty permitted template, so the refusal below tests key-list protection and not the missing-template result
   const outDir = path.join(TMP, `outside-sec-${++n}`); put(path.join(outDir, 'secrets', 'k.json'), '["SYNTHETIC_SECRET_R35_OUT"]');
   const aliasIn = path.join(d, 'innocent'); const aliasOut = path.join(TMP, `alias-out-${n}`);
   if (!linkDir(path.join(d, 'secrets'), aliasIn) || !linkDir(path.join(outDir, 'secrets'), aliasOut)) return skip('cannot create directory links');
@@ -1047,7 +1056,7 @@ test('R35', 'secret-input guard checks the resolved destination (junction/symlin
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'innocent/input.txt', '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
     ['merge-claude-settings', ['--run-id', 'run-0001', '--allow-file', path.join(aliasOut, 'k.json')]],
-    ['env-keys', ['merge', '--keys', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
+    ['env-keys', ['merge', '--template', 'auto', '--keys', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'secrets/input.txt', '--run-id', 'run-0001']], // direct control
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'does-not-exist.txt', '--run-id', 'run-0001']], // unresolvable
   ];
@@ -1207,14 +1216,16 @@ test('S01', 'fresh setup end to end, validate clean', () => {
   const det = S('detect', [], d); check(det.json?.mode === 'fresh', 'mode fresh', det.json?.mode);
   const { g, m } = freshSetup(d); check(g.code === 0 && m.code === 0 && m.json.needsDecision === false, 'drafts ok', [g.stdout, m.stdout]);
   put(path.join(d, 'keys.json'), JSON.stringify([{ name: 'DATABASE_URL', required: true, secret: true, description: 'DSN', group: 'Database' }]));
-  check(S('env-keys', ['merge', '--keys', path.join(d, 'keys.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
+  check(S('env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'keys.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
   const p = prepare(d); check(p.code === 0 && p.json.changed > 20, 'prepare', p.json);
   check(p.json?.metadataChanged === 0, 'a fresh setup has no metadata operation (automatic recording is not one)', p.json?.metadataChanged);
   const c = commit(d, p); check(c.code === 0 && c.json.committed, 'commit', c);
   const mf = JSON.parse(read(path.join(d, '.ai', 'manifest.json')));
   check(mf.schema === 3, 'a newly written manifest is schema 3', mf.schema);
   const v = S('validate', [], d); check(v.code === 0 && v.json.ok, 'validate clean', v.json?.results?.filter((x) => x.level !== 'pass'));
-  check(read(path.join(d, '.env.example')).includes('DATABASE_URL=<REDACTED>') && read(path.join(d, '.env.example')).startsWith('PORT=3000'), 'env template merged, existing lines kept');
+  // C9: a new secret name is staged as an empty assignment. Not includes('DATABASE_URL='), which would also accept the old placeholder output.
+  const envText = read(path.join(d, '.env.example'));
+  check(/^DATABASE_URL=$/m.test(envText) && !envText.includes('<REDACTED>') && envText.startsWith('PORT=3000'), 'env template merged: the new name is an empty assignment, no placeholder, existing lines kept');
   const dt = S('detect', [], d).json;
   check(dt?.mode === 'update', 'mode becomes update');
   const dm = dt?.ai?.manifest;
@@ -1266,7 +1277,7 @@ test('S05', 'lock contention and explicit break', () => {
 test('S06', 'env-keys never opens .env and never prints values', () => {
   const d = repo({ '.env': 'X=1\n', '.env.example': 'DB_PASSWORD=Sup3rSecretValue\nPORT=3000\nJWT_SECRET=\n' }, false);
   check(S('env-keys', ['keys', '--file', '.env'], d).code !== 0, '.env refused');
-  const k = S('env-keys', ['keys', '--file', '.env.example'], d);
+  const k = S('env-keys', ['keys', '--template', 'auto'], d);
   check(k.code === 0 && !k.stdout.includes('Sup3rSecretValue') && k.json.possibleRealSecrets.includes('DB_PASSWORD'), 'names + classification only', k);
 });
 

@@ -1189,9 +1189,10 @@ async function migrationGroup(context) {
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 16 && eq(file.evals.map((e) => e.id), Array.from({ length: 16 }, (_, i) => i + 1)), 'ids 1 through 16 in order', file.evals.map((e) => e && e.id));
+      // C9 (plan 4.3): the whole-inventory expectation moves from 16 to 19 entries (C9 appends 17-19); C8's own six objects are still compared exactly.
+      check(file.evals.length === 19 && eq(file.evals.map((e) => e.id), Array.from({ length: 19 }, (_, i) => i + 1)), 'ids 1 through 19 in order (C8 appended 11-16, C9 appends 17-19)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
-      check(eq(file.evals.slice(10), EVALS), 'evaluations 11-16 equal the plan objects exactly', file.evals.slice(10).map((e) => e && e.name));
+      check(eq(file.evals.slice(10, 16), EVALS), 'evaluations 11-16 equal the plan objects exactly', file.evals.slice(10, 16).map((e) => e && e.name));
     });
   });
 }

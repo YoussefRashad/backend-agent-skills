@@ -15,6 +15,7 @@ import { C5_IMPLEMENTATIONS } from './c5.test.mjs';
 import { C6_IMPLEMENTATIONS } from './c6.test.mjs';
 import { C7_IMPLEMENTATIONS } from './c7.test.mjs';
 import { C8_IMPLEMENTATIONS } from './c8.test.mjs';
+import { C9_IMPLEMENTATIONS } from './c9.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -192,6 +193,21 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'A5-templates/C8/migration', name: 'migration instructions preserve decisions and Q6 boundaries' },
     { id: 'A5-templates/C8/narrowing', name: 'whole result refusal retains unreviewed scope' },
   ],
+  // C9 plan (docs/plans/2026-10-19-project-setup-v3-rc1-c9.md) section 4.1, in its exact order.
+  C9: [
+    { id: 'R67/C9/commands', name: 'emitted command guidance contains no environment filename expression' },
+    { id: 'R68/C9/arguments', name: 'automatic template arguments reject alternate inputs' },
+    { id: 'R68/C9/resolution', name: 'automatic resolution addresses only the root template' },
+    { id: 'R68/C9/missing', name: 'missing templates produce a manual step without fallback' },
+    { id: 'R93/C9/values', name: 'template reports classify names without exposing values' },
+    { id: 'R93/C9/merge', name: 'merge preserves existing values and stages empty new assignments' },
+    { id: 'R93/C9/keys-input', name: 'key inputs respect path checks and both refusal sets' },
+    { id: 'R93/C9/vault', name: 'template staging remains inside the reviewed apply transaction' },
+    { id: 'R93/C9/instructions', name: 'instructions preserve the script-only template exception' },
+    { id: 'R93/C9/permissions', name: 'template handling leaves user-level permissions unchanged' },
+    { id: 'R97/C9/template-boundary', name: 'only the permitted root template receives the vault exception' },
+    { id: 'V2/C9/module-contract', name: 'template exports and component records are import safe' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -204,6 +220,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C6: Object.freeze([...C6_IMPLEMENTATIONS]),
   C7: Object.freeze([...C7_IMPLEMENTATIONS]),
   C8: Object.freeze([...C8_IMPLEMENTATIONS]),
+  C9: Object.freeze([...C9_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

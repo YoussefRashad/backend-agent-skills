@@ -29,8 +29,8 @@
 //     after prepare it is null;
 //   - sourceInventory lists every source, unchanged drafts included (5.3: an absent source yields the inventory row and suppresses its
 //     source-body row, and unchanged drafts have source-body rows).
-// One fixture fact worth knowing: the existing write scope has no root-level .env.sample or .env.template, so vault operations that must
-// pass prepare use docs/.env.sample and docs/.env.template (and .env.example at the root).
+// C9 (docs/plans/2026-10-19-project-setup-v3-rc1-c9.md 3.7 and 4.3): the only vault target is the root .env.example, so the successful vault operations use it and
+// the fixtures that held create, modify and unchanged vault targets together are split into independent temporary roots under the same assertions.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -280,7 +280,7 @@ const metaApprovalError = (t) => `metadata changes require --approve-user-conten
 const MSG = {
   DIFF_USAGE: 'usage: apply.mjs diff --project <root> --run-id <id>',
   ROOT: 'explicit project root is not a safe existing directory',
-  VAULT_TARGET: 'vault files may only target .env.example/.env.sample/.env.template',
+  VAULT_TARGET: 'vault files may only target the permitted root template',
   TARGET_TYPE: 'target is not a regular file',
   DUP: 'target appears in both drafts and vault',
   MANIFEST_DRAFT: 'the manifest is written by commit, not drafted',
@@ -336,6 +336,8 @@ const PRESERVE_SETTINGS = {
 const PRESERVE_BYTES = jsonText(PRESERVE_SETTINGS);
 // Section 7.8 classifier fixture and expected result.
 const ENV_FIXTURE = 'EMPTY=\nPLACE=<value>\nTOKEN=fixture-value\nPORT=3000\n';
+// C9 plan 3.4: the exact manual step an env-keys report carries when the template holds any value (V).
+const ENV_VALUES_STEP = 'Template contains values: .env.example. Existing values were preserved and were not printed. Manually reduce the template to key names with empty assignments.';
 const ENV_EXPECTED = [
   { name: 'EMPTY', line: 1, valueState: 'empty' },
   { name: 'PLACE', line: 2, valueState: 'placeholder' },
@@ -2090,32 +2092,54 @@ async function mixedTransaction(context) {
           const root = cloneBase(dir, plain, 'p');
           putFile(projPath(root, 'docs/crlf.md'), 'a\r\nb\r\n');
           putFile(projPath(root, 'docs/existing.md'), '# existing\n');
-          putFile(projPath(root, 'docs/.env.template'), 'KEEP=1\nSECRET_TOKEN=abc12345\n');
           commitAll(context, root, 'existing files');
           const id = 'run-c2-ops1';
           const drafts = { 'docs/new.md': '# new\n', 'docs/crlf.md': 'a\nc\n', 'docs/existing.md': '# existing\n' };
-          const vault = { 'docs/.env.sample': 'PORT=\n', 'docs/.env.template': 'KEEP=1\nSECRET_TOKEN=abc12345\n' };
+          // C9 (plan 4.3): the vault create operation of the root template runs in this root; the unchanged vault operation runs in its own root below.
+          const vault = { '.env.example': 'PORT=\n' };
           // docs/crlf.md is a pre-existing file the skill does not own: replacing its content needs the existing content approval.
           const p = runSpec(kit, root, id, { drafts, vault, o: { approve: ['docs/crlf.md'] } });
           check(p.ok === true, 'prepare succeeds', p.prep && p.prep.stdout.slice(0, 400));
           if (!p.ok) return;
           const cur = (t) => readBytes(projPath(root, t));
           const want = [
-            expectedOp({ target: 'docs/.env.sample', origin: 'vault', draft: vault['docs/.env.sample'], current: null, secret: true }),
-            expectedOp({ target: 'docs/.env.template', origin: 'vault', draft: vault['docs/.env.template'], current: cur('docs/.env.template'), secret: true }),
+            expectedOp({ target: '.env.example', origin: 'vault', draft: vault['.env.example'], current: null, secret: true }),
             expectedOp({ target: 'docs/crlf.md', draft: drafts['docs/crlf.md'], current: cur('docs/crlf.md'), reasons: ['draft changes content outside managed blocks (pre-existing file the skill does not own)'] }),
             expectedOp({ target: 'docs/existing.md', draft: drafts['docs/existing.md'], current: cur('docs/existing.md') }),
             expectedOp({ target: 'docs/new.md', draft: drafts['docs/new.md'], current: null }),
           ];
           checkOps(check, 'content operations', p.plan.ops, want);
           check(p.plan.ops.find((o) => o.target === 'docs/crlf.md').eol === '\r\n', 'a CRLF target keeps its line ending in the record');
-          check(p.prep.json.changed === 3 && p.prep.json.unchanged === 2 && p.prep.json.metadataChanged === 0, 'changed counts create and modify, unchanged counts unchanged, no metadata operation', { c: p.prep.json.changed, u: p.prep.json.unchanged, m: p.prep.json.metadataChanged });
-          check(eq(p.plan.sourceInventory, [{ target: 'docs/.env.sample', origin: 'vault' }, { target: 'docs/.env.template', origin: 'vault' }, { target: 'docs/crlf.md', origin: 'draft' }, { target: 'docs/existing.md', origin: 'draft' }, { target: 'docs/new.md', origin: 'draft' }]), 'sourceInventory lists every source (including unchanged), sorted by target', p.plan.sourceInventory);
+          check(p.prep.json.changed === 3 && p.prep.json.unchanged === 1 && p.prep.json.metadataChanged === 0, 'changed counts create and modify, unchanged counts unchanged, no metadata operation', { c: p.prep.json.changed, u: p.prep.json.unchanged, m: p.prep.json.metadataChanged });
+          check(eq(p.plan.sourceInventory, [{ target: '.env.example', origin: 'vault' }, { target: 'docs/crlf.md', origin: 'draft' }, { target: 'docs/existing.md', origin: 'draft' }, { target: 'docs/new.md', origin: 'draft' }]), 'sourceInventory lists every source (including unchanged), sorted by target', p.plan.sourceInventory);
           const j = commitOk(kit, check, 'ops', p, null);
-          check(j && eq(j.entries.map((e) => e.target), ['docs/.env.sample', 'docs/crlf.md', 'docs/new.md', T_MANIFEST]), 'only real writes are journaled', j && j.entries.map((e) => e.target));
+          check(j && eq(j.entries.map((e) => e.target), ['.env.example', 'docs/crlf.md', 'docs/new.md', T_MANIFEST]), 'only real writes are journaled', j && j.entries.map((e) => e.target));
           const man = readManifestFile(root);
-          check(man && eq(Object.keys(man.files), ['docs/.env.sample', 'docs/crlf.md', 'docs/new.md']), 'M23: the unchanged unrecorded targets (docs/existing.md, .env.template) gain no record; the written ones do', man && Object.keys(man.files));
+          check(man && eq(Object.keys(man.files), ['.env.example', 'docs/crlf.md', 'docs/new.md']), 'M23: the unchanged unrecorded target (docs/existing.md) gains no record; the written ones do', man && Object.keys(man.files));
           check(readText(projPath(root, 'docs/crlf.md')) === 'a\r\nc\r\n', 'a CRLF target is rewritten with CRLF');
+        });
+        // The unchanged vault operation in its own independent root (C9 plan 4.3), with an ordinary create beside it so that a real write and a journal exist.
+        await withScratch(context, 'opsu', async (dir) => {
+          const root = cloneBase(dir, plain, 'p');
+          putFile(projPath(root, '.env.example'), 'KEEP=1\nSECRET_TOKEN=abc12345\n');
+          commitAll(context, root, 'existing template');
+          const id = 'run-c2-ops2';
+          const drafts = { 'docs/new.md': '# new\n' };
+          const vault = { '.env.example': 'KEEP=1\nSECRET_TOKEN=abc12345\n' };
+          const p = runSpec(kit, root, id, { drafts, vault });
+          check(p.ok === true, 'prepare succeeds (unchanged vault operation)', p.prep && p.prep.stdout.slice(0, 400));
+          if (!p.ok) return;
+          const cur = (t) => readBytes(projPath(root, t));
+          checkOps(check, 'content operations (unchanged vault)', p.plan.ops, [
+            expectedOp({ target: '.env.example', origin: 'vault', draft: vault['.env.example'], current: cur('.env.example'), secret: true }),
+            expectedOp({ target: 'docs/new.md', draft: drafts['docs/new.md'], current: null }),
+          ]);
+          check(p.prep.json.changed === 1 && p.prep.json.unchanged === 1 && p.prep.json.metadataChanged === 0, 'one create and one unchanged vault operation, no metadata operation', { c: p.prep.json.changed, u: p.prep.json.unchanged, m: p.prep.json.metadataChanged });
+          check(eq(p.plan.sourceInventory, [{ target: '.env.example', origin: 'vault' }, { target: 'docs/new.md', origin: 'draft' }]), 'sourceInventory lists the unchanged vault source too, sorted by target', p.plan.sourceInventory);
+          const j = commitOk(kit, check, 'ops unchanged vault', p, null);
+          check(j && eq(j.entries.map((e) => e.target), ['docs/new.md', T_MANIFEST]), 'only real writes are journaled (the unchanged vault operation is not)', j && j.entries.map((e) => e.target));
+          const man = readManifestFile(root);
+          check(man && eq(Object.keys(man.files), ['docs/new.md']), 'M23: the unchanged unrecorded template gains no record; the written one does', man && Object.keys(man.files));
         });
       });
     }
@@ -3038,9 +3062,11 @@ async function diffOutput(context) {
         await withScratch(context, 'envk', async (dir) => {
           const root = cloneBase(dir, plain, 'p');
           putFile(projPath(root, '.env.example'), ENV_CORPUS.join('\r\n'));
-          const r = kit.script('env-keys', root, ['keys', '--file', '.env.example']);
-          check(r.code === 0 && r.json && eq(sorted(Object.keys(r.json)), ['exists', 'file', 'keys', 'ok', 'possibleRealSecrets']), 'the keys command output has its existing fields', r.stdout.slice(0, 200));
+          // C9 (plan 4.3): the automatic selector, and the two new fields. The corpus holds values, so containsValues is true and the one manual step is V.
+          const r = kit.script('env-keys', root, ['keys', '--template', 'auto']);
+          check(r.code === 0 && r.json && eq(sorted(Object.keys(r.json)), ['containsValues', 'exists', 'file', 'keys', 'manualSteps', 'ok', 'possibleRealSecrets']), 'the keys command output has its fields plus containsValues and manualSteps', r.stdout.slice(0, 200));
           check(r.json && eq(r.json.keys, ENV_CORPUS_EXPECTED) && eq(r.json.possibleRealSecrets, ['URL', 'API_KEY']) && r.json.file === '.env.example' && r.json.exists === true, 'its keys equal the classifier result and the secret names are unchanged', r.json && r.json.possibleRealSecrets);
+          check(r.json && r.json.containsValues === true && eq(r.json.manualSteps, [ENV_VALUES_STEP]), 'the corpus contains values: containsValues is true and manualSteps is exactly the reduction step', r.json && { containsValues: r.json.containsValues, manualSteps: r.json.manualSteps });
           check(!r.stdout.includes('real-looking-value') && !r.stdout.includes('user:pass'), 'values are still never printed');
           check(readText(projPath(root, '.env.example')) === ENV_CORPUS.join('\r\n'), 'the template is not modified');
         });
@@ -3062,10 +3088,10 @@ async function diffOutput(context) {
           for (const [t, d] of Object.entries(targets)) putFile(projPath(root, t), d);
           const oldEnv = 'OLD=1\nOLDSECRET=hunter2hunter2\n';
           putFile(projPath(root, '.env.example'), oldEnv);
-          putFile(projPath(root, 'docs/.env.template'), 'KEEP=1\nSECRET_TOKEN=abc12345\n');
           if (!kit.begin(root, id)) return;
           for (const [t, d] of Object.entries(drafts)) putDraft(root, id, t, d);
-          const vault = { '.env.example': ENV_FIXTURE, 'docs/.env.sample': ENV_FIXTURE, 'docs/.env.template': 'KEEP=1\nSECRET_TOKEN=abc12345\n' };
+          // C9 (plan 4.3): the vault holds only the root template; its create and unchanged reports are checked in their own roots below.
+          const vault = { '.env.example': ENV_FIXTURE };
           for (const [t, d] of Object.entries(vault)) putFile(vaultPath(root, id, t), d);
           putFile(path.join(runDirOf(root, id), 'vault', 'backup', '.env.example'), 'BACKUP-SENTINEL=never-read\n');
           writeRequests(root, id, { 'ownership.json': { 'docs/new.md': 'full' }, 'transaction-inputs.json': ['docs/consumer.md'] });
@@ -3077,8 +3103,6 @@ async function diffOutput(context) {
           const classifyT = (t) => classify(t);
           const vaultExp = [
             { target: '.env.example', action: 'modify', classification: 'env-template', before: classifyT(oldEnv), after: ENV_EXPECTED },
-            { target: 'docs/.env.sample', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED },
-            { target: 'docs/.env.template', action: 'unchanged', classification: 'env-template', before: classifyT('KEEP=1\nSECRET_TOKEN=abc12345\n'), after: classifyT('KEEP=1\nSECRET_TOKEN=abc12345\n') },
           ];
           const expectRoot = canonRoot(root);
           const watch = [path.join(runDirOf(root, id), 'vault', 'backup', '.env.example')];
@@ -3098,7 +3122,7 @@ async function diffOutput(context) {
           check(find('docs/crlf.md').action === 'unchanged' && find('docs/crlf.md').diff === null && find('docs/bom.md').diff === null && find('docs/nonl.md').diff === null, 'LF/CRLF, BOM and final-newline differences normalize to unchanged with a null diff');
           check(find('docs/crlf2.md').diff === '--- "a/docs/crlf2.md"\n+++ "b/docs/crlf2.md"\n@@ -1,2 +1,2 @@\n-a\n-b\n+a\n+c\n', 'a CRLF target is shown with normalized lines: all removed lines, then all added lines', find('docs/crlf2.md').diff);
           const targetsOf = (a) => (Array.isArray(a) ? a.map((f) => f.target) : null);
-          check(eq(targetsOf(r.json && r.json.files), Object.keys(drafts).sort()) && eq(targetsOf(r.json && r.json.vault), ['.env.example', 'docs/.env.sample', 'docs/.env.template']), 'files and vault are sorted by target in JavaScript string order');
+          check(eq(targetsOf(r.json && r.json.files), Object.keys(drafts).sort()) && eq(targetsOf(r.json && r.json.vault), ['.env.example']), 'files are sorted by target in JavaScript string order and the vault report holds the one permitted target');
           check(find('docs/a b.md').diff === textDiff('docs/a b.md', 'x\n', 'y\n') && find('docs/\u00e9.md').diff === `--- /dev/null\n+++ ${JSON.stringify('b/docs/\u00e9.md')}\n@@ -0,0 +1,1 @@\n+e\n`, 'labels are JSON-quoted (a space, a non-ASCII name)');
           // Output hygiene: no vault value, no hash, no timestamp, no absolute path other than the root, no source path.
           for (const secret of ['fixture-value', '<value>', '3000', 'hunter2hunter2', 'abc12345', 'BACKUP-SENTINEL']) check(!r.stdout.includes(secret), `the output never contains ${show(secret)}`);
@@ -3112,30 +3136,60 @@ async function diffOutput(context) {
           const rel = kit.diff(root, id, { cwd: path.dirname(root), project: path.basename(root) });
           check(rel.stdout === r.stdout, 'a relative --project resolves against the cwd');
         });
+        // C9 (plan 4.3): the vault create and unchanged actions, each in an independent root, with the same classification report and hygiene checks.
+        await withScratch(context, 'dfoc', async (dir) => {
+          const root = cloneBase(dir, plain, 'p');
+          const id = 'run-c2-dfo2';
+          if (!kit.begin(root, id)) return;
+          putFile(vaultPath(root, id, '.env.example'), ENV_FIXTURE);
+          const r = kit.diff(root, id);
+          expectDiffOk(check, 'unprepared diff (vault create)', r, {
+            root: canonRoot(root), runId: id, prepared: false, planSha256: null, files: [], metadataOps: null, metadataRequests: NO_REQUESTS,
+            vault: [{ target: '.env.example', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED }],
+          });
+          for (const secret of ['fixture-value', '<value>', '3000']) check(!r.stdout.includes(secret), `the create review never contains ${show(secret)}`);
+        });
+        await withScratch(context, 'dfou', async (dir) => {
+          const root = cloneBase(dir, plain, 'p');
+          const id = 'run-c2-dfo3';
+          const same = 'KEEP=1\nSECRET_TOKEN=abc12345\n';
+          putFile(projPath(root, '.env.example'), same);
+          if (!kit.begin(root, id)) return;
+          putFile(vaultPath(root, id, '.env.example'), same);
+          const r = kit.diff(root, id);
+          expectDiffOk(check, 'unprepared diff (vault unchanged)', r, {
+            root: canonRoot(root), runId: id, prepared: false, planSha256: null, files: [], metadataOps: null, metadataRequests: NO_REQUESTS,
+            vault: [{ target: '.env.example', action: 'unchanged', classification: 'env-template', before: classify(same), after: classify(same) }],
+          });
+          for (const secret of ['abc12345', 'KEEP=1']) check(!r.stdout.includes(secret), `the unchanged review never contains ${show(secret)}`);
+        });
       });
       await step('6.3 prepared review: the plan hash it read, embedded metadataOps, null requests, the same file reports', async () => {
-        await withScratch(context, 'dfp', async (dir) => {
-          const root = cloneBase(dir, plain, 'p');
-          putFile(projPath(root, 'docs/same.md'), 'same\n');
-          putFile(projPath(root, 'docs/.env.template'), 'KEEP=1\n');
-          const id = 'run-c2-dfp1';
-          const drafts = { 'docs/new1.md': '# one\n', 'docs/new2.md': '# two\n', 'docs/same.md': 'same\n' };
-          const vault = { 'docs/.env.sample': ENV_FIXTURE, 'docs/.env.template': 'KEEP=1\n' };
-          const p = runSpec(kit, root, id, { drafts, vault });
-          check(p.ok === true, 'prepare succeeds', p.prep && p.prep.stdout.slice(0, 300));
-          if (!p.ok) return;
-          const files = [['docs/new1.md', null], ['docs/new2.md', null], ['docs/same.md', 'same\n']].map(([t, old]) => ({ target: t, action: old === null ? 'create' : 'unchanged', diff: textDiff(t, old, drafts[t]) }));
-          const vaultExp = [
-            { target: 'docs/.env.sample', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED },
-            { target: 'docs/.env.template', action: 'unchanged', classification: 'env-template', before: classify('KEEP=1\n'), after: classify('KEEP=1\n') },
-          ];
-          const before = projectSnapshot(root);
-          const r = kit.diff(root, id);
-          expectDiffOk(check, 'prepared diff', r, { root: canonRoot(root), runId: id, prepared: true, planSha256: p.sha, files, vault: vaultExp, metadataOps: p.plan.metadataOps, metadataRequests: null });
-          check(r.json && r.json.planSha256 === planShaOf(root, id), 'planSha256 is the SHA-256 of the plan.json it read');
-          check(projectSnapshot(root) === before, 'a prepared review is read-only too');
-          check(r.json && eq(r.json.metadataOps, []), 'a plan without metadata operations embeds an empty list (not null)', r.json && r.json.metadataOps);
-        });
+        // C9 (plan 4.3): the vault create and unchanged operations each run in an independent root, with the same checks.
+        for (const variant of ['create', 'unchanged']) {
+          await withScratch(context, `dfp-${variant}`, async (dir) => {
+            const root = cloneBase(dir, plain, 'p');
+            putFile(projPath(root, 'docs/same.md'), 'same\n');
+            const tpl = variant === 'unchanged' ? 'KEEP=1\n' : null;
+            if (tpl !== null) putFile(projPath(root, '.env.example'), tpl);
+            const id = `run-c2-dfp-${variant}`;
+            const drafts = { 'docs/new1.md': '# one\n', 'docs/new2.md': '# two\n', 'docs/same.md': 'same\n' };
+            const vault = { '.env.example': tpl === null ? ENV_FIXTURE : tpl };
+            const p = runSpec(kit, root, id, { drafts, vault });
+            check(p.ok === true, `prepare succeeds (vault ${variant})`, p.prep && p.prep.stdout.slice(0, 300));
+            if (!p.ok) return;
+            const files = [['docs/new1.md', null], ['docs/new2.md', null], ['docs/same.md', 'same\n']].map(([t, old]) => ({ target: t, action: old === null ? 'create' : 'unchanged', diff: textDiff(t, old, drafts[t]) }));
+            const vaultExp = [tpl === null
+              ? { target: '.env.example', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED }
+              : { target: '.env.example', action: 'unchanged', classification: 'env-template', before: classify(tpl), after: classify(tpl) }];
+            const before = projectSnapshot(root);
+            const r = kit.diff(root, id);
+            expectDiffOk(check, `prepared diff (vault ${variant})`, r, { root: canonRoot(root), runId: id, prepared: true, planSha256: p.sha, files, vault: vaultExp, metadataOps: p.plan.metadataOps, metadataRequests: null });
+            check(r.json && r.json.planSha256 === planShaOf(root, id), `planSha256 is the SHA-256 of the plan.json it read (vault ${variant})`);
+            check(projectSnapshot(root) === before, `a prepared review is read-only too (vault ${variant})`);
+            check(r.json && eq(r.json.metadataOps, []), `a plan without metadata operations embeds an empty list (not null) (vault ${variant})`, r.json && r.json.metadataOps);
+          });
+        }
       });
     }
     if (v2p) {
@@ -3301,7 +3355,7 @@ async function noGit(context) {
       if (!kit.begin(root, id)) return;
       putDraft(root, id, 'docs/nested/a.md', 'new\n');
       putDraft(root, id, 'docs/new.md', '# new\n');
-      putFile(vaultPath(root, id, 'docs/.env.sample'), ENV_FIXTURE);
+      putFile(vaultPath(root, id, '.env.example'), ENV_FIXTURE);
       const preparedRoot = cloneBase(holder, root, 'prepared root');
       // docs/nested/a.md is a pre-existing file the skill does not own: replacing it needs the existing content approval
       const p = kit.prepare(preparedRoot, id, { approve: ['docs/nested/a.md'] });
@@ -3313,7 +3367,7 @@ async function noGit(context) {
         { target: 'docs/nested/a.md', action: 'modify', diff: textDiff('docs/nested/a.md', 'old\n', 'new\n') },
         { target: 'docs/new.md', action: 'create', diff: textDiff('docs/new.md', null, '# new\n') },
       ];
-      const wantVault = [{ target: 'docs/.env.sample', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED }];
+      const wantVault = [{ target: '.env.example', action: 'create', classification: 'env-template', before: [], after: ENV_EXPECTED }];
       const run = (label, project, cwd, rootDir, prepared) => {
         shim.clear();
         const before = snapshotTree(rootDir);
