@@ -27,7 +27,8 @@
 //   - the staged request files other than manifest-metadata.json are asserted only through what prepare and the plan show about them;
 //   - recorded omissions are compared by identity (anchor and lowercase glob), because the plan says "record its exact identity" without fixing
 //     the other fields of the stored entry.
-import fs from 'node:fs';
+import fs, { readFileSync as boundReadFileSync, statSync as boundStatSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import childProcessModule, { spawnSync } from 'node:child_process';
@@ -233,14 +234,25 @@ function observeEffects(fn) {
   const saved = [];
   for (const k of fsMethods) { if (typeof fs[k] === 'function') { const o = fs[k]; saved.push([fs, k, o]); fs[k] = function (...a) { log.push(`fs.${k}`); return o.apply(this, a); }; } }
   for (const k of ['spawnSync', 'execSync', 'execFileSync', 'spawn', 'exec', 'execFile', 'fork']) { const o = spawnSyncHolder[k]; if (typeof o === 'function') { saved.push([spawnSyncHolder, k, o]); spawnSyncHolder[k] = function (...a) { log.push(`child_process.${k}`); return o.apply(this, a); }; } }
+  // C12-12: the named ESM exports of the builtins are snapshots; without this call a module that imported readFileSync or spawnSync by name would never see the wrappers.
+  syncBuiltinESMExports();
   const realEnv = process.env;
   process.env = new Proxy(realEnv, { get(t, k, r) { if (typeof k === 'string') log.push(`env.${k}`); return Reflect.get(t, k, r); }, has(t, k) { log.push(`env.has.${String(k)}`); return Reflect.has(t, k); }, ownKeys(t) { log.push('env.keys'); return Reflect.ownKeys(t); } });
   let value; let thrown = null;
   try { value = fn(); } catch (e) { thrown = e; } finally {
     process.env = realEnv;
     for (const [obj, k, o] of saved) obj[k] = o;
+    syncBuiltinESMExports();
   }
   return { value, thrown, log };
+}
+// C12-12: the builtin functions as they are before any observation window, to prove that every window restores them (the default objects and the named ESM bindings alike).
+const OBSERVED_ORIGINALS = Object.freeze({ readFileSync: fs.readFileSync, statSync: fs.statSync, spawnSync: childProcessModule.spawnSync, execFileSync: childProcessModule.execFileSync, env: process.env });
+function observerRestored() {
+  return fs.readFileSync === OBSERVED_ORIGINALS.readFileSync && boundReadFileSync === OBSERVED_ORIGINALS.readFileSync
+    && fs.statSync === OBSERVED_ORIGINALS.statSync && boundStatSync === OBSERVED_ORIGINALS.statSync
+    && childProcessModule.spawnSync === OBSERVED_ORIGINALS.spawnSync && spawnSync === OBSERVED_ORIGINALS.spawnSync
+    && childProcessModule.execFileSync === OBSERVED_ORIGINALS.execFileSync && process.env === OBSERVED_ORIGINALS.env;
 }
 
 // ============================================================ literals ====
@@ -2363,16 +2375,29 @@ async function snapshot(context) {
         const od = kit.diff(ord, 'run-c3-ord');
         check(od.code === 0 && od.json && !hasOwn(od.json, 'security') && eq(Object.keys(od.json).sort(), DIFF_KEYS), 'an ordinary diff has no security field and the C2 keys', od.json && Object.keys(od.json));
       });
-      await step('the review reads and writes nothing it should not: repeated diffs agree, the tree and the lock stay put, and no Git runs (after the shim control)', async () => {
+      await step('the review reads and writes nothing it should not: repeated diffs agree, the tree and the lock stay put, and no Git runs; the control proves the shim intercepts a real Git call of a valid run', async () => {
         const c = clone1('norw');
-        const shim = makeGitShim(context, dir);
+        const diffShim = makeGitShim(context, dir); // its own records: the zero-Git observation never shares records with the control below
         const before = projectSnapshot(c);
-        const a = kit.diff(c, id, { env: shim.env });
-        const b = kit.diff(c, id, { env: shim.env });
+        const a = kit.diff(c, id, { env: diffShim.env });
+        const b = kit.diff(c, id, { env: diffShim.env });
         check(a.code === 0 && a.stdout === b.stdout && projectSnapshot(c) === before, 'the prepared diff is deterministic and writes nothing', { code: a.code, out: a.stdout.slice(0, 200) });
-        check(shim.records().length === 0, 'the prepared migration diff invoked zero Git commands', shim.records());
-        const control = kit.prepare(clone1('ctl'), 'run-c3-ctl2', { env: shim.env });
-        check(shim.records().length > 0 || control.code !== 0, 'control: the shim intercepts Git when a command that needs it runs', shim.records().length);
+        check(diffShim.records().length === 0, 'the prepared migration diff invoked zero Git commands', diffShim.records());
+        // C12-12 control: a valid initialized run whose lock and run ID match, in a fresh project, so only the failing Git can stop prepare. Without the shim the same
+        // prepare succeeds; with it, prepare must reach Git (root discovery), fail with the fixed message, and leave actual shim records.
+        const controlShim = makeGitShim(context, dir);
+        const ctl = cloneBase(dir, await getPlainBase(context), 'ctl');
+        const ctlId = 'run-c3-ctl2';
+        check(kit.begin(ctl, ctlId) === true, 'control: lock acquire and init succeed, so the run is valid and its lock matches the run ID');
+        const reference = kit.prepare(ctl, ctlId);
+        check(reference.code === 0 && reference.json && reference.json.ok === true, 'control: without the shim the same prepare succeeds, so the shim alone decides the outcome', { code: reference.code, out: reference.stdout.slice(0, 200) });
+        const control = kit.prepare(ctl, ctlId, { env: controlShim.env });
+        const records = controlShim.records().map((l) => { try { return JSON.parse(l); } catch { return null; } });
+        check(records.length >= 1 && records.every((r) => Array.isArray(r) && r.length >= 2), 'control: the shim recorded the Git calls prepare made', controlShim.records());
+        // On Windows the preload records process.argv.slice(1), whose first element is the first Git argument resolved as a script path; only its last segment is the Git argument.
+        check(records.length >= 1 && records[0] && eq([path.basename(String(records[0][0])), ...records[0].slice(1)], ['rev-parse', '--show-toplevel']), 'control: the first intercepted call is the root discovery (rev-parse --show-toplevel)', records[0]);
+        check(control.code === 1 && control.stderr === '' && control.json && control.json.ok === false && control.json.error === 'not inside a git repository', 'control: the failing shim makes prepare stop with exactly "not inside a git repository" (exit 1)', { code: control.code, out: control.stdout.slice(0, 200), err: control.stderr.slice(0, 120) });
+        check(diffShim.records().length === 0, 'the control did not add a record to the zero-Git diff observation', diffShim.records());
       });
       // ------------------------------------------------------------- drift ----
       const driftBoth = (label, mutate, rows, o = {}) => {
@@ -3756,6 +3781,36 @@ async function moduleContract(context) {
         }
       });
     }
+    await step('C12-12 observer controls: already-imported named fs and child_process bindings are observed, and every builtin and binding is restored after a successful and after a throwing callback', async () => {
+      await withScratch(context, 'obs', async (dir) => {
+        const target = path.join(dir, 'observed.txt');
+        fs.writeFileSync(target, 'x');
+        const missingExecutable = path.join(dir, 'no-such-executable');
+        check(observerRestored(), 'before the first window every builtin and named binding is the original');
+        const okRun = observeEffects(() => {
+          boundReadFileSync(target);
+          boundStatSync(target);
+          spawnSync(missingExecutable, [], { windowsHide: true });
+          return 'done';
+        });
+        check(okRun.thrown === null && okRun.value === 'done', 'a successful callback returns its value and records no throw', okRun.thrown && errMsg(okRun.thrown));
+        check(okRun.log.includes('fs.readFileSync') && okRun.log.includes('fs.statSync') && okRun.log.includes('child_process.spawnSync'), 'positive control: the named filesystem and child-process bindings imported before the window are observed', okRun.log);
+        check(observerRestored(), 'after a successful callback every builtin and named binding is the original again');
+        const logged = okRun.log.length;
+        boundReadFileSync(target);
+        spawnSync(missingExecutable, [], { windowsHide: true });
+        check(okRun.log.length === logged, 'after the window nothing more is recorded (the wrappers are gone)');
+        const badRun = observeEffects(() => {
+          boundReadFileSync(target);
+          throw new Error('c12-observer-throw');
+        });
+        check(badRun.thrown instanceof Error && badRun.thrown.message === 'c12-observer-throw' && badRun.log.includes('fs.readFileSync'), 'a throwing callback is reported as thrown and its earlier effects stay recorded', { thrown: badRun.thrown && badRun.thrown.message, log: badRun.log });
+        check(observerRestored(), 'after a throwing callback every builtin and named binding is the original again');
+        const quiet = observeEffects(() => 1 + 1);
+        check(quiet.value === 2 && quiet.thrown === null && quiet.log.length === 0, 'negative control: a callback that touches nothing records nothing', quiet.log);
+        check(observerRestored(), 'after the quiet window every builtin and named binding is the original');
+      });
+    });
     // -------------------------------------------------------------- registry ----
     await step('4.1 the C3 inventory, its registration and the unchanged C11a, C1 and C2 inventories', async () => {
       const rc = await needSibling(failures, 'rc1-cases.mjs');

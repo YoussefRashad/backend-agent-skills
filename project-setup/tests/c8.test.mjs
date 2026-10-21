@@ -269,6 +269,9 @@ const PROJECT_NAME = 'fixture-wallet-api';
 const TEXT = {
   noConnector: 'Read repository content only with the local file tools and `git-safe.mjs`. If a read or command fails or is denied, stop and report it. Never use an MCP server, connector, browser or remote service to read repository files or history, and never send repository content to one.',
   noFallback: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox; the review lane also requires the launcher isolation described in the setup documentation.',
+  // C12-11 (plan docs/plans/2026-10-21-project-setup-v3-rc1-c12.md): the docs-sync agent has its own two paragraphs (no launcher claim; refs are not fetched at all). The reviewer paragraphs above are unchanged.
+  noFallbackDocs: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox.',
+  fourCommandsDocs: 'Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch refs yourself; the user supplies or fetches the ref.',
   trustedCheckout: 'Start the review from a trusted checkout whose instructions, settings, hooks, security policy and tools you trust. For another person\'s branch, keep the trusted base checkout and review the other branch through resolved commit objects. Never check out that branch, create a worktree for it, or start an agent session there as part of the review.',
   fourCommands: 'Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch the reviewed branch yourself; the user supplies or fetches the ref.',
   refsUnavailable: 'If the requested refs are unavailable, stop and ask the user to fetch them from the trusted checkout. Do not fetch or change Git state during the review.',
@@ -799,11 +802,16 @@ async function agentsGroup(context) {
     await step('both rules sections carry the no-connector paragraph, the no-fallback paragraph and the four-command ban', async () => {
       const r = reviewer === null ? null : needSection(check, reviewer, SEC.reviewer4, 'reviewer section 4 (Hard rules)');
       const d = docsync === null ? null : needSection(check, docsync, SEC.docsRules, 'docs-sync Rules');
-      for (const [name, sec] of [['reviewer Hard rules', r], ['docs-sync Rules', d]]) {
+      // C12-11: the reviewer keeps its two paragraphs; docs-sync has its own docs-sync-specific wording (no launcher claim, no reviewed-branch fetch sentence).
+      for (const [name, sec, noFallback, fourCommands] of [['reviewer Hard rules', r, TEXT.noFallback, TEXT.fourCommands], ['docs-sync Rules', d, TEXT.noFallbackDocs, TEXT.fourCommandsDocs]]) {
         if (sec === null) continue;
         para(check, sec, TEXT.noConnector, `${name}: the local-read, stop-on-failure and no-connector paragraph`);
-        para(check, sec, TEXT.noFallback, `${name}: the no-retry, no-sandbox-change and no-fallback paragraph`);
-        para(check, sec, TEXT.fourCommands, `${name}: the four-command checkout ban and the do-not-fetch sentence`);
+        para(check, sec, noFallback, `${name}: the no-retry, no-sandbox-change and no-fallback paragraph`);
+        para(check, sec, fourCommands, `${name}: the four-command checkout ban and the do-not-fetch sentence`);
+      }
+      if (d !== null) {
+        check(!has(d, TEXT.noFallback) && !has(d, TEXT.fourCommands), 'docs-sync Rules: the reviewer-specific no-fallback and reviewed-branch fetch paragraphs are gone');
+        check(!/launcher isolation|review lane/i.test(d), 'docs-sync Rules: no launcher or review-lane claim (no docs-sync launcher exists)');
       }
     });
     await step('docs-sync keeps its documentation-only bullet and states the trusted checked-out branch scope', async () => {
@@ -1194,7 +1202,7 @@ async function migrationGroup(context) {
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
       // C9 (plan 4.3): the whole-inventory expectation moves from 16 to 19 entries (C9 appends 17-19); C8's own six objects are still compared exactly.
-      check(file.evals.length === 20 && eq(file.evals.map((e) => e.id), Array.from({ length: 20 }, (_, i) => i + 1)), 'ids 1 through 20 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 21 && eq(file.evals.map((e) => e.id), Array.from({ length: 21 }, (_, i) => i + 1)), 'ids 1 through 21 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS), 'evaluations 11-16 equal the plan objects exactly', file.evals.slice(10, 16).map((e) => e && e.name));
     });

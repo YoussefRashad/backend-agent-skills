@@ -900,10 +900,13 @@ const worldMissing = (check, w, what) => { check(false, `${what}: the release wo
 // Plan 3.1, 3.2, 3.4 and 5.1: the CLI grammar, the dependency seam, the path rules and the exact streams and exits. Matrices run in process; the only children are the success build of the release world,
 // one usage launch and one import-safety probe.
 const CTL = (n) => String.fromCharCode(n);
+// C12-12: the absolute output is built with literal separators. path.join normalizes the ".." segment away, which silently turned the case into an ordinary
+// path; the literal text keeps the segment, the interior space and the repeated space, and the parser must return exactly this string.
+const ABSOLUTE_OUT = `${path.sep}a b${path.sep}..${path.sep}c  d`;
 const PARSE_VALID = [
   ['tag first', ['--tag', 'c11b-fixture-rc1', '--out', 'rel/out'], { tag: 'c11b-fixture-rc1', out: 'rel/out' }],
   ['out first', ['--out', 'rel/out', '--tag', 'c11b-fixture-rc1'], { tag: 'c11b-fixture-rc1', out: 'rel/out' }],
-  ['an absolute output with spaces is not normalized', ['--tag', 'project-setup-v3.0.0-rc.1', '--out', path.join(path.sep, 'a b', '..', 'c  d')], { tag: 'project-setup-v3.0.0-rc.1', out: path.join(path.sep, 'a b', '..', 'c  d') }],
+  ['an absolute output with spaces and a literal .. segment is not normalized', ['--tag', 'project-setup-v3.0.0-rc.1', '--out', ABSOLUTE_OUT], { tag: 'project-setup-v3.0.0-rc.1', out: ABSOLUTE_OUT }],
   ['a relative parent output is not normalized', ['--tag', 'a', '--out', '../x/./y'], { tag: 'a', out: '../x/./y' }],
   ['the longest tag (128 characters)', ['--tag', `a${'b'.repeat(127)}`, '--out', 'o'], { tag: `a${'b'.repeat(127)}`, out: 'o' }],
   ['a hexadecimal-looking tag is a tag name', ['--tag', 'deadbeef'.repeat(5), '--out', 'o'], { tag: 'deadbeef'.repeat(5), out: 'o' }],
@@ -949,6 +952,9 @@ async function releaseCli(context) {
       });
     });
     await step('plan 3.1: parseReleaseArgs is synchronous and pure and returns the exact supplied strings for every valid form (frozen input is never modified)', async () => {
+      // C12-12: the absolute-output input really contains the literal parent segment, the interior space and the repeated space before the parser sees it.
+      const absoluteRow = PARSE_VALID.find((r) => r[0].startsWith('an absolute output with spaces'));
+      check(absoluteRow !== undefined && absoluteRow[1][3] === ABSOLUTE_OUT && ABSOLUTE_OUT.split(path.sep).includes('..') && ABSOLUTE_OUT.includes('a b') && ABSOLUTE_OUT.includes('c  d') && path.isAbsolute(ABSOLUTE_OUT) && ABSOLUTE_OUT !== path.normalize(ABSOLUTE_OUT), 'the absolute output input keeps the literal .. segment and its spaces (it is not already normalized)', ABSOLUTE_OUT);
       for (const [label, argv, want] of PARSE_VALID) {
         const frozen = deepFreeze([...argv]);
         const r = attempt(() => rel.parseReleaseArgs(frozen));
@@ -2364,7 +2370,8 @@ async function strictGate(context) {
 
 // ================================================ RC1/C11b/documentation ====
 // Plan 2.1, 2.3, 3.6, 3.7 and 5.9: the candidate documentation, byte for byte where the plan gives bytes, by section and after whitespace normalization where it says so, and the files the plan says do not change.
-// The pins of unchanged content are SHA-256 digests of the committed post-C10 bytes (CRLF normalized): a different digest means C11b changed what the plan says it must preserve.
+// The pins are SHA-256 digests (CRLF normalized). installer, notes200, changelogSuffix and every readmeSections entry are the committed post-C10 bytes: a different digest means a change to what the plan says it must preserve.
+// skillWithOldHeading and readmeTopRest cover the files C12 edits on purpose (C12-15) and are updated together with the exact CHANGELOG_ENTRY_LINES and RELEASE_NOTES_TEXT expectations (decision I11b-2).
 const PINS = deepFreeze({
   installer: '9e22d4192aed1c504053e9c499bdaf98450a7bd0a80e44b0aeb4b11b19d5b947',
   notes200: '27711d116ec2ee4ba012b9cdaec198703e154055341cba793472d2ee79886eba',
@@ -2412,13 +2419,13 @@ async function documentation(context) {
       check(suffix.startsWith('## 2.0.0\n') && sha256(suffix) === PINS.changelogSuffix, 'the historical entries from "## 2.0.0" onward are byte-identical to the post-C10 file', { starts: suffix.slice(0, 20), bytes: suffix.length });
       check(cl.split('\n## 3.0.0-rc.1\n').length === 2, 'the candidate entry appears once');
     });
-    await step('plan 3.6: SKILL.md differs from the post-C10 file only by the top-level release heading "# project-setup 3.0.0-rc.1"', async () => {
+    await step('plan 3.6 and C12-15: SKILL.md carries the top-level release heading "# project-setup 3.0.0-rc.1" and every other byte is the pinned text', async () => {
       const skill = text('SKILL.md');
       if (skill === null) return;
       const ls = skill.split('\n');
       check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.1"', ls[5]);
       const restored = [...ls]; restored[5] = '# project-setup v2';
-      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md (C8 workflow, C9 template flow, C10 validator and doctor text) is unchanged', sha256(restored.join('\n')));
+      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits)', sha256(restored.join('\n')));
       check(ls.filter((l) => l === SKILL_HEADING_LINES[0]).length === 1 && !ls.includes('# project-setup v2'), 'the new heading appears once and the old heading is gone');
     });
     await step('plan 3.6 and 5.9: README.md has the exact seven-line opening with a separate security paragraph, the overview after it, the release-builder inventory row after the installer row, the exact Test first paragraph and fence, the retained sections unchanged and the exact "Local candidate release" section last', async () => {
@@ -2433,7 +2440,7 @@ async function documentation(context) {
       const rowAt = topLines.findIndex((l) => l.startsWith('install/release.mjs'));
       check(rowAt > 0 && topLines[rowAt - 1].startsWith('install/install.mjs ') && squash(topLines[rowAt]) === squash(README_INVENTORY_ROW_LINES[0]), 'the release-builder row follows the installer row immediately', { rowAt, prev: rowAt > 0 ? topLines[rowAt - 1] : null, row: topLines[rowAt] });
       const rest = topLines.slice(7).filter((l, i) => !(i + 7 === rowAt));
-      check(sha256(squash(rest.join('\n'))) === PINS.readmeTopRest, 'everything else in the overview and inventory (C8 text and rows) is unchanged', sha256(squash(rest.join('\n'))));
+      check(sha256(squash(rest.join('\n'))) === PINS.readmeTopRest, 'everything else in the overview and inventory is the pinned text (the C8 rows plus the deliberate C12 data/ line correction)', sha256(squash(rest.join('\n'))));
       const secs = readme.split(/^(?=## )/m).filter((s) => s.startsWith('## '));
       const heads = secs.map((s) => s.split('\n')[0]);
       check(eq(heads, [...Object.keys(PINS.readmeSections), '## Local candidate release']), 'the section list is the retained sections in order followed by "## Local candidate release"', heads);
@@ -2460,13 +2467,13 @@ async function documentation(context) {
       check(sec !== null && squash(sec) === squash(lines(LIVE_SECTION_LINES)), 'its text is exactly the plan paragraphs after whitespace normalization', sec && squash(sec).slice(0, 200));
       check(live.includes('### C5 review-diff procedure (host evidence pending)') && ls.includes('## 2. Stop conditions'), 'the C5 and C8 procedures and the stop conditions are retained (their own checks keep their text)');
     });
-    await step('plan 5.9: evals/evals.json holds evaluations 1 to 20 without duplicates and evaluation 20 is exactly the plan object', async () => {
+    await step('plan 5.9 and C12-13: evals/evals.json holds evaluations 1 to 21 without duplicates and evaluation 20 is exactly the plan object', async () => {
       let file = null;
       try { file = JSON.parse(readText(skillPath(context, 'evals/evals.json'))); } catch { file = null; }
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array');
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 20 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 20 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 20, 'IDs 1 through 20 in order without duplicates', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 21 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 21 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 21, 'IDs 1 through 21 in order without duplicates (C12 appends 21)', file.evals.map((e) => e && e.id));
       check(eq(file.evals[19], EVAL_20), 'evaluation 20 equals the plan object exactly (an expectation, not proof that an agent followed it)', file.evals[19]);
     });
     await step('plan 3.6 and 3.7: the working-tree release builder exists with the pinned public surface; nothing in the documentation claims publication or a real tag', async () => {

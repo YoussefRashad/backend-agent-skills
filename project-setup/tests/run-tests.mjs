@@ -996,6 +996,13 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c10context.tmp, { recursive: true });
   const rep10 = await runComponentAssertions('C10', c10context);
   check(rep10.ok === true, 'C10 component assertions pass', { errors: rep10.errors, failed: rep10.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C12 component assertions (the review fixes: the apply policy gate, the CLI entry guards, the hook --config-env rule, the runtime-unit identities, the documentation boundaries, the pins and the registration contracts) run once, after the C10
+  // aggregation, inside the same case. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C12 report is ok. The run is not also invoked from any other baseline case.
+  // (C12 plan C12-13 and decision K12.)
+  const c12context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c12'), env: { ...ENV } };
+  fs.mkdirSync(c12context.tmp, { recursive: true });
+  const rep12 = await runComponentAssertions('C12', c12context);
+  check(rep12.ok === true, 'C12 component assertions pass', { errors: rep12.errors, failed: rep12.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {

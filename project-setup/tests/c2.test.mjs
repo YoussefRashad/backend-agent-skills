@@ -31,7 +31,8 @@
 //     source-body row, and unchanged drafts have source-body rows).
 // C9 (docs/plans/2026-10-19-project-setup-v3-rc1-c9.md 3.7 and 4.3): the only vault target is the root .env.example, so the successful vault operations use it and
 // the fixtures that held create, modify and unchanged vault targets together are split into independent temporary roots under the same assertions.
-import fs from 'node:fs';
+import fs, { readFileSync as boundReadFileSync, statSync as boundStatSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import childProcessModule, { spawnSync } from 'node:child_process';
@@ -4206,6 +4207,8 @@ function observeEffects(fn) {
   const saved = [];
   for (const k of fsMethods) { if (typeof fs[k] === 'function') { const o = fs[k]; saved.push([fs, k, o]); fs[k] = function (...a) { log.push(`fs.${k}`); return o.apply(this, a); }; } }
   for (const k of ['spawnSync', 'execSync', 'execFileSync', 'spawn', 'exec', 'execFile', 'fork']) { const o = spawnSyncHolder[k]; if (typeof o === 'function') { saved.push([spawnSyncHolder, k, o]); spawnSyncHolder[k] = function (...a) { log.push(`child_process.${k}`); return o.apply(this, a); }; } }
+  // C12-12: the named ESM exports of the builtins are snapshots; without this call a module that imported readFileSync or spawnSync by name would never see the wrappers.
+  syncBuiltinESMExports();
   const envDesc = Object.getOwnPropertyDescriptor(process, 'env');
   const realEnv = process.env;
   process.env = new Proxy(realEnv, { get(t, k, r) { if (typeof k === 'string') log.push(`env.${k}`); return Reflect.get(t, k, r); }, has(t, k) { log.push(`env.has.${String(k)}`); return Reflect.has(t, k); }, ownKeys(t) { log.push('env.keys'); return Reflect.ownKeys(t); } });
@@ -4214,11 +4217,20 @@ function observeEffects(fn) {
     process.env = realEnv;
     if (envDesc && envDesc.configurable === false) { /* nothing to restore */ }
     for (const [obj, k, o] of saved) obj[k] = o;
+    syncBuiltinESMExports();
   }
   return { value, thrown, log };
 }
 // The child_process module object (the default import of a builtin is the live module object, so patching it is observable).
 const spawnSyncHolder = childProcessModule;
+// C12-12: the builtin functions as they are before any observation window, to prove that every window restores them (the default objects and the named ESM bindings alike).
+const OBSERVED_ORIGINALS = Object.freeze({ readFileSync: fs.readFileSync, statSync: fs.statSync, spawnSync: childProcessModule.spawnSync, execFileSync: childProcessModule.execFileSync, env: process.env });
+function observerRestored() {
+  return fs.readFileSync === OBSERVED_ORIGINALS.readFileSync && boundReadFileSync === OBSERVED_ORIGINALS.readFileSync
+    && fs.statSync === OBSERVED_ORIGINALS.statSync && boundStatSync === OBSERVED_ORIGINALS.statSync
+    && childProcessModule.spawnSync === OBSERVED_ORIGINALS.spawnSync && spawnSync === OBSERVED_ORIGINALS.spawnSync
+    && childProcessModule.execFileSync === OBSERVED_ORIGINALS.execFileSync && process.env === OBSERVED_ORIGINALS.env;
+}
 
 async function moduleContract(context) {
   return runAssertion(async ({ failures, check, step }) => {
@@ -4268,6 +4280,36 @@ async function moduleContract(context) {
       });
     }
 
+    await step('C12-12 observer controls: already-imported named fs and child_process bindings are observed, and every builtin and binding is restored after a successful and after a throwing callback', async () => {
+      await withScratch(context, 'obs', async (dir) => {
+        const target = path.join(dir, 'observed.txt');
+        fs.writeFileSync(target, 'x');
+        const missingExecutable = path.join(dir, 'no-such-executable');
+        check(observerRestored(), 'before the first window every builtin and named binding is the original');
+        const okRun = observeEffects(() => {
+          boundReadFileSync(target);
+          boundStatSync(target);
+          spawnSync(missingExecutable, [], { windowsHide: true });
+          return 'done';
+        });
+        check(okRun.thrown === null && okRun.value === 'done', 'a successful callback returns its value and records no throw', okRun.thrown && errMsg(okRun.thrown));
+        check(okRun.log.includes('fs.readFileSync') && okRun.log.includes('fs.statSync') && okRun.log.includes('child_process.spawnSync'), 'positive control: the named filesystem and child-process bindings imported before the window are observed', okRun.log);
+        check(observerRestored(), 'after a successful callback every builtin and named binding is the original again');
+        const logged = okRun.log.length;
+        boundReadFileSync(target);
+        spawnSync(missingExecutable, [], { windowsHide: true });
+        check(okRun.log.length === logged, 'after the window nothing more is recorded (the wrappers are gone)');
+        const badRun = observeEffects(() => {
+          boundReadFileSync(target);
+          throw new Error('c12-observer-throw');
+        });
+        check(badRun.thrown instanceof Error && badRun.thrown.message === 'c12-observer-throw' && badRun.log.includes('fs.readFileSync'), 'a throwing callback is reported as thrown and its earlier effects stay recorded', { thrown: badRun.thrown && badRun.thrown.message, log: badRun.log });
+        check(observerRestored(), 'after a throwing callback every builtin and named binding is the original again');
+        const quiet = observeEffects(() => 1 + 1);
+        check(quiet.value === 2 && quiet.thrown === null && quiet.log.length === 0, 'negative control: a callback that touches nothing records nothing', quiet.log);
+        check(observerRestored(), 'after the quiet window every builtin and named binding is the original');
+      });
+    });
     // -------------------------------------------------------------- registry ----
     await step('7.1/7.11 the C2 inventory, registration and the unchanged C1 and C11a inventories', async () => {
       const rc = await needSibling(failures, 'rc1-cases.mjs');
