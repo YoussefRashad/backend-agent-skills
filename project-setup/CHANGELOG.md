@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.0-rc.1
+
+Security and permissions candidate: anchored policy migration, trusted-checkout review,
+raw-Git hooks, managed-allow retirement, script-only template handling and doctor diagnostics.
+Manifest schema 3 requires a paired skill/project upgrade. V2 validation rejects schema 3;
+this is not a retrofitted pre-write guard in every old command.
+Roll back project state with rc.1 tooling before reverting the installed skill.
+Automated acceptance and pending host measurements are described in
+RELEASE-NOTES-3.0.0-rc.1.md. Publication remains a separate authorized action.
+
 ## 2.0.0
 Release of the `2.0.0-rc.13` source, unchanged in function. Only `VERSION` and release documentation changed
 (`RELEASE-NOTES-2.0.0.md`, `README.md` status and limitations, this entry, the version placeholder in

@@ -1,6 +1,8 @@
-# project-setup (v2) — skill source
+# project-setup 3.0.0-rc.1 - skill source
 
-**Release 2.0.0.** See `RELEASE-NOTES-2.0.0.md` for verification evidence, known limitations and backlog.
+**Release candidate 3.0.0-rc.1.** See `RELEASE-NOTES-3.0.0-rc.1.md` for acceptance requirements,
+compatibility and pending host measurements.
+
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
 
@@ -14,6 +16,7 @@ assets/             agent definitions, wrappers, templates, project tools (git-s
 data/               secret-paths.json (single source for every secret control)
 scripts/            zero-dependency Node scripts (JSON output)
 install/install.mjs installer (not copied into installs)
+install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)
 tests/run-tests.mjs regression + success-path suite (not copied into installs)
 evals/              agent-level scenarios (not copied into installs)
 ```
@@ -110,6 +113,14 @@ node tests/run-tests.mjs --keep     # keep fixtures + results.json for inspectio
 
 The suite runs in a temp directory with HOME/USERPROFILE and git config redirected there.
 
+Candidate acceptance requires the complete strict gate below. A focused run or a zero exit
+from diagnostic selection does not replace it. Only R13d may skip for the recorded Windows
+file-symlink privilege reason.
+
+```text
+node tests/accept-rc1.mjs
+```
+
 ## Install (only when you decide to)
 
 ```
@@ -133,3 +144,22 @@ refused unless `--accept-unverified-backup` is passed after a manual inspection.
 
 `tests/fixtures/toml-corpus.json` was generated with Python 3.12 `tomllib`; the suite checks the validator agrees
 case by case (date/time values are deliberately reported as unsupported and fail validation).
+
+## Local candidate release
+
+The release builder reads an existing local tag and writes a ZIP plus RELEASE-NOTES.md into
+a new directory outside project-setup. It does not create tags, publish releases or install
+the skill. Run complete candidate acceptance before a later authorized release action.
+
+S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
+requires or creates project-setup-v3.0.0-rc.1 in the distribution repository.
+
+The installer payload hash, archive SHA256 and backup snapshot digest identify different
+bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
+do not rebuild or replace its archive.
+
+Later local build, after the reviewed tag already exists:
+
+```text
+node install/release.mjs --tag project-setup-v3.0.0-rc.1 --out <unused-directory>
+```
