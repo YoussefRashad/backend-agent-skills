@@ -94,9 +94,9 @@ controls to make the lane start.
 Configuration coverage and zero observed connector calls do not prove host tool absence.
 Record host negative-capability evidence separately from configuration checks.
 
-The planned doctor audits these prerequisites without starting a model session or sandbox
-probe. Until the doctor component lands, this paragraph describes its required scope, not an
-available command. An unresolved prerequisite means the lane is not ready.
+The doctor is available as scripts/doctor.mjs. It audits these prerequisites without
+starting a model session or sandbox probe. See references/security.md, Doctor diagnostics,
+for its command and result scope. An unresolved prerequisite means the lane is not ready.
 
 The canonical agents also say this in their own words: instructions are guidance, not a sandbox. See
 `references/codex.md` ("Review-lane launcher prerequisite") for the Codex launcher wording.

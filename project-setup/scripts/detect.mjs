@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   parseArgs, repoRoot, git, run, toPosix, loadSecretSpec, isSecretPath, matchesAny, canonicalPath,
-  readJsonFile, skillVersion, IS_WINDOWS, ok, fail, loadEffectivePolicy, SKILL_DIR, normalizedHash,
+  readJsonFile, skillVersion, IS_WINDOWS, ok, fail, loadEffectivePolicy, SKILL_DIR, normalizedHash, validateRunId,
 } from './lib.mjs';
 import { parseToml } from './toml.mjs';
 import { readManifest } from './ownership.mjs';
@@ -186,16 +186,24 @@ function securityPolicyRows() {
   }
 }
 const lockHeld = exists('.ai/.setup.lock');
-const runs = listDir('.ai/.run');
+// C10 plan 5.3: the review-artifact directory and every alias of it are not setup runs. Only names the shared run-id
+// check reserves are dropped (their contents are never read); every other name, an invalid one included, keeps its order.
+const isReservedRun = (name) => {
+  try { validateRunId(name); return false; } catch (e) {
+    return e instanceof Error && Object.prototype.hasOwnProperty.call(e, 'code') && e.code === 'RUN_ID_RESERVED';
+  }
+};
+const runs = listDir('.ai/.run').filter((name) => !isReservedRun(name));
 const v1Docs = ['.ai/context', '.ai/decisions'].filter(exists);
 const v1ProvenanceInAi = visible
   .filter((p) => p.startsWith('.ai/') && p.endsWith('.md'))
   .some((p) => V1_PROVENANCE.test(safeRead(p) || ''));
 
 // ---- secrets: NAMES ONLY -----------------------------------------------------
-const ENV_TEMPLATE = /(^|\/)\.env\.(example|sample|template)$/;
-const trackedSecretPaths = tracked.filter((p) => isProtected(p) && !ENV_TEMPLATE.test(p));
-const envTemplates = visible.filter((p) => ENV_TEMPLATE.test(p));
+// C10 plan 5.1: exactly the root template, by name (C9's root-only exception); every other template-like name stays a
+// protected path. No template body is read here.
+const envTemplates = visible.filter((p) => p === '.env.example');
+const trackedSecretPaths = tracked.filter((p) => isProtected(p) && p !== '.env.example');
 const presentSecretPaths = [...new Set([...untracked, ...ignored])].filter((p) => isProtected(p) && !p.startsWith('.ai/.run/'));
 const riskGlobs = (p) => (p && p.contentRisk && Array.isArray(p.contentRisk.globs) ? p.contentRisk.globs.filter((g) => typeof g === 'string') : []);
 const contentRiskGlobs = policyFailure ? [] : [...new Set([...riskGlobs(spec), ...riskGlobs(projectPolicy)])];
@@ -398,8 +406,8 @@ if (v1Docs.length && mode !== 'migrate-v1' && mode !== 'update' && mode !== 'inv
 const warnings = [];
 if (mode === 'invalid') warnings.push('invalid .ai/manifest.json; repair or restore it before setup');
 if (claude.claudeignore) warnings.push('.claudeignore exists but Claude Code ignores it; its entries must become Read deny rules');
-if (trackedSecretPaths.length) warnings.push('secret-pattern files (not env templates) are TRACKED in git; stop and escalate before generating docs');
-if (envTemplates.length) warnings.push('env templates present; inspect them only via env-keys.mjs (names + value classification, never values)');
+if (trackedSecretPaths.length) warnings.push('secret-pattern files other than the root .env.example are TRACKED in git; ' + 'stop and escalate before generating docs');
+if (envTemplates.length) warnings.push('root environment template is present; inspect it only via ' + 'node <SKILL_DIR>/scripts/env-keys.mjs keys --template auto; ' + 'agents must not open it directly');
 if (lockHeld) warnings.push('.ai/.setup.lock exists; another run may be in progress or crashed (see lock.mjs status)');
 if (porcelain.length) warnings.push('working tree has uncommitted changes; only files touched by the plan must be clean');
 const cuf = codexUserConfigFlags();

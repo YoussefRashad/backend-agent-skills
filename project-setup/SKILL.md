@@ -83,7 +83,8 @@ All scripts are zero-dependency Node (>=18) and print JSON. Run them from the re
 | `blocks.mjs` | `check`/`hashes`/`drift`/`upsert` managed blocks (upsert writes drafts only) |
 | `lock.mjs` | One run per checkout; breaking a lock is a user decision |
 | `apply.mjs` | `init`/`diff`/`prepare`/`commit`/`status`/`rollback`/`cleanup`: the only writer; `diff` reviews drafts in-process without Git |
-| `validate.mjs` | Static checks: JSON shape, TOML syntax, sizes, imports, references, markers, drift, secret-shaped content (exit 1 on any failure) |
+| `validate.mjs` | Static setup checks and installed hook self-test; exit 1 on any failure |
+| `doctor.mjs` | Audit lane configuration and local diagnostics without a model session or sandbox probe |
 | `canary.mjs` | Runtime measurement of secret-read protection per tool layer (no canaries = INCONCLUSIVE, exit 3) |
 | `secret-scan.mjs` | Optional local gitleaks scan, redacted; findings as file:line:rule only |
 | `assets/tools/git-safe.mjs` | Installed into projects with six companion runtime files: bounded diff/log/show/cat/ls/grep and `review-diff` with secret excludes, no shell |
@@ -324,6 +325,16 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
    the run wrote them; they and their backups were left alone. Tell the user; never clean up without
    `--confirm-manual-resolution` from them.
 2. `validate.mjs`. Fix failures through a new draft/prepare/commit cycle, or record them in `TODO.md`.
+
+   Validation uses the installed policy baseline and shared ownership schemas. Schema 2 reports needs update. The
+   installed hook self-test proves direct script behavior only; Claude hook loading remains not verified.
+
+   Run validation in a trusted checkout because the installed hook self-test executes project code.
+
+   After migration, a schema-2 policy content change in a project with catalog tools, including a projectPatterns
+   addition, still goes through migrate-security-paths.mjs and security-decisions.json. Validation reports project
+   patterns and stale snippets; it does not bypass that reviewed migration workflow.
+
 3. `render-permissions.mjs codex-snippet --project .` prints the Codex snippet as raw TOML on stdout. Present it
    for review; never write user-level configuration. A recorded snippet hash is not evidence that the user
    installed it.
@@ -332,6 +343,9 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 
 Follow `references/security.md`: load verification and the canary protocol for the tool you are running in.
 You cannot verify the other tool from this session; list the exact steps for the user and mark it *not verified*.
+
+Run doctor.mjs only with the worker's effective lane options. Its configuration and diagnostic results do not
+verify connector-tool absence or sandbox enforcement.
 
 ### Phase 5 — Report and release
 

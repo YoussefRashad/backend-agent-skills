@@ -12,7 +12,14 @@ Use this structure. Keep it factual; every claim maps to something observed in t
 - conflicts resolved, allow-listed commands and why, items deliberately skipped
 
 ### Validation (validate.mjs)
-pass N · warn N · fail N  — list every warn/fail
+pass N / warn N / fail N; list every warn/fail and needs-update info.
+Static setup results: <summary>.
+Installed hook self-test: <passed / failed / not-run>.
+Claude hook loading: <verified with scoped evidence / not verified>.
+
+### Doctor diagnostics
+Configuration and diagnostics: <ready / not ready / not run>.
+Connector-tool absence and sandbox enforcement: <separate host evidence / not verified>.
 
 ### Capability report
 <table from references/security.md §5; "not verified" where it was not observed>

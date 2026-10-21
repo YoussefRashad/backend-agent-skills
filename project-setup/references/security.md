@@ -221,3 +221,32 @@ One table per tool, filled from observations only:
 
 Any cell that is not *pass* or *verified* also goes to `TODO.md` → Unverified Controls, with the exact steps to
 verify it.
+
+Keep static validation, direct installed-hook results, doctor diagnostics and live host evidence
+separate. Neither a passing self-test nor a ready doctor verifies Claude hook loading, connector-tool
+absence or sandbox enforcement.
+
+## 6. Doctor diagnostics
+
+The doctor runs only codex mcp list --json with validated lane options, reads the newest permitted
+sandbox log and inventories Windows processes. It never starts a model session or sandbox probe,
+reads authentication or sandbox-secret files, kills processes or changes sandbox mode.
+
+```text
+node <SKILL_DIR>/scripts/doctor.mjs --disable apps --disable plugins -c mcp_servers.node_repl.enabled=false -p review -C <project-root>
+```
+
+Supply only configuration-defined server names. The external launcher owns enumeration and must use
+the same directory, profile, configuration and disable options for the worker. An enabled server,
+failed command, invalid output or unresolved prerequisite means not ready.
+
+Exit 0 means the supplied configuration and available diagnostics passed these checks. It does not
+establish host negative capability. An absent or unreadable log and an unavailable Windows process
+inventory remain unknown and produce exit 1.
+
+A clean log means no recognized setup-refresh error was found in the newest readable log. It is
+historical diagnostic evidence, not a successful sandbox measurement.
+
+The report includes the selected log's modification time. An error in that log remains a failure
+until newer evidence is available. Resolve the underlying problem before retrying; the doctor does
+not delete logs or run a probe to create new evidence.
