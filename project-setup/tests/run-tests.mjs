@@ -15,7 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { selectSuiteCases, runComponentAssertions } from './rc1-cases.mjs';
+import { selectSuiteCases, runComponentAssertions as runComponentAssertionsUncached, registerRc1Cases } from './rc1-cases.mjs';
+import { createComponentMemo } from './helpers/rc1-integration.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -94,6 +95,20 @@ const test = (id, name, fn) => {
   if (tests.some((t) => t.id === id)) throw Object.assign(new Error(`SUITE_DUPLICATE_ID: ${id}`), { code: 'SUITE_DUPLICATE_ID' });
   tests.push({ id, name, fn });
 };
+
+// C11b: one execution per component for the whole suite. The baseline cases keep their call sites and context
+// literals through this destructured name; the complete rc.1 cases request the same cached promises through
+// getComponent (plan 4.1). Each component report is also persisted as <component tmp>/integration-results.json.
+const { runComponentAssertions, getComponent } = createComponentMemo({
+  run: runComponentAssertionsUncached,
+  fs,
+  tmpRoot: TMP,
+  baseContext: {
+    repository: path.resolve(SKILL, '..'),
+    skillRoot: SKILL,
+    env: { ...ENV },
+  },
+});
 
 // ============================================================ regressions ====
 test('R01', 'git-safe blocks object forms that bypass pathspec excludes', async () => {
@@ -1313,6 +1328,14 @@ test('S07', 'installer happy path: install, unchanged rerun, upgrade, verify, ro
   fs.mkdirSync(context.tmp);
   const rep = await runComponentAssertions('C11a', context);
   check(rep.ok === true, 'C11a component assertions pass', { errors: rep.errors, failed: rep.results.filter((r) => r.status !== 'PASS').map((r) => ({ id: r.id, failures: r.failures.slice(0, 5) })) });
+  const c11bcontext = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c11b'), env: { ...ENV } };
+  fs.mkdirSync(c11bcontext.tmp);
+  const rep11b = await runComponentAssertions('C11b', c11bcontext);
+  check(rep11b.ok === true, 'C11b component assertions pass', {
+    errors: rep11b.errors,
+    failed: rep11b.results.filter((r) => r.status !== 'PASS')
+      .map((r) => ({ id: r.id, failures: r.failures.slice(0, 5) })),
+  });
 });
 
 test('S08', 'canary setup/probe/verify measure readability', () => {
@@ -1333,6 +1356,8 @@ test('S09', 'rejects writes outside documentation scope and through secret draft
   put(path.join(r, 'drafts', '.env.example'), 'X=\n'); check(prepare(d).code === 3, 'draft to env template rejected (vault only)');
 });
 
+registerRc1Cases(test, { getComponent });
+
 // ================================================================ runner ====
 // Selection happens before any case runs: duplicates, malformed cases and an empty selection exit 1 at once.
 let selected;
@@ -1343,7 +1368,21 @@ try { selected = selectSuiteCases(tests, { only: cli.only, onlyId: cli.onlyId })
 }
 for (const t of selected) {
   current = { id: t.id, name: t.name, failures: [], skipped: null };
-  try { await t.fn(); } catch (e) { current.failures.push(`threw: ${e.stack || e}`); }
+  try {
+    // A callback may return { failures, skipped } (the complete rc.1 cases do); a void callback keeps its behavior.
+    const outcome = await t.fn();
+    if (outcome !== undefined) {
+      const valid = outcome !== null && typeof outcome === 'object' && !Array.isArray(outcome)
+        && Object.keys(outcome).sort().join() === 'failures,skipped'
+        && Array.isArray(outcome.failures) && outcome.failures.every((f) => typeof f === 'string')
+        && (outcome.skipped === null || (typeof outcome.skipped === 'string' && outcome.skipped !== ''));
+      if (!valid) current.failures.push(`RC1_COMPOSITION: invalid case outcome ${t.id}`);
+      else {
+        current.failures.push(...outcome.failures);
+        if (outcome.skipped !== null) current.skipped = outcome.skipped;
+      }
+    }
+  } catch (e) { current.failures.push(`threw: ${e.stack || e}`); }
   if (current.failures.length) current.skipped = null; // failures take precedence over a skip
   results.push(current);
   const tag = current.failures.length ? 'FAIL' : current.skipped ? 'SKIP' : 'PASS';

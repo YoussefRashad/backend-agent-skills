@@ -2239,10 +2239,10 @@ async function instructionsGroup(context) {
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 19 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 19 }, (_, i) => i + 1)), 'ids 1 through 19 in order', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 20 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 20 }, (_, i) => i + 1)), 'ids 1 through 20 in order (C11b appends 20)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS_11_16), 'C8 evaluations 11-16 are retained exactly', file.evals.slice(10, 16).map((e) => e && e.name));
-      check(eq(file.evals.slice(16), EVALS_17_19), 'evaluations 17-19 equal the plan objects exactly', file.evals.slice(16).map((e) => e && e.name));
+      check(eq(file.evals.slice(16, 19), EVALS_17_19), 'evaluations 17-19 equal the plan objects exactly', file.evals.slice(16, 19).map((e) => e && e.name));
     });
   });
 }
@@ -2526,7 +2526,12 @@ async function moduleContractGroup(context) {
       check(eq(Object.keys(rc.COMPONENT_ASSERTIONS).slice(0, order.length), order) && eq(Object.keys(rc.COMPONENT_IMPLEMENTATIONS).slice(0, order.length), order), 'the registry holds C11a and C1-C9 in order (C7 and C8 registrations survive; later components may follow)', Object.keys(rc.COMPONENT_ASSERTIONS));
       const calls = [];
       const ret = rc.registerRc1Cases((...a) => calls.push(a), { repository: context.repository });
-      check(calls.length === 0 && (ret === undefined || (ret && typeof ret.then === 'function')), 'registerRc1Cases still registers no complete numbered case', calls.length);
+      check(calls.length === 40 && eq(calls.map((c) => c[0]), [...rc.RC1_CASE_IDS]) && calls.every((c) => typeof c[2] === 'function') && ret === undefined && !calls.some((c) => c[0].includes('/C9/')), 'registerRc1Cases registers exactly the 40 ordered RC1_CASE_IDS with function callbacks, returns undefined and registers no /C9/ ID (plan C11b 4.4)', calls.length);
+      {
+        const executed = []; const seen = []; const scratch = () => { try { return fs.readdirSync(context.tmp).sort().join('|'); } catch { return ''; } }; const before = scratch();
+        const again = rc.registerRc1Cases((...a) => seen.push(a), { repository: context.repository, getComponent: (name) => { executed.push(name); return Promise.resolve(null); } });
+        check(executed.length === 0 && seen.length === 40 && again === undefined && scratch() === before, 'registration performs no execution and no fixture work: no component is requested and the scratch directory is unchanged', { executed, registered: seen.length });
+      }
       check(!rc.REQUIRED_CASE_IDS.some((x) => x.includes('/C9/')), 'no complete-case inventory names a C9 sub-assertion');
       const runner = readText(new URL('./run-tests.mjs', import.meta.url));
       const at8 = runner === null ? -1 : runner.indexOf("runComponentAssertions('C8'");

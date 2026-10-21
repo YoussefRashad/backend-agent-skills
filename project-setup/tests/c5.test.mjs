@@ -2574,7 +2574,12 @@ async function argumentsGroup(context) {
       check(Object.isFrozen(C5_IMPLEMENTATIONS) && eq(C5_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C5_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C5_IMPLEMENTATIONS is a frozen array of the eighteen IDs with callable run functions');
       const calls = [];
       const ret = rc.registerRc1Cases((...a) => calls.push(a), { repository: context.repository });
-      check(calls.length === 0 && (ret === undefined || (ret && typeof ret.then === 'function')), 'registerRc1Cases still registers no complete numbered case', calls.length);
+      check(calls.length === 40 && eq(calls.map((c) => c[0]), [...rc.RC1_CASE_IDS]) && calls.every((c) => typeof c[2] === 'function') && ret === undefined && !calls.some((c) => c[0].includes('/C5/')), 'registerRc1Cases registers exactly the 40 ordered RC1_CASE_IDS with function callbacks, returns undefined and registers no /C5/ ID (plan C11b 4.4)', calls.length);
+      {
+        const executed = []; const seen = []; const scratch = () => { try { return fs.readdirSync(context.tmp).sort().join('|'); } catch { return ''; } }; const before = scratch();
+        const again = rc.registerRc1Cases((...a) => seen.push(a), { repository: context.repository, getComponent: (name) => { executed.push(name); return Promise.resolve(null); } });
+        check(executed.length === 0 && seen.length === 40 && again === undefined && scratch() === before, 'registration performs no execution and no fixture work: no component is requested and the scratch directory is unchanged', { executed, registered: seen.length });
+      }
       check(!rc.REQUIRED_CASE_IDS.some((x) => x.includes('/C5/')) && rc.BASELINE_CASE_IDS.length === 60 && rc.RC1_CASE_IDS.length === 40, 'the complete-case inventories are untouched', { baseline: rc.BASELINE_CASE_IDS.length, rc1: rc.RC1_CASE_IDS.length });
     });
     await step('the grammar table of the fixture: accepted rows give the exact result, refused rows the exact error and no filesystem or Git work; options in any order; duplicates; value tokens; literal paths', async () => {

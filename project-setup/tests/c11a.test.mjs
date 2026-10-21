@@ -2067,7 +2067,54 @@ async function componentRecords(context) {
       check(impls.every((i) => typeof i.run === 'function' && C11A_IMPLEMENTATIONS.some((m) => m.id === i.id && (m.run === i.run || String(m.run) === String(i.run)))), 'the implementations are the tests-lane C11A_IMPLEMENTATIONS (assertion bodies are not rewritten)');
       check(eq(C11A_IMPLEMENTATIONS.map((i) => i.id), EXPECTED.map((e) => e.id)) && C11A_IMPLEMENTATIONS.every((i) => typeof i.run === 'function'), 'C11A_IMPLEMENTATIONS holds the eight IDs of plan 3.1');
       const calls = []; const r = rc.registerRc1Cases((...a) => calls.push(a), context);
-      check(calls.length === 0 && (r === undefined || (r && typeof r.then === 'function')), 'registerRc1Cases registers no complete rc.1 case at C11a landing (component assertions never masquerade as numbered cases)', calls.length);
+      const C11B_CASES = [
+        ['R41', 'committed file reads enforce policy'],
+        ['R42', 'tree listing and grep enforce policy'],
+        ['R43', 'historical secret paths remain protected'],
+        ['R44', 'anchors agree between matching and controls'],
+        ['R45', 'policy grammar and schemas are strict'],
+        ['R46', 'validation identifies unanchored user denies'],
+        ['R47', 'project policy reaches controls and Git'],
+        ['R48', 'project pattern moves require approval'],
+        ['R49', 'validation compares recorded managed policy'],
+        ['R50', 'raw Git parsing preserves the frozen boundary'],
+        ['R51', 'hook process behavior follows the exact contract'],
+        ['R52', 'deny and hook ownership preserve user settings'],
+        ['R53', 'allow discovery and validation agree'],
+        ['R54', 'new managed execution permissions are refused'],
+        ['R65', 'local review preserves Git state'],
+        ['R66', 'copied content and hard link limits are documented'],
+        ['R67', 'emitted template commands avoid environment filenames'],
+        ['R68', 'automatic template resolution has no alternate fallback'],
+        ['R72', 'installed hook self-test reports exact outcomes'],
+        ['R73', 'validation requires installed hook evidence'],
+        ['R74', 'the shared policy corpus reaches every consumer'],
+        ['R75', 'structural checks preserve exact Git names'],
+        ['R76', 'Git and review arguments failures and limits are bounded'],
+        ['R77', 'installed v2 customizations survive reviewed migration'],
+        ['R78', 'versioned migration uses compatible reviewed readers'],
+        ['R79', 'ownership schemas and runtime validation agree'],
+        ['R80', 'migration binds one snapshot and complete runtime unit'],
+        ['R81', 'installed baseline age is distinct from managed drift'],
+        ['R82', 'snippet state is recorded without user config writes'],
+        ['R84', 'hook argument rules preserve orchestrator commands'],
+        ['R85', 'managed allow retirement preserves retained denies'],
+        ['R86', 'reconciliation preserves approvals omissions and rollback'],
+        ['R90', 'review identity and self review instructions agree'],
+        ['R91', 'review paths require real junction containment'],
+        ['R92', 'reserved review artifacts survive setup lifecycle'],
+        ['R93', 'template handling preserves values and permission boundaries'],
+        ['R97', 'environment variants stay protected outside the script exception'],
+        ['R100', 'review output limits retain the remaining scope'],
+        ['A5-templates', 'agent instructions retain the trusted execution boundary'],
+        ['N8-doctor', 'synthetic doctor checks preserve evidence boundaries'],
+      ];
+      check(calls.length === 40 && eq(calls.map((c) => [c[0], c[1]]), C11B_CASES) && eq(calls.map((c) => c[0]), [...rc.RC1_CASE_IDS]) && calls.every((c) => typeof c[2] === 'function') && r === undefined && !calls.some((c) => BASELINE_IDS.includes(c[0])), 'registerRc1Cases registers exactly the 40 ordered complete cases with their exact names and function callbacks, returns undefined and registers no baseline ID again (plan C11b 4.4)', calls.length);
+      {
+        const executed = []; const seen = []; const scratch = () => { try { return fs.readdirSync(context.tmp).sort().join('|'); } catch { return ''; } }; const before = scratch();
+        const again = rc.registerRc1Cases((...a) => seen.push(a), { repository: context.repository, getComponent: (name) => { executed.push(name); return Promise.resolve(null); } });
+        check(executed.length === 0 && seen.length === 40 && again === undefined && scratch() === before, 'registration performs no execution and no fixture work: no component is requested and the scratch directory is unchanged', { executed, registered: seen.length });
+      }
     });
     await step('4.7 the 60 baseline cases stay registered in run-tests.mjs (the suite itself is not run here)', async () => {
       // No infrastructure test launches the complete baseline suite (plan 4). The full 59/0/1 (or 60/0/0) run is the

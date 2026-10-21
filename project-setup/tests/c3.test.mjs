@@ -3773,7 +3773,12 @@ async function moduleContract(context) {
       }
       const calls = [];
       const ret = rc.registerRc1Cases((...a) => calls.push(a), context);
-      check(calls.length === 0 && (ret === undefined || (ret && typeof ret.then === 'function')), 'registerRc1Cases registers no complete numbered rc.1 case (C11b composes them)', calls.length);
+      check(calls.length === 40 && eq(calls.map((c) => c[0]), [...rc.RC1_CASE_IDS]) && calls.every((c) => typeof c[2] === 'function') && ret === undefined && !calls.some((c) => c[0].includes('/C3/')), 'registerRc1Cases registers exactly the 40 ordered RC1_CASE_IDS with function callbacks, returns undefined and registers no /C3/ ID (plan C11b 4.4)', calls.length);
+      {
+        const executed = []; const seen = []; const scratch = () => { try { return fs.readdirSync(context.tmp).sort().join('|'); } catch { return ''; } }; const before = scratch();
+        const again = rc.registerRc1Cases((...a) => seen.push(a), { repository: context.repository, getComponent: (name) => { executed.push(name); return Promise.resolve(null); } });
+        check(executed.length === 0 && seen.length === 40 && again === undefined && scratch() === before, 'registration performs no execution and no fixture work: no component is requested and the scratch directory is unchanged', { executed, registered: seen.length });
+      }
       check(rc.BASELINE_CASE_IDS.length === 60 && rc.RC1_CASE_IDS.length === 40 && !rc.REQUIRED_CASE_IDS.some((x) => x.includes('/C3/')), 'RC1_CASE_IDS and the baseline case IDs are untouched', { baseline: rc.BASELINE_CASE_IDS.length, rc1: rc.RC1_CASE_IDS.length });
     });
     await step('4.1/6 the runner seam with the C3 inventory: eighteen successful outcomes print the exact plan 6 records; a missing group, a failure and a forbidden skip fail as before', async () => {

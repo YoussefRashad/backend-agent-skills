@@ -17,6 +17,8 @@ import { C7_IMPLEMENTATIONS } from './c7.test.mjs';
 import { C8_IMPLEMENTATIONS } from './c8.test.mjs';
 import { C9_IMPLEMENTATIONS } from './c9.test.mjs';
 import { C10_IMPLEMENTATIONS } from './c10.test.mjs';
+import { C11B_IMPLEMENTATIONS } from './c11b.test.mjs';
+import { RC1_CASE_DESCRIPTORS, CASE_REQUIREMENTS, composeCaseOutcome } from './helpers/rc1-integration.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -232,6 +234,19 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'V2/C10/run-inventory', name: 'discovery excludes reserved review-artifact directories' },
     { id: 'V2/C10/contracts', name: 'C10 exports documentation and evidence boundaries are exact' },
   ],
+  // C11b plan (docs/plans/2026-10-20-project-setup-v3-rc1-c11b.md) section 5, in its exact order.
+  C11b: [
+    { id: 'S07/C11b/release-cli', name: 'release arguments streams and errors are exact' },
+    { id: 'S07/C11b/identity', name: 'release identity comes from the named local tag' },
+    { id: 'S07/C11b/archive', name: 'commit archives are reproducible and complete' },
+    { id: 'S07/C11b/notes', name: 'publication notes bind identity without self reference' },
+    { id: 'S07/C11b/immutability', name: 'release generation preserves source and Git state' },
+    { id: 'S07/C11b/installed-payload', name: 'both installed copies contain the complete candidate payload' },
+    { id: 'S07/C11b/v2-compatibility', name: 'v2 validation rejects schema three without a broader guard claim' },
+    { id: 'RC1/C11b/composition', name: 'complete records require every component assertion' },
+    { id: 'RC1/C11b/strict-gate', name: 'candidate acceptance rejects incomplete or contradictory evidence' },
+    { id: 'RC1/C11b/documentation', name: 'release documentation preserves frozen contracts and pending evidence' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -246,6 +261,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C8: Object.freeze([...C8_IMPLEMENTATIONS]),
   C9: Object.freeze([...C9_IMPLEMENTATIONS]),
   C10: Object.freeze([...C10_IMPLEMENTATIONS]),
+  C11b: Object.freeze([...C11B_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
@@ -359,10 +375,27 @@ export async function runComponentAssertions(component, context, { registry } = 
 }
 
 /**
- * Registers complete rc.1 cases with the baseline runner: register(id, name, fn).
- * At C11a landing there are none; C11b composes them from the component assertions.
+ * Registers the 40 complete rc.1 cases with the baseline runner, register(id, name, fn), in RC1_CASE_IDS order
+ * (C11b plan 4.1). Registration is synchronous, returns undefined and does no work: it reads nothing from the
+ * context, so the partial contexts used by the component tests are accepted. Each callback requests its required
+ * components through context.getComponent in plan order and composes the case from their reports; a missing or
+ * rejecting provider is a composition failure for the first affected component. There is no fallback runner and no
+ * second cache here: the provider is the baseline runner's memo.
  */
 export function registerRc1Cases(register, context) {
-  void register;
-  void context;
+  for (const { id, name } of RC1_CASE_DESCRIPTORS) {
+    register(id, name, async () => {
+      const reports = new Map();
+      for (const { component } of CASE_REQUIREMENTS[id]) {
+        try {
+          if (context === null || typeof context !== 'object' || typeof context.getComponent !== 'function') throw new TypeError('component provider is unavailable');
+          reports.set(component, await context.getComponent(component));
+        } catch (e) {
+          const evidence = e !== null && typeof e === 'object' && e.code === 'RC1_EVIDENCE_WRITE';
+          return { failures: [`RC1_COMPOSITION: ${evidence ? 'evidence write failed' : 'component execution failed'} ${component}`], skipped: null };
+        }
+      }
+      return composeCaseOutcome(id, reports, COMPONENT_ASSERTIONS);
+    });
+  }
 }

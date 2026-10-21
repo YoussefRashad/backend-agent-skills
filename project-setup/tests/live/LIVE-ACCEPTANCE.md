@@ -139,3 +139,15 @@ Canary matrix (L15/L16):
 | subprocess | | | |
 | late file | | | |
 ```
+
+## Candidate 3.0.0-rc.1 evidence
+
+Record the actual accept-rc1 command, date, platform, Node and Git versions, totals, RESULTS
+path and EVIDENCE path. Required totals are not a substitute for retained execution evidence.
+
+TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling;
+A3 trusted-checkout live review; A5 host negative capability.
+Synthetic doctor fixtures, direct Node hook tests and static instructions are not host proof.
+Do not mark a pending host measurement PASS from automated candidate acceptance.
+
+Candidate acceptance creates no real release tag and performs no publication.
