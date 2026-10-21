@@ -3,8 +3,8 @@
 Decisions taken during the C10 tests and implementation review. The frozen plan
 `docs/plans/2026-10-20-project-setup-v3-rc1-c10.md` is not edited; where an item below and the plan
 differ, the item wins. Items marked "overnight" were taken by the orchestrator under the
-maintainer's delegation for plan-conformance fixes and low-risk choices, and are open to the
-maintainer's review.
+maintainer's delegation for plan-conformance fixes and low-risk choices; the maintainer approved
+all of them on 2026-10-21.
 
 ## Tests lane: I10-1
 
@@ -42,10 +42,10 @@ all were fixed in `scripts/validate.mjs` (overnight). The frozen tests stay unch
   catalog runtime-unit rows are emitted, mirroring the installed-policy-failure rule in section 4.9
   (overnight; review round 2 allowed it).
 - I10-5 (C10-R4, C10-R5, output contract). R53 now follows C10-P3-2: after an installed-policy
-  failure, or with no shipped baseline, the protected `allow-input` row wins over the unsafe-settings
-  row; with a valid policy, unsafe still wins over protected. This supersedes implementer judgment
-  call b. `checkSecurityPolicy` from `schemas.mjs` now validates the installed policy, as section
-  4.4 names it, with the emitted rows unchanged.
+  failure, or with no shipped baseline, the protected `allow-input` row wins over the
+  unsafe-settings row; with a valid policy, unsafe still wins over protected. This supersedes
+  implementer judgment call b. `checkSecurityPolicy` from `schemas.mjs` now validates the installed
+  policy, as section 4.4 names it, with the emitted rows unchanged.
 
 The pre-existing `secret-shaped-content` pass row counts candidate files, so it also counts files
 skipped unread. Section 4.3 keeps existing output unchanged, and review round 2 found it acceptable
@@ -75,3 +75,17 @@ names with a null executable path, and a missing `ExecutablePath`; no enumeratio
 suppression for protected instruction files and `.gitignore`; invalid argv combined with invalid
 dependencies; and the documentation-placement and no-top-level-await checks, which are weaker than
 their contracts although the implementation satisfies them.
+
+## Post-commit security review (automated, 2026-10-21): I10-6
+
+- I10-6 (residuals, maintainer decision). An automated security review of the pushed C10 change
+  raised two MEDIUM items in `scripts/validate.mjs`. First, the installed
+  `.ai/tools/hooks-selftest.mjs` runs with the caller's environment and without a hash check.
+  Section 4.8 pins that call, and section 8.2 records that the installed hook executes trusted
+  project code and that catalog presence does not authenticate runtime bytes. The same hooks
+  already run automatically under Claude and Codex. Second, content bodies outside the fixed
+  controls, `.ai/tools/` and the never-read set are read without link refusal. Section 4.2 rules
+  out a general guarded-read framework and section 8.2 adds no general isolation layer; the rows
+  such a read can produce carry a file, line and rule name, never content. The maintainer kept
+  both as accepted residuals for rc.1. A later change may add a hash check against the manifest
+  before the self-test, a minimal environment, and link refusal on every content read.
