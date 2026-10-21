@@ -37,9 +37,11 @@ so rather than quietly hand-rolling substitutes.
 
 ## `project-setup` — related, but optional
 
-`project-setup` is a separate general-purpose skill in this repo. It is optional and only
-useful on existing projects, where it reverse-engineers documentation from code that
-already exists. Nothing here depends on it.
+`project-setup` is a separate general-purpose skill in this repo. It is optional and nothing
+here depends on it. It sets up shared Claude Code + Codex agent scaffolding (`AGENTS.md` as
+the shared source of truth, reviewer and docs-sync agents) and, where source code exists,
+reverse-engineers documentation from it. It also handles new and empty repos and v1, v2 and
+hand-written setups.
 
 ---
 
