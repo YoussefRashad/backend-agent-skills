@@ -1323,7 +1323,21 @@ async function manifestSchema(context) {
             const i = r2.json.results.findIndex((x) => eq(x, pass));
             check(i >= 0 && eq(r2.json.results[i + 1], info), 'schema 2: the info record directly follows the pass record', r2.json.results.slice(Math.max(0, i), i + 2));
             check(sameSummary(r2.json), 'schema 2: info records do not count in pass/warn/fail totals', r2.json.summary);
-            check(r2.json.results.filter((x) => x.level === 'info').length === 1, 'schema 2: exactly one info record');
+            // C10 plan 6.4 item 1: the C2-era assertion that the whole report holds exactly one info row is replaced. Exactly one manifest-version info row remains (directly after the pass, above); the other info rows are
+            // now the C10 integration and are asserted independently, in report order: six runtime-unit needs-update infos (the genuine v2 install has only .ai/tools/git-safe.mjs), the C3 behind and
+            // missing-snippet rows, the personal-settings row and the schema-2 hook info.
+            const tools = ['security-policy.mjs', 'git-safe-core.mjs', 'guard-raw-git-core.mjs', 'review-diff.mjs', 'git-safe.mjs', 'guard-raw-git.mjs', 'hooks-selftest.mjs'].map((m) => `.ai/tools/${m}`);
+            const unitInfo = (t) => ({ level: 'info', check: 'runtime-unit', detail: `${t}: runtime unit incomplete; needs update` });
+            const behind = { level: 'info', check: 'policy-version', detail: '.ai/security-paths.json: installed managed patterns are behind this skill' };
+            const snippetMissing = { level: 'info', check: 'codex-snippet', detail: 'Codex deny-read snippet has not been recorded' };
+            const localRow = { level: 'info', check: 'allow-local', detail: '.claude/settings.local.json is personal and is not managed by project-setup; permissions there do not protect the team.' };
+            const hookSchema2 = { level: 'info', check: 'hooks-selftest', detail: 'Schema 2 needs update; installed hook self-test was not run' };
+            check(r2.json.results.filter((x) => x.check === 'manifest-version').length === 1, 'schema 2: exactly one manifest-version info row', r2.json.results.filter((x) => x.check === 'manifest-version'));
+            const infos2 = r2.json.results.filter((x) => x.level === 'info');
+            check(eq(infos2, [info, ...tools.filter((t) => !t.endsWith('/git-safe.mjs')).map(unitInfo), behind, snippetMissing, localRow, hookSchema2]), 'schema 2: the info rows are the manifest-version row, six runtime needs-update rows, behind, missing snippet, the personal-settings row and the schema-2 hook info, in report order', infos2);
+            check(hasRes(r2.json, { level: 'pass', check: 'runtime-unit', detail: '.ai/tools/git-safe.mjs: runtime member is present and readable' }), 'schema 2: the one installed runtime member is a runtime-unit pass');
+            check(hasRes(r2.json, { level: 'pass', check: 'policy-schema', detail: '.ai/security-paths.json' }) && hasRes(r2.json, { level: 'pass', check: 'policy-managed', detail: '.ai/security-paths.json: managed patterns match installed baseline' }), 'schema 2: the installed-policy pass and the C3 managed pass rows are present');
+            check(r2.json.runtimeEvidence && r2.json.runtimeEvidence.hookSelfTest === 'not-run' && r2.json.runtimeEvidence.claudeHookLoading === 'not-verified', 'schema 2: the self-test was not run and Claude hook loading is not verified', r2.json.runtimeEvidence);
           }
           check(projectSnapshot(r2root) === before, 'validate writes nothing');
           const r3root = cloneBase(dir, v3base, 'b');
@@ -1332,6 +1346,14 @@ async function manifestSchema(context) {
           check(hasRes(r3.json, pass), 'schema 3: the json-schema pass is present');
           check(!(r3.json && r3.json.results.some((x) => x.check === 'manifest-version')), 'schema 3: no manifest-version record');
           check(sameSummary(r3.json), 'schema 3: totals agree with the records', r3.json && r3.json.summary);
+          // C10 plan 6.4 item 2 (closed PQ1 and PQ2): the v3base keeps its original schema-1 policy and gains six runtime needs-update infos and the no-installation hook info; it still exits 0.
+          if (r3.json && Array.isArray(r3.json.results)) {
+            const unitsNeeded = ['security-policy.mjs', 'git-safe-core.mjs', 'guard-raw-git-core.mjs', 'review-diff.mjs', 'guard-raw-git.mjs', 'hooks-selftest.mjs'].map((m) => ({ level: 'info', check: 'runtime-unit', detail: `.ai/tools/${m}: runtime unit incomplete; needs update` }));
+            const infos3 = r3.json.results.filter((x) => x.level === 'info');
+            check(unitsNeeded.every((u) => hasRes(r3.json, u)) && r3.json.results.filter((x) => x.check === 'runtime-unit' && x.level === 'info').length === 6, 'schema 3 with the original schema-1 policy: six runtime-unit needs-update infos', infos3.filter((x) => x.check === 'runtime-unit').length);
+            check(hasRes(r3.json, { level: 'info', check: 'hooks-selftest', detail: 'No installed raw-Git hook was identified; installed hook self-test was not run' }), 'schema 3: the no-installation hook info', infos3.filter((x) => x.check === 'hooks-selftest'));
+            check(r3.json.runtimeEvidence && r3.json.runtimeEvidence.hookSelfTest === 'not-run' && r3.json.runtimeEvidence.claudeHookLoading === 'not-verified', 'schema 3: the self-test was not run and Claude hook loading is not verified', r3.json.runtimeEvidence);
+          }
         });
       });
       await step('3.7 validate: invalid manifests get the actual json-schema failures, no update info, exit 1, no source text', async () => {

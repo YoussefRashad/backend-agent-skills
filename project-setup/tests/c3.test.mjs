@@ -3353,8 +3353,9 @@ async function recordedPatterns(context) {
         check(eq(j.ai && j.ai.securityPolicy, [{ level: 'fail', check: 'policy-schema', detail: '.ai/security-paths.json: POLICY_JSON: policy text must be valid JSON' }]), 'the only row is the exact policy-schema fail row with the C1 message', j.ai && j.ai.securityPolicy);
         check(guard.hits().length === 0, 'no instruction file, package.json or document body was opened', guard.hits().slice(0, 4));
         check(j.project && j.project.package === null && j.secrets && eq(j.secrets.contentRiskFiles, []), 'package is null and contentRiskFiles is empty', { pkg: j.project && j.project.package, risk: j.secrets && j.secrets.contentRiskFiles });
-        const tracked = gitCmd(context, root, ['ls-files']).stdout.split('\n').filter(Boolean).filter((p) => !/(^|\/)\.env\.(example|sample|template)$/.test(p));
-        check(j.secrets && eq(sorted(j.secrets.trackedSecretPaths), sorted(tracked)), 'the conservative matcher protects every tracked path except env templates', j.secrets && j.secrets.trackedSecretPaths.slice(0, 5));
+        // C10 plan 5.1 and 6.4 item 4: the template exception is exactly the root `.env.example`; every other tracked path, other template-like names included, stays reported.
+        const tracked = gitCmd(context, root, ['ls-files']).stdout.split('\n').filter(Boolean).filter((p) => p !== '.env.example');
+        check(j.secrets && eq(sorted(j.secrets.trackedSecretPaths), sorted(tracked)), 'the conservative matcher protects every tracked path except the root .env.example', j.secrets && j.secrets.trackedSecretPaths.slice(0, 5));
         check(j.secrets && j.secrets.presentSecretPaths.includes('notes/x.txt') && !j.secrets.presentSecretPaths.some((p) => p.startsWith('.ai/.run/')), 'untracked names are protected (names only) and the run-name exclusion stays', j.secrets && j.secrets.presentSecretPaths);
         check(j.instructionFiles && j.instructionFiles.length >= 2 && j.instructionFiles.every((f) => f.lines === null && f.bytes === null), 'instruction files are inventoried by name only', j.instructionFiles && j.instructionFiles.slice(0, 2));
         check(j.ai && j.ai.manifest && j.ai.manifest.status === 'needs update' && j.mode === 'update', 'the fixed manifest-control read and the mode still work', j.ai && j.ai.manifest);
@@ -3464,7 +3465,10 @@ async function snippet(context) {
           const rows = (v.json && v.json.results) || [];
           check(v.code === 0 && v.json && v.json.ok === true, 'validate still succeeds on the edited installation', { code: v.code, fails: rows.filter((r) => r.level === 'fail') });
           check(!rows.some((r) => /differs from this skill version/.test(r.detail)), 'no result says the policy differs from this skill version', rows.filter((r) => /differs/.test(r.detail)));
-          check(!rows.some((r) => r.check === 'policy-managed' || r.check === 'policy-version' || r.check === 'policy-baseline' || r.check === 'codex-snippet'), 'validate adds no inspectSecurityState rows (C10 owns them)', rows.filter((r) => /policy|snippet/.test(r.check)));
+          // C10 plan 4.5 and 6.4 item 3: the temporary prohibition is replaced by the integration. The depth-only edit leaves the recorded v2 baseline and the managed list unchanged, so validate appends the three
+          // inspectSecurityState rows unchanged and in order (the record, not the installed bytes, identifies the baseline): managed pass, behind this skill, snippet not recorded. The older "differs" text stays gone.
+          const state = rows.filter((r) => r.check === 'policy-managed' || r.check === 'policy-version' || r.check === 'policy-baseline' || r.check === 'policy-project' || r.check === 'codex-snippet');
+          check(eq(state, [ROW_MANAGED_PASS, ROW_BEHIND, ROW_SNIPPET_MISSING]), 'validate appends the inspectSecurityState rows unchanged and in order: managed pass, behind, missing snippet', state);
         });
       }
     });

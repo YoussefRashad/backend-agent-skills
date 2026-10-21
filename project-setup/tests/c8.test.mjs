@@ -303,7 +303,9 @@ const TEXT = {
   launcherB: 'Before launch, run `codex mcp list --json` with the same effective lane options. Refuse launch if a listed server is enabled, the command fails, its output is invalid, or the effective configuration cannot be established. Report identifiers and disable coverage only.',
   launcherNoAuth: 'Do not read authentication files to perform this check. Preserve the user\'s profile and settings; do not use an ignore-user-config shortcut, request full access or weaken sandbox controls to make the lane start.',
   launcherHost: 'Configuration coverage and zero observed connector calls do not prove host tool absence. Record host negative-capability evidence separately from configuration checks.',
-  futureDoctor: 'The planned doctor audits these prerequisites without starting a model session or sandbox probe. Until the doctor component lands, this paragraph describes its required scope, not an available command. An unresolved prerequisite means the lane is not ready.',
+  // C10 plan section 5.2 (6.4 item 6): the available-doctor paragraph replaces C8's future-doctor paragraph in both files; the old text must be gone.
+  doctorAvailable: 'The doctor is available as scripts/doctor.mjs. It audits these prerequisites without starting a model session or sandbox probe. See references/security.md, Doctor diagnostics, for its command and result scope. An unresolved prerequisite means the lane is not ready.',
+  futureDoctorGone: 'The planned doctor audits these prerequisites',
   checker: 'Only when detect reports mode `update` with a schema-2 manifest, run `node <SKILL_DIR>/scripts/check-agent-baselines.mjs` before reading installed agents or wrappers for comparison, from the same `<SKILL_DIR>` whose `data/v2.0.0/` files you will compare. Continue only on exit 0; otherwise stop and report the checker error without inventing or substituting a baseline. Fresh, adopt, migrate-v1 and all other runs do not run this checker.',
   allowInventory: 'Read `claude.allows.rules`, `managed`, `omitted` and `results`. The managed inventory comes from installed ownership records; omitted entries remain explicit decisions. Diagnostics identify risk and remedy, not permission to remove a rule. Inventory is not approval.',
   phase1Agents: 'Before replacing installed agents or wrappers, follow `references/migration-v2.md`. Replace `{{PROJECT_NAME}}` and remove references to docs you did not generate. Preserve both rendering rules when comparing v2 files and drafting their replacements.',
@@ -979,7 +981,8 @@ async function launcherGroup(context) {
       check(sec !== null && (has(sec, TEXT.launcherReadmeB) || has(sec, TEXT.launcherB)), 'the same-context codex mcp list --json paragraph is present in a pinned wording', sec && clip(sec));
       para(check, sec, TEXT.launcherNoAuth, 'the no-authentication-file-read paragraph is exact');
       para(check, sec, TEXT.launcherHost, 'the host negative-capability evidence paragraph is exact');
-      para(check, sec, TEXT.futureDoctor, 'the future-doctor qualification paragraph is exact');
+      para(check, sec, TEXT.doctorAvailable, 'the available-doctor paragraph (C10 section 5.2) is exact');
+      check(sec !== null && !has(sec, TEXT.futureDoctorGone), 'the C8 future-doctor paragraph is gone from the README section', sec && clip(sec));
     });
     await step('references/codex.md has "### Review-lane launcher prerequisite" inside "## Project config" with the C8-P4-4 paragraphs first and the rest unchanged', async () => {
       if (codex === null) return;
@@ -990,7 +993,8 @@ async function launcherGroup(context) {
       para(check, sub, TEXT.launcherB, 'C8-P4-4: the second launcher paragraph (same effective lane options) is exact');
       para(check, sub, TEXT.launcherNoAuth, 'the no-authentication-file-read paragraph follows unchanged');
       para(check, sub, TEXT.launcherHost, 'the host negative-capability evidence paragraph is exact');
-      para(check, sub, TEXT.futureDoctor, 'the future-doctor qualification paragraph is exact');
+      para(check, sub, TEXT.doctorAvailable, 'the available-doctor paragraph (C10 section 5.2) is exact');
+      check(sub !== null && !has(sub, TEXT.futureDoctorGone), 'the C8 future-doctor paragraph is gone from the Codex subsection', sub && clip(sub));
       if (sub !== null) {
         const flat = squash(sub);
         const order = [TEXT.launcherA, TEXT.launcherB, TEXT.launcherNoAuth].map((p) => flat.indexOf(squash(p)));

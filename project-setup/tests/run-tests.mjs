@@ -975,6 +975,12 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c9context.tmp, { recursive: true });
   const rep9 = await runComponentAssertions('C9', c9context);
   check(rep9.ok === true, 'C9 component assertions pass', { errors: rep9.errors, failed: rep9.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C10 component assertions (the doctor, the validation integration, the root-only template discovery and the reserved review-directory exclusion) run once, after the C9 aggregation, inside the same case. Under the same
+  // rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C10 report is ok. The run is not also invoked from any other baseline case. (C10 plan 6.4 item 5.)
+  const c10context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c10'), env: { ...ENV } };
+  fs.mkdirSync(c10context.tmp, { recursive: true });
+  const rep10 = await runComponentAssertions('C10', c10context);
+  check(rep10.ok === true, 'C10 component assertions pass', { errors: rep10.errors, failed: rep10.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {
@@ -983,6 +989,8 @@ test('R30', 'validate: a user-owned legacy hook is a warning; broken managed per
   const d = repo({ ...base, '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Read(**/.env)'] }, hooks: { PostToolUse: [{ matcher: 'Write', command: 'x' }] } }) });
   const v = S('validate', [], d);
   check(v.code === 0 && v.json?.ok === true && v.json.results.some((x) => x.level === 'warn' && /legacy shape/.test(x.detail)), 'legacy hook -> warn, validate ok', v.json?.results);
+  // C10 plan 4.9 (R30 legacy-hook case) and 6.4 item 9: an unrelated legacy hook never activates the installed raw-Git self-test; the no-installation info row is present and the self-test is not run.
+  check(v.json?.results?.some((x) => x.level === 'info' && x.check === 'hooks-selftest' && x.detail === 'No installed raw-Git hook was identified; installed hook self-test was not run') && v.json?.runtimeEvidence?.hookSelfTest === 'not-run', 'legacy hook is not an activation signal: the no-installation info row and not-run evidence', v.json?.results?.filter((x) => x.check === 'hooks-selftest'));
   const d2 = repo({ ...base, '.claude/settings.json': JSON.stringify({ permissions: { deny: 'Read(**/.env)' } }) });
   const v2 = S('validate', [], d2); check(v2.code === 1 && v2.json.results.some((x) => x.level === 'fail' && /permissions\.deny/.test(x.detail)), 'broken managed key -> fail', v2.json?.results);
 });
@@ -1223,6 +1231,12 @@ test('S01', 'fresh setup end to end, validate clean', () => {
   const mf = JSON.parse(read(path.join(d, '.ai', 'manifest.json')));
   check(mf.schema === 3, 'a newly written manifest is schema 3', mf.schema);
   const v = S('validate', [], d); check(v.code === 0 && v.json.ok, 'validate clean', v.json?.results?.filter((x) => x.level !== 'pass'));
+  // C10 plan 6.4 item 9: S01 now launches the real installed self-test (the three trusted hook files copied by the fresh setup) and requires its pass row; the seven runtime members are all present runtime-unit passes. New info or
+  // warning rows do not change the success criteria above.
+  const passRows = (v.json?.results || []).filter((x) => x.level === 'pass');
+  check(passRows.some((x) => x.check === 'hooks-selftest' && x.detail === 'Installed hook self-test passed; Claude hook loading is not verified'), 'validate runs the real installed hook self-test and reports its pass row', v.json?.results?.filter((x) => x.check === 'hooks-selftest'));
+  check(v.json?.runtimeEvidence?.hookSelfTest === 'passed' && v.json?.runtimeEvidence?.claudeHookLoading === 'not-verified', 'the evidence block records the passed self-test and the unverified Claude hook loading', v.json?.runtimeEvidence);
+  check(passRows.filter((x) => x.check === 'runtime-unit').length === 7 && (v.json?.results || []).every((x) => x.check !== 'runtime-unit' || x.level === 'pass'), 'a fresh schema-1 setup has seven runtime-unit passes and no other runtime-unit row', v.json?.results?.filter((x) => x.check === 'runtime-unit'));
   // C9: a new secret name is staged as an empty assignment. Not includes('DATABASE_URL='), which would also accept the old placeholder output.
   const envText = read(path.join(d, '.env.example'));
   check(/^DATABASE_URL=$/m.test(envText) && !envText.includes('<REDACTED>') && envText.startsWith('PORT=3000'), 'env template merged: the new name is an empty assignment, no placeholder, existing lines kept');

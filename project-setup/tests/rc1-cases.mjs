@@ -16,6 +16,7 @@ import { C6_IMPLEMENTATIONS } from './c6.test.mjs';
 import { C7_IMPLEMENTATIONS } from './c7.test.mjs';
 import { C8_IMPLEMENTATIONS } from './c8.test.mjs';
 import { C9_IMPLEMENTATIONS } from './c9.test.mjs';
+import { C10_IMPLEMENTATIONS } from './c10.test.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
 const ids = (s) => s.trim().split(/\s+/);
@@ -208,6 +209,29 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'R97/C9/template-boundary', name: 'only the permitted root template receives the vault exception' },
     { id: 'V2/C9/module-contract', name: 'template exports and component records are import safe' },
   ],
+  // C10 plan (docs/plans/2026-10-20-project-setup-v3-rc1-c10.md) section 6.1, in its exact order.
+  C10: [
+    { id: 'N8-doctor/C10/arguments', name: 'doctor accepts only documented lane options' },
+    { id: 'N8-doctor/C10/entrypoints', name: 'doctor resolves native and Windows npm entrypoints' },
+    { id: 'N8-doctor/C10/context', name: 'doctor preserves the effective lane context' },
+    { id: 'N8-doctor/C10/configuration', name: 'doctor reports exact MCP readiness outcomes' },
+    { id: 'N8-doctor/C10/logs', name: 'doctor reports the newest permitted sandbox log' },
+    { id: 'N8-doctor/C10/processes', name: 'doctor reports Desktop and cua_node processes' },
+    { id: 'N8-doctor/C10/negative-actions', name: 'doctor performs no model probe or remediation action' },
+    { id: 'N8-doctor/C10/cli', name: 'doctor CLI streams and exits are exact' },
+    { id: 'R46/C10/anchors', name: 'validation warns only on unanchored user denies' },
+    { id: 'R49/C10/policy', name: 'validation compares managed policy with installed state' },
+    { id: 'R53/C10/reporting', name: 'validation preserves allow classifier rows and severity' },
+    { id: 'R73/C10/selftest', name: 'validation requires exact installed hook evidence' },
+    { id: 'R79/C10/schemas', name: 'validation uses shared schemas before consuming ownership' },
+    { id: 'R79/C10/runtime-unit', name: 'validation checks every catalog runtime target' },
+    { id: 'R81/C10/baseline', name: 'older installed policy is behind rather than edited' },
+    { id: 'R82/C10/snippet', name: 'validation reports stale snippet state without user config access' },
+    { id: 'V2/C10/schema2', name: 'schema 2 reports needs update without a schema failure' },
+    { id: 'V2/C10/discovery', name: 'discovery recognizes only the root environment template' },
+    { id: 'V2/C10/run-inventory', name: 'discovery excludes reserved review-artifact directories' },
+    { id: 'V2/C10/contracts', name: 'C10 exports documentation and evidence boundaries are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -221,6 +245,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C7: Object.freeze([...C7_IMPLEMENTATIONS]),
   C8: Object.freeze([...C8_IMPLEMENTATIONS]),
   C9: Object.freeze([...C9_IMPLEMENTATIONS]),
+  C10: Object.freeze([...C10_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

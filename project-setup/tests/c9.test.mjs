@@ -971,6 +971,9 @@ const POSITIVE_CONTROLS = [
   ['a template regular expression', 'mjs', 'export const ENV_TEMPLATE_RE = /^\\.env\\.example$/;\n'],
   ['an explanatory comment', 'mjs', '// The permitted template is .env.example; nothing else is read.\nconst a = 1;\n'],
   ['a usage text without a file name', 'mjs', "const U = 'usage: env-keys.mjs keys --template auto; env-keys.mjs merge --template auto --keys <file> --run-id <id>';\n"],
+  // C10 plan 5.1 and 6.4 item 7: the two replacement detect warnings pass the command rules unchanged: the invocation-bearing one names no environment filename, the other names a file but no command.
+  ['the C10 invocation-bearing detect warning', 'mjs', "warnings.push('root environment template is present; inspect it only via ' + 'node <SKILL_DIR>/scripts/env-keys.mjs keys --template auto; ' + 'agents must not open it directly');\n"],
+  ['the C10 tracked-secret detect warning', 'mjs', "warnings.push('secret-pattern files other than the root .env.example are TRACKED in git; ' + 'stop and escalate before generating docs');\n"],
   ['a literal naming a file but no command', 'mjs', "const e = 'template path is unsafe; the file is .env.example';\n"],
 ];
 // The committed non-command occurrences of plan 3.10 (anchors are source anchors, not line-number exemptions). `scan` is a synthetic file holding the occurrence; `keep` lists exact
@@ -989,7 +992,10 @@ const KNOWN_CONTROLS = [
   ['scripts/apply.mjs:1233', 'scripts/apply.mjs', 'mjs', '/**\n * draft body is read, the binding hashes included: a rewritten plan.json can never turn diff into a reader of `.env`.\n */\n', ['a rewritten plan.json can never turn diff into a reader of `.env`.']],
   ['scripts/migrate-security-paths.mjs:10', 'scripts/migrate-security-paths.mjs', 'mjs', '//   - A broader replacement (**/.env* for **/.env and **/.env.*) is a NEW decision. An old omission neither omits nor\n', ['//   - A broader replacement (**/.env* for **/.env and **/.env.*) is a NEW decision. An old omission neither omits nor']],
   ['scripts/canary.mjs:25-26', 'scripts/canary.mjs', 'mjs', "const CANARY_PATHS = ['.env', 'nested/.env.local', 'keys/canary.pem', 'secrets/canary.txt'];\nconst LATE_PATHS = ['late/.env', 'late/.env.production'];\n", ["const CANARY_PATHS = ['.env', 'nested/.env.local', 'keys/canary.pem', 'secrets/canary.txt'];", "const LATE_PATHS = ['late/.env', 'late/.env.production'];"]],
-  ['scripts/detect.mjs:141', 'scripts/detect.mjs', 'mjs', 'const ENV_TEMPLATE = /(^|\\/)\\.env\\.(example|sample|template)$/;\n', ['const ENV_TEMPLATE = /(^|\\/)\\.env\\.(example|sample|template)$/;']],
+  // C10 plan 5.1 and 6.4 item 7: detect's old broad template regular expression is replaced by exact root-name equality. The occurrence is now a filename literal inside a filter, not a command. A keep entry that is an
+  // array lists alternative spellings (any one must be present). PLAN-GAP: the plan quotes the substring as p === ".env.example" with double quotes, while detect.mjs is written with single quotes; either quote style passes.
+  ['scripts/detect.mjs (C10 plan spelling)', 'scripts/detect.mjs', 'mjs', 'const envTemplates = visible.filter(p => p === ".env.example");\n', null],
+  ['scripts/detect.mjs (C10 filename literal)', 'scripts/detect.mjs', 'mjs', "const envTemplates = visible.filter((p) => p === '.env.example');\n", [['p === ".env.example"', "p === '.env.example'"]]],
   ['scripts/lib.mjs:20', 'scripts/lib.mjs', 'mjs', "export const WRITE_ALLOWLIST = [\n  '.env.example',\n];\n", ["  '.env.example',"]],
   ['scripts/lib.mjs:234 (replaced text)', 'scripts/lib.mjs', 'mjs', 'export const ENV_TEMPLATE_RE = /(^|\\/)\\.env\\.(example|sample|template)$/;\n', null],
   ['scripts/lib.mjs:234 (the C9 expression)', 'scripts/lib.mjs', 'mjs', 'export const ENV_TEMPLATE_RE = /^\\.env\\.example$/;\n', null],
@@ -1047,7 +1053,8 @@ async function commandsGroup(context) {
         const text = readText(docAt(context, file));
         if (text === null) { check(false, `known control ${anchor}: ${file} is readable`); continue; }
         const flat = text.replace(/\r\n?/g, '\n');
-        for (const k of keep) check(kind === 'md' ? squash(flat).includes(squash(k)) : flat.includes(k), `known control ${anchor}: the exact occurrence is preserved in ${file}`, clip(k));
+        const present = (k) => (kind === 'md' ? squash(flat).includes(squash(k)) : flat.includes(k));
+        for (const k of keep) check(Array.isArray(k) ? k.some(present) : present(k), `known control ${anchor}: the exact occurrence is preserved in ${file}`, clip(Array.isArray(k) ? k.join(' | ') : k));
       }
     });
     await step('the production inventory has no violation (expected: none) and the scanner lexes every module cleanly', async () => {
