@@ -577,6 +577,7 @@ async function policyGates(context) {
             checkNoWrite(check, `${label}: commit`, f, RUN_ID, before);
           }
         });
+        if (state) await aliasGates(context, kit, check, step, dir, state, S2);
       }
       if (mig) {
         await migrationGates(context, kit, check, step, dir, mig);
@@ -706,6 +707,391 @@ async function migrationGates(context, kit, check, step, dir, base) {
       check(d.code === 3 && d.json && d.json.ok === false && d.json.code === code && d.json.code !== REGRESSION_CODE && typeof d.json.error === 'string' && d.json.error.startsWith(`${code}: `), `${label}: the unprepared diff reports exactly ${code}`, { code: d.code, out: d.stdout.slice(0, 300) });
       check(projectSnapshot(c) === before.project, `${label}: the unprepared diff writes nothing`);
     });
+  });
+}
+
+
+// ============================================ I12-2: case-variant aliases of protected targets ====
+// Decision I12-2 (docs/plans/2026-10-21-project-setup-v3-rc1-c12-decisions.md, review finding C12-R1; it wins over the frozen plan). The policy gate, the C3 workflow gate and the control-file handling select targets by exact string, so on a
+// case-insensitive filesystem a draft spelled `.ai/SECURITY-PATHS.JSON` writes the installed policy past all three. apply.mjs refuses, with the existing code APPLY_PATH and its existing text `unsafe path: <target>`, any draft target or
+// declared transaction input whose ASCII case fold equals a protected canonical target but whose spelling differs. Protected: the two control files, every runtime-unit target of the shipped catalog and (decision I12-2a, which wins) the
+// manifest `.ai/manifest.json`, whose canonical spelling keeps APPLY_MANIFEST_DRAFT. The refusal runs before approvals in
+// prepare and in loading a prepared plan for both diffs and commit, on every platform. The canonical spelling is not this refusal, a name that differs by more than case is not, and neither is a name that folds to a protected target only
+// under a Unicode fold (the rule names the ASCII fold).
+//
+// Readings recorded by decision I12-2a (they were PLAN-GAPs when the tests were written):
+// - exit and envelope: the decision says "its existing text and exit" without a number. APPLY_PATH has two existing exits: the thrown unsafe path of a link, junction or escape (exit 2, text built from the run-relative source) and the
+//   per-target refusal that returns { code, error } (exit 3; in prepare one APPLY_PLAN_REJECTED entry, in the diffs and commit a direct { ok, code, error } failure). Only the second carries the text `unsafe path: <target>` with the target as
+//   written (declaredInputRefusal, checkSource), so the tests pin it: exit 3, prepare as the exact plan rejection, every other phase as the three-key envelope. A reading as exit 2 would change ALIAS_EXIT and expectAliasP.
+// - order: the refusal is asserted for `.claude/` aliases on every platform; on a case-sensitive filesystem `.claude/SETTINGS.JSON` is also outside the write allowlist, so it must come before the write-scope check.
+// - fold: ASCII only (A-Z to a-z); a name that folds to a protected target only under Unicode case rules keeps its existing outcome (the controls below).
+// - an alias inside a forged plan's metadata.transactionInputs keeps the existing APPLY_PLAN_INVALID (exit 1), pinned by the forged-input rows.
+//
+// Decision I12-4 (review round 2, C12-R3 and C12-R4; written before the implementation): the same refusal covers the other Windows spellings of a protected target. Compared per component, as C1 does (security-policy.mjs, `alternatives`): the
+// ASCII case fold, the prefix before the component's first ":" (an NTFS stream suffix such as "::$DATA"), and both with trailing ASCII dots and spaces removed. A name with any such form equal to a protected target whose spelling differs
+// is APPLY_PATH, at the same boundaries and in the same order (before the write scope, so `.claude./settings.json` is APPLY_PATH, not APPLY_WRITE_SCOPE). The fold stays ASCII only. 8.3 short names are not modelled. C12-R4: the protected
+// runtime targets come from the catalog's target list alone (a missing runtime source cannot empty it); an unreadable catalog fails closed for names under `.ai/tools/` whose spelling is not its own canonical form.
+// Reading of the platform: Node addresses Windows paths with the extended prefix, so a draft file spelled with a trailing dot or space is a literal, distinct name there, while a "::$DATA" draft is the default stream of the canonical file. A
+// draft row whose spelling the drafts directory does not list as written (the stream forms on Windows) is therefore recorded in the diagnostics and left out of the draft rows (never a skip); the same spelling is still covered as a declared
+// input and as the operation of a forged plan, where it is only text. PLAN-GAP: C12-R3 describes a plan whose source inventory keeps the canonical draft name while the operation names the alias; it is bound consistently only where the
+// alias resolves to the canonical draft (the stream form here); elsewhere the plan is refused by the alias rule before any binding is compared, which is what the rows assert.
+const ALIAS_CODE = 'APPLY_PATH';
+const ALIAS_EXIT = 3;
+const aliasText = (t) => `unsafe path: ${t}`;
+const RUNTIME_TARGETS = RUNTIME_MEMBERS.map((m) => `.ai/tools/${m}`);
+const KELVIN = String.fromCodePoint(0x212a); // U+212A: lower-cases to ASCII "k" with String#toLowerCase, never under the ASCII fold
+const LONG_S = String.fromCodePoint(0x17f); // U+017F: upper-cases to ASCII "S" with String#toUpperCase, never under the ASCII fold
+const POLICY_ALIASES = ['.ai/SECURITY-PATHS.JSON', '.ai/Security-Paths.json', '.ai/security-paths.jsoN', '.AI/security-paths.json'];
+const SETTINGS_ALIASES = ['.claude/SETTINGS.JSON', '.claude/Settings.json', '.claude/settings.jsoN', '.CLAUDE/settings.json'];
+const RUNTIME_ALIASES = RUNTIME_MEMBERS.map((m) => `.ai/TOOLS/${m.toUpperCase()}`);
+const GIT_SAFE_ALIASES = ['.ai/tools/git-safe.mjS', '.AI/tools/git-safe.mjs'];
+const MANIFEST_ALIASES = ['.ai/MANIFEST.JSON', '.ai/Manifest.json', '.ai/manifest.jsoN', '.AI/manifest.json'];
+const MANIFEST_DRAFT = { code: 'APPLY_MANIFEST_DRAFT', error: 'the manifest is written by commit, not drafted' };
+// I12-4 spellings: trailing dot, trailing space, dot-space-dot, a stream suffix, a trailing dot on a directory component, a case change with a trailing dot, and a stream suffix on a directory component.
+const POLICY_SPELLINGS = ['.ai/security-paths.json.', '.ai/security-paths.json ', '.ai/security-paths.json. .', '.ai/security-paths.json::$DATA', '.ai./security-paths.json', '.AI/Security-Paths.json.', '.ai::$INDEX_ALLOCATION/security-paths.json'];
+const SETTINGS_SPELLINGS = ['.claude/settings.json.', '.claude/settings.json ', '.claude/settings.json. .', '.claude/settings.json::$DATA', '.claude./settings.json', '.CLAUDE/Settings.json.'];
+const MANIFEST_SPELLINGS = ['.ai/manifest.json.', '.ai/manifest.json ', '.ai/manifest.json. .', '.ai/manifest.json::$DATA', '.ai./manifest.json', '.AI/Manifest.json.'];
+const RUNTIME_SPELLINGS = ['.ai/tools/git-safe.mjs.', '.ai/tools/git-safe.mjs ', '.ai/tools/git-safe.mjs. .', '.ai/tools/git-safe.mjs::$DATA', '.ai/tools./git-safe.mjs', '.ai./tools/git-safe.mjs', '.AI/TOOLS/Git-Safe.mjs.'];
+// The draft every alias row carries: a valid schema-2 policy that drops an installed project identity and holds the marker (so any echo of the rejected content is caught). Written to the alias, it is the regression the gate exists for.
+const aliasDraftOf = (S2) => jsonText({ ...S2, projectPatterns: [P2], patterns: [...S2.patterns, { anchor: 'root', glob: `zz-${MARKER}/**`, kind: 'dir' }] });
+
+// The prepare refusal: exactly one APPLY_PATH entry for the alias, as written.
+function expectAliasP(check, label, r, target) {
+  expectP(check, label, r, [{ target, code: ALIAS_CODE, error: aliasText(target) }]);
+  check(!echoOf(r).includes(MARKER), `${label}: the rejected draft content is not echoed`, echoOf(r).slice(0, 300));
+}
+// A direct refusal (the diffs and commit): the existing APPLY_PATH envelope, nothing rendered, nothing echoed.
+function expectAliasF(check, label, r, target) {
+  expectF(check, label, r, { code: ALIAS_CODE, exit: ALIAS_EXIT, error: aliasText(target) });
+  if (r.json) check(eq(sorted(Object.keys(r.json)), ['code', 'error', 'ok']), `${label}: the envelope holds exactly ok, code and error`, Object.keys(r.json));
+  check(!/"(files|vault|diff|plan|planSha256)"/.test(r.stdout), `${label}: no review content, plan or plan hash is rendered`, r.stdout.slice(0, 200));
+  check(!echoOf(r).includes(MARKER), `${label}: the rejected draft content is not echoed`, echoOf(r).slice(0, 300));
+}
+// A prepared run rewritten so its one operation targets `target` (consistent bindings otherwise): the draft moves to that spelling, the operation, the inventory and the bound inputs follow, and the new plan hash is returned. The binding of an
+// alias is what the filesystem gives: the installed bytes on a case-insensitive one, absence on a case-sensitive one.
+function forgeTargetOp(root, id, target, draftText) {
+  const plan = readPlan(root, id);
+  const op = plan.ops.find((o) => o.target === T_POLICY);
+  const bytes = Buffer.from(draftText, 'utf8');
+  rmrf(path.join(runDirOf(root, id), 'drafts'));
+  putDraft(root, id, target, bytes);
+  const installed = readBytes(projPath(root, target));
+  op.target = target;
+  op.source = `drafts/${target}`;
+  op.sourceSha256 = sha(bytes);
+  op.preRawSha = installed === null ? null : sha(installed);
+  op.action = installed === null ? 'create' : 'modify';
+  plan.sourceInventory = draftNames(root, id).map((t) => ({ target: t, origin: 'draft' })); // what the drafts directory lists (a stream spelling lists the canonical name)
+  if (!plan.inputs.some((i) => i.target === target)) plan.inputs = [...plan.inputs, { target, preRawSha: op.preRawSha }];
+  const text = jsonText(plan);
+  putFile(runFile(root, id, 'plan.json'), text);
+  return sha(Buffer.from(text, 'utf8'));
+}
+// A fresh clone of a run state for one alias phase: every phase gets its own directory.
+let aliasSeq = 0;
+const aliasClone = (state, base, label) => cloneTree(base, path.join(state.dir, `i122-${++aliasSeq}-${label}`));
+// The drafts of a run as the directory lists them: the names an inventory would report.
+const draftNames = (root, id) => walkTree(path.join(runDirOf(root, id), 'drafts')).filter(([, kind]) => kind === 'file').map(([rel]) => rel);
+// C12-R3: the operation names the alias while the drafts directory, the source inventory and the draft bytes keep the canonical policy draft (a stream spelling resolves to those bytes; a literal spelling is refused before any binding is read).
+function forgeKeepingInventory(root, id, alias, draftText) {
+  const plan = readPlan(root, id);
+  const op = plan.ops.find((o) => o.target === T_POLICY);
+  const bytes = Buffer.from(draftText, 'utf8');
+  putFile(draftPath(root, id, T_POLICY), bytes);
+  const installed = readBytes(projPath(root, alias));
+  op.target = alias;
+  op.source = `drafts/${alias}`;
+  op.sourceSha256 = sha(bytes);
+  op.preRawSha = installed === null ? null : sha(installed);
+  op.action = installed === null ? 'create' : 'modify';
+  if (!plan.inputs.some((i) => i.target === alias)) plan.inputs = [...plan.inputs, { target: alias, preRawSha: op.preRawSha }];
+  const text = jsonText(plan);
+  putFile(runFile(root, id, 'plan.json'), text);
+  return sha(Buffer.from(text, 'utf8'));
+}
+
+// Every draft alias: prepare (also with the exact content approval for the rows that carry it), then the unprepared diff, each on its own clone of the begun run.
+function aliasDraftRows(context, kit, check, state, rows) {
+  rows.forEach((row, i) => {
+    const tag = `${row.tag || 'I12-2'} draft alias ${show(row.alias)}${row.consumers ? ' (runtime consumer installed)' : ''}${row.manifest ? ' (manifest installed)' : ''}`;
+    const fresh = (kind) => {
+      const p = aliasClone(state, state.b0, `d${i}-${kind}`);
+      if (row.consumers) addConsumer(p);
+      if (row.manifest) putFile(manifestPath(p), jsonText(manifestOf({})));
+      try { putDraft(p, RUN_ID, row.alias, row.draft); } catch { /* the name cannot be created here; reported below */ }
+      return p;
+    };
+    // The draft must exist as written for the row to mean anything: where the filesystem lists another name (a stream spelling on Windows) the subcase is recorded and left out, never a skip.
+    if (!draftNames(fresh('probe'), RUN_ID).includes(row.alias)) { diag(context, `${tag} left out: this filesystem does not list the draft under that spelling`); return; }
+    // The content approval is passed trimmed by the command line, so a spelling with trailing white space has no approval variant.
+    for (const approve of row.approve && row.alias === row.alias.trim() ? [[], [row.alias]] : [[]]) {
+      const p = fresh(approve.length ? 'pa' : 'p');
+      const before = noWriteState(p, RUN_ID);
+      const label = `${tag}: prepare${approve.length ? ' with the content approval' : ''}`;
+      expectAliasP(check, label, kit.prepare(p, RUN_ID, { approve }), row.alias);
+      checkNoWrite(check, label, p, RUN_ID, before);
+    }
+    const d = fresh('d');
+    const before = noWriteState(d, RUN_ID);
+    expectAliasF(check, `${tag}: unprepared diff`, kit.diff(d, RUN_ID), row.alias);
+    check(projectSnapshot(d) === before.project, `${tag}: the unprepared diff writes nothing`);
+  });
+}
+// A forged prepared plan whose operation targets an alias: the prepared diff and the bound, hash-approved commit both refuse, render nothing and write nothing.
+function aliasForgedRows(kit, check, state, aliases, draft, forge = forgeTargetOp, tagPrefix = 'I12-2') {
+  aliases.forEach((alias, i) => {
+    const tag = `${tagPrefix} forged plan with an operation on ${show(alias)}`;
+    const f = aliasClone(state, state.bp, `f${i}`);
+    const sha2 = forge(f, RUN_ID, alias, draft);
+    const before = noWriteState(f, RUN_ID);
+    expectAliasF(check, `${tag}: prepared diff`, kit.diff(f, RUN_ID), alias);
+    check(projectSnapshot(f) === before.project, `${tag}: the prepared diff writes nothing`);
+    expectAliasF(check, `${tag}: commit of the bound, hash-approved plan`, kit.commit(f, RUN_ID, sha2), alias);
+    checkNoWrite(check, `${tag}: commit`, f, RUN_ID, before);
+  });
+}
+// A forged prepared plan whose metadata.transactionInputs holds an alias, with the request file, its bound hash and the bound input all consistent: loading the plan refuses it as APPLY_PLAN_INVALID (exit 1), the existing mapping of a
+// refused declared input in a prepared plan (decision I12-2a), in the prepared diff and in the bound, hash-approved commit. Nothing is rendered or written. The same forging with an unrelated input renders, so only the alias is refused.
+function forgeDeclaredInput(root, id, input) {
+  const plan = readPlan(root, id);
+  const list = [input];
+  putRequest(root, id, 'transaction-inputs.json', list);
+  plan.metadata.transactionInputs = list;
+  plan.metadata.transactionInputsSha256 = sha(readBytes(runFile(root, id, 'transaction-inputs.json')));
+  const installed = readBytes(projPath(root, input));
+  plan.inputs = [...plan.inputs, { target: input, preRawSha: installed === null ? null : sha(installed) }];
+  const text = jsonText(plan);
+  putFile(runFile(root, id, 'plan.json'), text);
+  return sha(Buffer.from(text, 'utf8'));
+}
+const PLAN_INVALID = { code: 'APPLY_PLAN_INVALID', error: 'invalid prepared plan; run prepare again' };
+function expectPlanInvalid(check, label, r) {
+  expectF(check, label, r, { code: PLAN_INVALID.code, exit: 1, error: PLAN_INVALID.error });
+  if (r.json) check(eq(sorted(Object.keys(r.json)), ['code', 'error', 'ok']), `${label}: the envelope holds exactly ok, code and error`, Object.keys(r.json));
+  check(!/"(files|vault|diff|plan|planSha256)"/.test(r.stdout), `${label}: no review content, plan or plan hash is rendered`, r.stdout.slice(0, 200));
+}
+function aliasForgedInputRows(kit, check, state, aliases) {
+  aliases.forEach((alias, i) => {
+    const tag = `I12-2a forged plan declaring the input ${show(alias)}`;
+    const f = aliasClone(state, state.bp, `fi${i}`);
+    const sha2 = forgeDeclaredInput(f, RUN_ID, alias);
+    const before = noWriteState(f, RUN_ID);
+    expectPlanInvalid(check, `${tag}: prepared diff`, kit.diff(f, RUN_ID));
+    check(projectSnapshot(f) === before.project, `${tag}: the prepared diff writes nothing`);
+    expectPlanInvalid(check, `${tag}: commit of the bound, hash-approved plan`, kit.commit(f, RUN_ID, sha2));
+    checkNoWrite(check, `${tag}: commit`, f, RUN_ID, before);
+  });
+  // control: the same forging with an input that is no alias keeps every binding consistent, so the refusals above are the alias rule alone
+  const g = cloneTree(state.bp, path.join(state.dir, 'i122-fi-control'));
+  forgeDeclaredInput(g, RUN_ID, 'docs/Security-Paths.json');
+  const before = projectSnapshot(g);
+  const d = kit.diff(g, RUN_ID);
+  check(d.code === 0 && d.json && d.json.ok === true && d.json.prepared === true, 'I12-2a control: a forged plan declaring an unrelated input renders in the prepared diff', { code: d.code, out: d.stdout.slice(0, 300) });
+  check(projectSnapshot(g) === before, 'I12-2a control: the prepared diff writes nothing');
+}
+// A declared transaction input spelled as an alias: prepare and the unprepared diff refuse it by name; the canonical spelling beside it is not refused.
+function aliasInputRows(kit, check, state, aliases, tagPrefix = 'I12-2') {
+  aliases.forEach((alias, i) => {
+    const tag = `${tagPrefix} declared input ${show(alias)}`;
+    const fresh = (kind, inputs) => {
+      const p = aliasClone(state, state.b0, `i${i}-${kind}`);
+      putRequest(p, RUN_ID, 'transaction-inputs.json', inputs);
+      return p;
+    };
+    const p = fresh('p', [alias]);
+    const before = noWriteState(p, RUN_ID);
+    expectAliasP(check, `${tag}: prepare`, kit.prepare(p, RUN_ID, {}), alias);
+    checkNoWrite(check, `${tag}: prepare`, p, RUN_ID, before);
+    const d = fresh('d', [alias]);
+    const beforeD = noWriteState(d, RUN_ID);
+    expectAliasF(check, `${tag}: unprepared diff`, kit.diff(d, RUN_ID), alias);
+    check(projectSnapshot(d) === beforeD.project, `${tag}: the unprepared diff writes nothing`);
+  });
+  if (tagPrefix === 'I12-2') [[T_SETTINGS, '.claude/SETTINGS.JSON'], [T_MANIFEST, '.ai/MANIFEST.JSON']].forEach(([canonical, alias], i) => {
+    const both = cloneTree(state.b0, path.join(state.dir, `i122-i-both${i}`));
+    putRequest(both, RUN_ID, 'transaction-inputs.json', [canonical, alias]);
+    const beforeBoth = noWriteState(both, RUN_ID);
+    expectAliasP(check, `I12-2 declared inputs holding the canonical spelling ${canonical} and its alias: only the alias is refused (prepare)`, kit.prepare(both, RUN_ID, {}), alias);
+    checkNoWrite(check, `I12-2 declared canonical spelling ${canonical} and its alias: prepare`, both, RUN_ID, beforeBoth);
+  });
+}
+// Negative controls: names that are not aliases of a protected target are not refused by this rule.
+function aliasControls(context, kit, check, state, S2) {
+  const names = [
+    ['docs/Security-Paths.json', 'the policy file name in another directory'],
+    ['.ai/security-paths.json.bak', 'the policy name with a suffix'],
+    ['.ai/Tools/notes.md', 'a case-variant directory holding a name no catalog target has'],
+    ['.ai/TOOLS/GIT-SAFE.MJS.BAK', 'a runtime-unit name with a suffix'],
+    ['docs/security-paths.json.', 'the policy name with a trailing dot in another directory'],
+  ];
+  const longS = `.ai/security-path${LONG_S}.json`;
+  // The long s names the installed policy only on a filesystem that folds it; there the name is an alias the ASCII rule does not cover, so the subcase is recorded and left out (never a skip).
+  if (exists(projPath(state.b0, longS))) diag(context, `I12-2 control ${show(longS)} left out: this filesystem folds U+017F onto the installed policy name`);
+  else names.push([longS, 'a name that folds to the policy name only under a Unicode upper-casing (the long s)']);
+  names.forEach(([name, why], i) => {
+    const tag = `I12-2 control ${show(name)} (${why})`;
+    const p = cloneTree(state.b0, path.join(state.dir, `i122-c${i}`));
+    putDraft(p, RUN_ID, name, aliasDraftOf(S2));
+    const r = kit.prepare(p, RUN_ID, {});
+    check(r.code === 0 && r.json && r.json.ok === true && r.json.changed === 1 && r.json.ops.length === 1 && r.json.ops[0].target === name && r.json.ops[0].action === 'create', `${tag}: prepare accepts it as a new file`, { code: r.code, out: r.stdout.slice(0, 300) });
+    const q = cloneTree(state.b0, path.join(state.dir, `i122-cd${i}`));
+    putDraft(q, RUN_ID, name, aliasDraftOf(S2));
+    const d = kit.diff(q, RUN_ID);
+    check(d.code === 0 && d.json && d.json.ok === true && d.json.prepared === false && Array.isArray(d.json.files) && d.json.files.length === 1 && d.json.files[0].target === name, `${tag}: the unprepared diff renders it`, { code: d.code, out: d.stdout.slice(0, 300) });
+  });
+  // The Kelvin sign lower-cases to "k" under String#toLowerCase, which is how C1 and C4's complete-unit check match a runtime target, so that existing check still refuses this untrusted draft in its own words. This rule names the ASCII
+  // fold: it must not answer with APPLY_PATH, so the refusal is exactly the existing unit refusal (unchanged by I12-2) in prepare and in the unprepared diff.
+  const kelvin = `.ai/tools/hoo${KELVIN}s-selftest.mjs`;
+  const u = UNREVIEWED('.ai/tools/security-policy.mjs');
+  const kp = cloneTree(state.b0, path.join(state.dir, 'i122-c-kelvin-p'));
+  putDraft(kp, RUN_ID, kelvin, aliasDraftOf(S2));
+  const kBefore = noWriteState(kp, RUN_ID);
+  expectP(check, `I12-2 control ${show(kelvin)}: prepare keeps the existing unit refusal, not APPLY_PATH`, kit.prepare(kp, RUN_ID, {}), [{ target: u.target, code: u.code, error: u.error }]);
+  checkNoWrite(check, 'I12-2 control: the Kelvin name in prepare', kp, RUN_ID, kBefore);
+  const kd = cloneTree(state.b0, path.join(state.dir, 'i122-c-kelvin-d'));
+  putDraft(kd, RUN_ID, kelvin, aliasDraftOf(S2));
+  expectF(check, `I12-2 control ${show(kelvin)}: the unprepared diff keeps the existing unit refusal, not APPLY_PATH`, kit.diff(kd, RUN_ID), { code: u.code, exit: 3, error: u.error, target: u.target });
+  // The canonical settings spelling is accepted as a draft target and as a declared input (the policy and the runtime unit already have canonical controls in this descriptor).
+  const c = cloneTree(state.b0, path.join(state.dir, 'i122-c-settings'));
+  putDraft(c, RUN_ID, T_SETTINGS, '{}\n');
+  const cs = kit.prepare(c, RUN_ID, {});
+  check(cs.code === 0 && cs.json && cs.json.ok === true && cs.json.ops.some((o) => o.target === T_SETTINGS && o.action === 'create'), 'I12-2 control: the canonical settings spelling is accepted as a draft target', { code: cs.code, out: cs.stdout.slice(0, 300) });
+  const k = cloneTree(state.b0, path.join(state.dir, 'i122-c-inputs'));
+  putRequest(k, RUN_ID, 'transaction-inputs.json', [T_SETTINGS, T_POLICY, T_MANIFEST]);
+  const ki = kit.prepare(k, RUN_ID, {});
+  check(ki.code === 0 && ki.json && ki.json.ok === true, 'I12-2 control: the canonical spellings of both control files and of the manifest are accepted as declared inputs', { code: ki.code, out: ki.stdout.slice(0, 300) });
+  // I12-4: a name that merely holds a dot or a colon elsewhere has no form equal to a protected target, so this rule leaves it to the existing checks (which accept these as declared inputs).
+  const di = aliasClone(state, state.b0, 'c-dots');
+  putRequest(di, RUN_ID, 'transaction-inputs.json', ['.ai/security-paths.json.bak', '.ai/security-paths:json', 'docs/security-paths.json.']);
+  const dr = kit.prepare(di, RUN_ID, {});
+  check(dr.code === 0 && dr.json && dr.json.ok === true, 'I12-4 control: names that only hold a dot or a colon elsewhere are not refused as declared inputs', { code: dr.code, out: dr.stdout.slice(0, 300) });
+  // I12-2a: the canonical manifest spelling keeps its own refusal, as a draft in prepare and in the unprepared diff, and as the operation of a forged plan in the prepared diff (no alias refusal, no other code).
+  const mp = cloneTree(state.b0, path.join(state.dir, 'i122-c-manifest-p'));
+  putDraft(mp, RUN_ID, T_MANIFEST, aliasDraftOf(S2));
+  const mBefore = noWriteState(mp, RUN_ID);
+  expectP(check, 'I12-2a control: the canonical manifest draft keeps APPLY_MANIFEST_DRAFT in prepare', kit.prepare(mp, RUN_ID, {}), [{ target: T_MANIFEST, ...MANIFEST_DRAFT }]);
+  checkNoWrite(check, 'I12-2a control: the canonical manifest draft in prepare', mp, RUN_ID, mBefore);
+  const md = cloneTree(state.b0, path.join(state.dir, 'i122-c-manifest-d'));
+  putDraft(md, RUN_ID, T_MANIFEST, aliasDraftOf(S2));
+  expectF(check, 'I12-2a control: the canonical manifest draft keeps APPLY_MANIFEST_DRAFT in the unprepared diff', kit.diff(md, RUN_ID), { ...MANIFEST_DRAFT, exit: 3 });
+  const mf = cloneTree(state.bp, path.join(state.dir, 'i122-c-manifest-f'));
+  forgeTargetOp(mf, RUN_ID, T_MANIFEST, aliasDraftOf(S2));
+  expectF(check, 'I12-2a control: a forged plan operating on the canonical manifest keeps APPLY_MANIFEST_DRAFT in the prepared diff', kit.diff(mf, RUN_ID), { ...MANIFEST_DRAFT, exit: 3 });
+}
+// C12-R4, in isolated copies of the skill (the repository's own files are never touched): the protected runtime targets come from the catalog's target list alone, so a missing runtime source cannot empty it, and an unreadable
+// catalog fails closed for names under `.ai/tools/` that are not their own canonical form.
+function aliasUnreadableRows(context, kit, check, state, dir) {
+  const ALIAS = '.ai/tools/GIT-SAFE.mjs';
+  const noSource = copySkillWith(context, path.join(dir, 'i124-skill-nosource'));
+  fs.rmSync(path.join(noSource, 'assets', 'tools', 'review-diff.mjs'));
+  const kitNoSource = makeKit(context, check, noSource);
+  const noCatalog = copySkillWith(context, path.join(dir, 'i124-skill-nocatalog'));
+  fs.writeFileSync(path.join(noCatalog, 'data', 'runtime-units.json'), '{ not json');
+  const kitNoCatalog = makeKit(context, check, noCatalog);
+  const declare = (names) => { const p = aliasClone(state, state.b0, 'r4'); putRequest(p, RUN_ID, 'transaction-inputs.json', names); return p; };
+  // a valid catalog, one runtime source missing: a declarations-only plan declaring an alias is still refused by name (prepare and the unprepared diff); a canonical declaration is not refused
+  for (const alias of [ALIAS, '.ai/tools/git-safe.mjs.', '.ai/tools/git-safe.mjs::$DATA']) {
+    const tag = `I12-4 C12-R4 (a runtime source is missing) declared ${show(alias)}`;
+    const p = declare([alias]);
+    const before = noWriteState(p, RUN_ID);
+    expectAliasP(check, `${tag}: prepare`, kitNoSource.prepare(p, RUN_ID, {}), alias);
+    checkNoWrite(check, `${tag}: prepare`, p, RUN_ID, before);
+    expectAliasF(check, `${tag}: unprepared diff`, kitNoSource.diff(declare([alias]), RUN_ID), alias);
+  }
+  const canon = kitNoSource.prepare(declare(['.ai/tools/git-safe.mjs']), RUN_ID, {});
+  check(canon.code === 0 && canon.json && canon.json.ok === true, 'I12-4 C12-R4 control: with a runtime source missing, the canonical declaration is not refused by the alias rule', { code: canon.code, out: canon.stdout.slice(0, 300) });
+  // the same alias embedded in a forged plan's metadata.transactionInputs: loading the plan refuses it as APPLY_PLAN_INVALID, before the catalog is consulted for anything else
+  const f = aliasClone(state, state.bp, 'r4-forged');
+  const sha2 = forgeDeclaredInput(f, RUN_ID, ALIAS);
+  const fBefore = noWriteState(f, RUN_ID);
+  expectPlanInvalid(check, 'I12-4 C12-R4 (a runtime source is missing) forged plan declaring the alias: prepared diff', kitNoSource.diff(f, RUN_ID));
+  check(projectSnapshot(f) === fBefore.project, 'I12-4 C12-R4: the prepared diff writes nothing');
+  expectPlanInvalid(check, 'I12-4 C12-R4 (a runtime source is missing) forged plan declaring the alias: commit of the bound, hash-approved plan', kitNoSource.commit(f, RUN_ID, sha2));
+  checkNoWrite(check, 'I12-4 C12-R4: commit', f, RUN_ID, fBefore);
+  // an unreadable catalog: the fixed names stay protected and every non-canonical name under .ai/tools/ is refused, as a declared input and as a draft; a name that is its own canonical form is not
+  for (const alias of [ALIAS, '.ai/tools/git-safe.mjs.', '.ai/tools/Brand-New.mjs']) {
+    const tag = `I12-4 C12-R4 (the catalog is unreadable) declared ${show(alias)}`;
+    const p = declare([alias]);
+    const before = noWriteState(p, RUN_ID);
+    expectAliasP(check, `${tag}: prepare`, kitNoCatalog.prepare(p, RUN_ID, {}), alias);
+    checkNoWrite(check, `${tag}: prepare`, p, RUN_ID, before);
+    expectAliasF(check, `${tag}: unprepared diff`, kitNoCatalog.diff(declare([alias]), RUN_ID), alias);
+  }
+  const draftRoot = aliasClone(state, state.b0, 'r4-draft');
+  putDraft(draftRoot, RUN_ID, ALIAS, aliasDraftOf(policyS2(context)));
+  const draftBefore = noWriteState(draftRoot, RUN_ID);
+  expectAliasP(check, `I12-4 C12-R4 (the catalog is unreadable) draft ${show(ALIAS)}: prepare`, kitNoCatalog.prepare(draftRoot, RUN_ID, {}), ALIAS);
+  checkNoWrite(check, 'I12-4 C12-R4 (the catalog is unreadable) draft: prepare', draftRoot, RUN_ID, draftBefore);
+  const canonNoCatalog = kitNoCatalog.prepare(declare(['.ai/tools/brand-new.mjs']), RUN_ID, {});
+  check(canonNoCatalog.code === 0 && canonNoCatalog.json && canonNoCatalog.json.ok === true, 'I12-4 C12-R4 control: with the catalog unreadable, a name under .ai/tools/ that is its own canonical form is not refused by the alias rule', { code: canonNoCatalog.code, out: canonNoCatalog.stdout.slice(0, 300) });
+  const readable = kit.prepare(declare(['.ai/tools/Brand-New.mjs']), RUN_ID, {});
+  check(readable.code === 0 && readable.json && readable.json.ok === true, 'I12-4 C12-R4 control: with the catalog readable, a non-canonical name that is no catalog alias is not refused (the fail-closed rule applies only to an unreadable catalog)', { code: readable.code, out: readable.stdout.slice(0, 300) });
+}
+async function aliasGates(context, kit, check, step, dir, state, S2) {
+  const draft = aliasDraftOf(S2);
+  await step('I12-2 the alias set covers every protected target: the two control files, the manifest and every runtime-unit target of the shipped catalog', async () => {
+    const catalog = readJson(skillPath(context, 'data/runtime-units.json'));
+    check(catalog && Array.isArray(catalog.units) && eq(sorted(catalog.units.map((u) => u.target)), sorted(RUNTIME_TARGETS)), 'the runtime-unit targets this test aliases are exactly the catalog targets', catalog && catalog.units && catalog.units.map((u) => u.target));
+    const all = [...POLICY_ALIASES, ...SETTINGS_ALIASES, ...MANIFEST_ALIASES, ...RUNTIME_ALIASES, ...GIT_SAFE_ALIASES];
+    const protectedTargets = [T_POLICY, T_SETTINGS, T_MANIFEST, ...RUNTIME_TARGETS];
+    check(all.every((a) => !protectedTargets.includes(a) && protectedTargets.includes(a.replace(/[A-Z]/g, (ch) => ch.toLowerCase()))), 'every alias differs in spelling and folds under the ASCII fold to exactly one protected target', all.filter((a) => protectedTargets.includes(a) || !protectedTargets.includes(a.replace(/[A-Z]/g, (ch) => ch.toLowerCase()))));
+    check(!protectedTargets.some((t) => t.replace(/[A-Z]/g, (ch) => ch.toLowerCase()) !== t), 'every canonical target is already ASCII lower case (the canonical spelling is its own fold)', protectedTargets);
+  });
+  await step('I12-2 a draft spelled as a case variant of the installed policy, a settings file, the manifest or a runtime-unit target is refused by name before any approval, in prepare (with and without the content approval) and in the unprepared diff, and nothing is written', async () => {
+    const rows = [
+      ...POLICY_ALIASES.map((alias, i) => ({ alias, draft, approve: i < 2 })),
+      { alias: POLICY_ALIASES[0], draft, consumers: true },
+      ...SETTINGS_ALIASES.map((alias, i) => ({ alias, draft, approve: i === 0 })),
+      ...MANIFEST_ALIASES.map((alias, i) => ({ alias, draft, approve: i < 2 })),
+      { alias: MANIFEST_ALIASES[0], draft, approve: true, manifest: true },
+      ...RUNTIME_ALIASES.map((alias, i) => ({ alias, draft, approve: RUNTIME_MEMBERS[i] === 'git-safe.mjs' })),
+      ...GIT_SAFE_ALIASES.map((alias) => ({ alias, draft })),
+    ];
+    aliasDraftRows(context, kit, check, state, rows);
+  });
+  await step('I12-4 a draft spelled with a trailing dot or space, both, a stream suffix, a dotted or streamed directory or a case change plus a dot on a protected target is refused by name before any approval, in prepare (with and without the content approval) and in the unprepared diff, and nothing is written', async () => {
+    const rows = [
+      ...POLICY_SPELLINGS.map((alias, i) => ({ tag: 'I12-4', alias, draft, approve: i === 0 || i === 3 })),
+      ...SETTINGS_SPELLINGS.map((alias, i) => ({ tag: 'I12-4', alias, draft, approve: i === 0 })),
+      ...MANIFEST_SPELLINGS.map((alias, i) => ({ tag: 'I12-4', alias, draft, approve: i === 0 })),
+      ...RUNTIME_SPELLINGS.map((alias, i) => ({ tag: 'I12-4', alias, draft, approve: i === 0 })),
+    ];
+    aliasDraftRows(context, kit, check, state, rows);
+  });
+  await step('I12-4 a rewritten prepared plan whose operation names one of these spellings is refused by name in the prepared diff and in the bound, hash-approved commit, with nothing rendered and nothing written', async () => {
+    const spellings = [
+      ...POLICY_SPELLINGS.filter((s, i) => i !== 6), ...SETTINGS_SPELLINGS.filter((s, i) => i === 0 || i === 3 || i === 4), ...MANIFEST_SPELLINGS.filter((s, i) => i === 0 || i === 3 || i === 5),
+      ...RUNTIME_SPELLINGS.filter((s, i) => i === 0 || i === 3 || i === 4 || i === 5),
+    ];
+    aliasForgedRows(kit, check, state, spellings, draft, forgeTargetOp, 'I12-4');
+  });
+  await step('I12-4 C12-R3: a forged, consistently bound, hash-approved plan whose source inventory keeps the canonical policy draft name while the operation names a trailing-dot, trailing-space or stream spelling is refused by name in the prepared diff and in commit, and the installed policy is unchanged', async () => {
+    aliasForgedRows(kit, check, state, ['.ai/security-paths.json.', '.ai/security-paths.json ', '.ai/security-paths.json::$DATA'], draft, forgeKeepingInventory, 'I12-4 C12-R3 (canonical source inventory)');
+  });
+  await step('I12-4 a declared transaction input spelled with a trailing dot or space, both, a stream suffix, a dotted or streamed directory or a case change plus a dot is refused by name in prepare and in the unprepared diff', async () => {
+    aliasInputRows(kit, check, state, [...POLICY_SPELLINGS, ...SETTINGS_SPELLINGS, ...MANIFEST_SPELLINGS, ...RUNTIME_SPELLINGS], 'I12-4');
+  });
+  await step('I12-4 C12-R4: a missing runtime source cannot empty the protected runtime targets, and an unreadable catalog fails closed under .ai/tools/ (isolated skill copies)', async () => {
+    aliasUnreadableRows(context, kit, check, state, dir);
+  });
+  await step('I12-2 a rewritten prepared plan whose operation targets an alias is refused by name in the prepared diff and in the bound, hash-approved commit, before the gate, with nothing rendered and nothing written; an unrelated target in the same forged shape is not refused', async () => {
+    aliasForgedRows(kit, check, state, [POLICY_ALIASES[0], POLICY_ALIASES[3], SETTINGS_ALIASES[0], MANIFEST_ALIASES[0], MANIFEST_ALIASES[3], RUNTIME_ALIASES[4]], draft);
+    // control: the same forging with a target that is no alias keeps every binding consistent, so the refusals above are the alias rule alone
+    const g = cloneTree(state.bp, path.join(dir, 'i122-f-control'));
+    forgeTargetOp(g, RUN_ID, 'docs/Security-Paths.json', '# note\n');
+    const before = projectSnapshot(g);
+    const d = kit.diff(g, RUN_ID);
+    check(d.code === 0 && d.json && d.json.ok === true && d.json.prepared === true && Array.isArray(d.json.files) && d.json.files.length === 1 && d.json.files[0].target === 'docs/Security-Paths.json', 'I12-2 control: a forged plan on an unrelated target renders in the prepared diff', { code: d.code, out: d.stdout.slice(0, 300) });
+    check(projectSnapshot(g) === before, 'I12-2 control: the prepared diff writes nothing');
+  });
+  await step('I12-2 a declared transaction input spelled as an alias of a protected target is refused by name in prepare and in the unprepared diff, even beside the canonical spelling', async () => {
+    aliasInputRows(kit, check, state, [POLICY_ALIASES[0], POLICY_ALIASES[2], SETTINGS_ALIASES[0], SETTINGS_ALIASES[3], MANIFEST_ALIASES[0], MANIFEST_ALIASES[2], RUNTIME_ALIASES[4], GIT_SAFE_ALIASES[0]]);
+  });
+  await step('I12-2a an alias inside a forged prepared plan\'s metadata.transactionInputs keeps the existing APPLY_PLAN_INVALID (exit 1) in the prepared diff and in the bound, hash-approved commit; an unrelated input in the same forged shape is not refused', async () => {
+    aliasForgedInputRows(kit, check, state, [POLICY_ALIASES[0], SETTINGS_ALIASES[0], MANIFEST_ALIASES[0], RUNTIME_ALIASES[4]]);
+  });
+  await step('I12-2 names that are not aliases (another directory, a suffix, a Unicode-only fold) and the canonical spellings (settings, declared inputs, the manifest keeping APPLY_MANIFEST_DRAFT) are not refused by this rule', async () => {
+    aliasControls(context, kit, check, state, S2);
   });
 }
 

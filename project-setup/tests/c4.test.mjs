@@ -2707,10 +2707,14 @@ async function runtimeTargets(context) {
     if (UNIT.some((t) => T[t] === null)) { failures.push(`cannot read the trusted runtime sources: ${UNIT.filter((t) => T[t] === null).join(', ')}`); return; }
     const ALIAS = '.ai/tools/GIT-SAFE.mjs';
     const unrev = (t) => ({ code: 'TOOL_UNIT_UNREVIEWED', error: MSG.TOOL_UNREVIEWED(t), target: t });
-    // One refusal scenario at the four boundaries. spec: { base, drafts, declared, expect: target (UNREVIEWED), lenient: [codes] }.
+    // One refusal scenario at the four boundaries. spec: { base, drafts, declared, expect: target (UNREVIEWED), expectAlias: alias (APPLY_PATH, I12-2b), lenient: [codes] }.
     async function refusal(label, dir, spec) {
       const rt = await useRt(failures, context, spec.base);
       if (!rt) return;
+      // I12-2b: an alias is refused by name with the returned APPLY_PATH (exit 3; the prepare entry targets the alias, the direct envelope is exactly ok, code and error).
+      const aliasText = spec.expectAlias ? `unsafe path: ${spec.expectAlias}` : null;
+      const wantF = aliasText ? { code: 'APPLY_PATH', error: aliasText, exit: 3 } : { ...unrev(spec.expect), exit: 3 };
+      const wantEntry = aliasText ? { target: spec.expectAlias, code: 'APPLY_PATH', error: aliasText } : { target: spec.expect, code: 'TOOL_UNIT_UNREVIEWED', error: MSG.TOOL_UNREVIEWED(spec.expect) };
       const root = cloneTree(rt.root, path.join(dir, `u-${label.replace(/\W+/g, '-').slice(0, 24)}-${++seq}`));
       for (const [t, data] of Object.entries(spec.drafts)) putDraft(root, CID, t, data);
       if (spec.declared && spec.declared.length) putRequest(root, CID, 'transaction-inputs.json', spec.declared);
@@ -2721,12 +2725,12 @@ async function runtimeTargets(context) {
       const f = kit.diff(root, CID, gopt);
       if (accepted) {
         check(f.code === 3 && f.json && f.json.ok === false && accepted.includes(f.json.code) && f.json.target === spec.expect && f.stderr === '', `${label}: unprepared diff refuses ${spec.expect} (${accepted.join(' or ')})`, { code: f.code, out: f.stdout.slice(0, 300) });
-      } else expectF(check, `${label}: unprepared diff`, f, { ...unrev(spec.expect), exit: 3 });
+      } else expectF(check, `${label}: unprepared diff`, f, wantF);
       const p = kit.prepare(root, CID, gopt);
       if (accepted) {
         const e = p.json && p.json.errors && p.json.errors[0];
         check(p.code === 3 && p.stderr === '' && p.json && p.json.code === 'APPLY_PLAN_REJECTED' && p.json.errors.length === 1 && e && e.target === spec.expect && accepted.includes(e.code), `${label}: prepare refuses ${spec.expect} (${accepted.join(' or ')})`, { code: p.code, out: p.stdout.slice(0, 300) });
-      } else expectP(check, `${label}: prepare`, p, [{ target: spec.expect, code: 'TOOL_UNIT_UNREVIEWED', error: MSG.TOOL_UNREVIEWED(spec.expect) }]);
+      } else expectP(check, `${label}: prepare`, p, [wantEntry]);
       check(projectSnapshot(root) === before.project && sameBytes(readBytes(lockOwnerPath(root)), before.lock) && !exists(runFile(root, CID, 'plan.json')) && !exists(runFile(root, CID, 'journal.json')), `${label}: the refused diff and prepare wrote no plan, journal, manifest, project file or heartbeat`);
       if (guard) check(guard.hits().length === 0, `${label}: the unbound installed target was never read`, guard.hits().slice(0, 3));
       // the same drafts in a prepared plan: a forged but hash-approved plan proves prepare is not the only boundary
@@ -2740,11 +2744,11 @@ async function runtimeTargets(context) {
       const fopt = fguard ? { preload: fguard.file } : {};
       const pd = kit.diff(fr, CID, fopt);
       if (accepted) check(pd.code === 3 && pd.json && pd.json.ok === false && accepted.includes(pd.json.code) && pd.json.target === spec.expect && pd.stderr === '', `${label}: prepared diff refuses ${spec.expect}`, { code: pd.code, out: pd.stdout.slice(0, 300) });
-      else expectF(check, `${label}: prepared diff`, pd, { ...unrev(spec.expect), exit: 3 });
+      else expectF(check, `${label}: prepared diff`, pd, wantF);
       check(!/"files"|"diff"/.test(pd.stdout), `${label}: the prepared review builds no printable review text before refusing`, pd.stdout.slice(0, 120));
       const pc = kit.commit(fr, CID, sha1, fopt);
       if (accepted) check(pc.code === 3 && pc.json && pc.json.ok === false && accepted.includes(pc.json.code) && pc.json.target === spec.expect && pc.stderr === '', `${label}: commit refuses ${spec.expect}`, { code: pc.code, out: pc.stdout.slice(0, 300) });
-      else expectF(check, `${label}: commit`, pc, { ...unrev(spec.expect), exit: 3 });
+      else expectF(check, `${label}: commit`, pc, wantF);
       checkNoWrite(check, `${label}: commit`, fr, CID, fb);
       if (fguard) {
         check(fguard.hits().length === 0, `${label}: the unbound installed target was not read by the prepared review or commit (guard on the clone they ran against)`, fguard.hits().slice(0, 3));
@@ -2766,10 +2770,9 @@ async function runtimeTargets(context) {
         await refusal('helper trusted, core and entrypoint arbitrary: the core first', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: ARB, [T_ENTRY]: ARB }, expect: T_CORE });
         await refusal('unchanged members without declarations, the first is named and unread', dir, { base: 's2old', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [], expect: T_HELPER, noRead: [T_HELPER, T_CORE] });
         await refusal('only the helper declared: the core is the first without a role', dir, { base: 's2old', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [T_HELPER], expect: T_CORE, noRead: [T_CORE] });
-        // PLAN-GAP: 3.10 says an alias operation does not satisfy a missing canonical member 'on a host where it is a different file', and also prescribes lexical recognition
-        // with no realpath lookup. The two alias scenarios assert the lexical behavior on every host: an alias never stands in for the canonical member and must itself be trusted.
-        await refusal('a trusted case alias does not satisfy the missing canonical entrypoint', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [T_GUARD_CORE]: T[T_GUARD_CORE], [T_REVIEW]: T[T_REVIEW], [ALIAS]: T[T_ENTRY] }, expect: T_ENTRY });
-        await refusal('an arbitrary case alias is refused and the canonical target is named', dir, { base: 's2full', drafts: { [ALIAS]: ARB }, declared: UNIT, expect: T_ENTRY });
+        // I12-2b: ALIAS is a case alias of a catalog target; since I12-2 it is refused by name with APPLY_PATH before the unit check, so an alias still never stands in for the canonical member.
+        await refusal('a trusted case alias is refused as a case alias (I12-2) and never satisfies the missing canonical entrypoint', dir, { base: 'none', drafts: { [T_HELPER]: T[T_HELPER], [T_CORE]: T[T_CORE], [T_GUARD_CORE]: T[T_GUARD_CORE], [T_REVIEW]: T[T_REVIEW], [ALIAS]: T[T_ENTRY] }, expectAlias: ALIAS });
+        await refusal('an arbitrary case alias is refused as a case alias (I12-2) by its own name', dir, { base: 's2full', drafts: { [ALIAS]: ARB }, declared: UNIT, expectAlias: ALIAS });
         // PLAN-GAP: the code for a protected unchanged member (UNREVIEWED or the migration protected-input refusal) is not pinned for ordinary plans; the target and the absence of a read are.
         await refusal('a protected unchanged member is never read', dir, { base: 'protcore', drafts: { [T_ENTRY]: T[T_ENTRY] }, declared: [T_HELPER], expect: T_CORE, noRead: [T_CORE], lenient: ['TOOL_UNIT_UNREVIEWED', 'MIGRATION_PROTECTED_INPUT'] });
       });
