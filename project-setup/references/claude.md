@@ -210,7 +210,7 @@ v1 can reach a Claude session three ways. Two active copies are ambiguous, so Ph
 |---|---|---|
 | Skill enabled on claude.ai, synced into Claude Code | `anthropic-skills:project-setup`, source "claude.ai sync", under `<config>/skills/synced/<id>/` | `/plugin` → Installed → select it → Space until it reads `off`. Saved as `"skillOverrides": { "anthropic-skills:project-setup": "off" }` in `.claude/settings.local.json`. Only this skill is affected; `pr-review` and `audit` stay. Or disable it on claude.ai for the whole account |
 | Plain user copy | `~/.claude/skills/project-setup` (no `.installed.json`) | The installer refuses to replace it unless `--replace-unversioned` (backed up, restorable) |
-| Organization plugin bundling several skills | `<plugin>:project-setup`, plugin type in `/plugin` → Installed | A public issue reported `skillOverrides` not applying to plugin skills (2.1.226); verify on your version. Otherwise ask the plugin owner to ship v2 or drop v1. Do not use a `Skill(...)` deny rule: it can match v2 too |
+| Organization plugin bundling several skills | `<plugin>:project-setup`, plugin type in `/plugin` → Installed | A public issue reported `skillOverrides` not applying to plugin skills (2.1.226); verify on your version. Otherwise ask the plugin owner to ship this version or drop v1. Do not use a `Skill(...)` deny rule: it can match this version too |
 
 Facts learned live:
 - `CLAUDE_CONFIG_DIR` does NOT isolate account-level skills synced from claude.ai: they appear in the isolated config
@@ -219,8 +219,8 @@ Facts learned live:
 - The `/plugin` skill toggle writes `.claude/settings.local.json` in the project; it is user-owned and the skill never
   writes it (write denylist).
 
-Install v2 next to v1 only after v1 is retired: start a new session, confirm one `project-setup`, run Phase 0 on a
-test repo. Rollback: undo the override (or re-enable) and `install.mjs rollback`.
+Install this version next to v1 only after v1 is retired: start a new session, confirm one `project-setup`, run
+Phase 0 on a test repo. Rollback: undo the override (or re-enable) and `install.mjs rollback`.
 
 ## Load verification (Claude session)
 

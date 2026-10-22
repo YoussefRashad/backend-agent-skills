@@ -75,10 +75,10 @@ commit and one journal apply both, the manifest last, exactly as approved. Every
 `transaction-inputs.json` consumers, the installed policy, the manifest) is rechecked before anything is written. Run
 ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
 
-Protected targets are matched by exact spelling: `.ai/security-paths.json`, `.claude/settings.json`,
-`.ai/manifest.json` and every `.ai/tools/` runtime-unit target listed in the shipped catalog
-(`data/runtime-units.json`). A draft target or declared input that is another spelling of one of them is refused on
-every platform as `APPLY_PATH` (`unsafe path: <target>`, exit 3). Each path component is compared through its ASCII
+The gates select protected targets by exact spelling (`.ai/security-paths.json`, `.claude/settings.json`,
+`.ai/manifest.json` and every `.ai/tools/` runtime-unit target listed in the shipped catalog,
+`data/runtime-units.json`), so a draft target or declared input that is any other spelling of one of them is refused
+on every platform as `APPLY_PATH` (`unsafe path: <target>`, exit 3). Each path component is compared through its ASCII
 case fold, its prefix before the first `:` (an NTFS stream such as `::$DATA`) and both with trailing dots and spaces
 removed, so `.ai/SECURITY-PATHS.JSON`, `.ai/security-paths.json.` and `.ai/security-paths.json::$DATA` are all
 refused, while `.ai/security-paths.json.bak` is not; 8.3 short names are not modelled. If the catalog itself cannot be

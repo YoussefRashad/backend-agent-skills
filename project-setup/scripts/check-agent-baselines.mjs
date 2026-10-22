@@ -144,8 +144,9 @@ export function main(argv, dependencies = {}) {
   }
 }
 
-// The entry check compares resolved paths and, failing that, native real paths, so a launch through a junction or an
-// 8.3 short name still runs the CLI (an alternate launch path that missed it would print nothing).
+// The entry check compares resolved paths and, failing that, native real paths, so a launch through a junction
+// (tested) or, through realpath, an 8.3 short name (untested) still runs the CLI (an alternate launch path that
+// missed it would print nothing).
 function isEntryPoint() {
   if (!process.argv[1]) return false;
   const self = fileURLToPath(import.meta.url);

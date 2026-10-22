@@ -21,6 +21,11 @@ draft that is invalid, lowers the schema, or drops an installed entry outside th
 (`APPLY_POLICY_REGRESSION`, exit 3); a content approval does not bypass it. To change the shipped defaults, edit the
 skill's file; installed projects receive the change through that workflow.
 
+Removing an installed `projectPatterns` entry is a manual edit outside setup. The apply gate refuses that removal
+even in a reviewed migration with decisions, by design: setup never shrinks a project's own protections, so the
+refusal is expected and is not a bug. To drop such an entry, edit `.ai/security-paths.json` directly and review that
+change like any other project edit.
+
 `.env.example` is in the list on purpose: real values end up in templates often enough that no agent reads any
 `.env*` file.
 

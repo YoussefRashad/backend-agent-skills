@@ -13,8 +13,11 @@ RELEASE-NOTES-3.0.0-rc.1.md. Publication remains a separate authorized action.
 Review corrections: a rerun never copies the shipped policy defaults over an installed policy, and
 apply refuses a policy draft that is invalid, lowers the schema or drops installed entries outside
 the reviewed migration workflow (APPLY_POLICY_REGRESSION, exit 3). The never-read boundary is the
-shipped defaults plus the installed policy. Script entry checks accept junction and real-path
-launches, the raw-Git hook blocks --config-env alias overrides, and stale wording is corrected.
+shipped defaults plus the installed policy. Other spellings of a protected target (ASCII case, a
+trailing dot or space, a ":" stream suffix; the control files, the manifest and every catalog
+runtime target) are refused with APPLY_PATH (unsafe path: <target>, exit 3). Script entry checks
+accept junction and real-path launches, the raw-Git hook blocks --config-env alias overrides, and
+stale wording is corrected.
 
 ## 2.0.0
 Release of the `2.0.0-rc.13` source, unchanged in function. Only `VERSION` and release documentation changed

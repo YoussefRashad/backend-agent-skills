@@ -12,7 +12,10 @@ action; automated acceptance does not authorize a tag, upload or deployment.
 - Script-only root-template handling that preserves existing values.
 - Validation and doctor diagnostics with explicit evidence limits.
 - Complete candidate case composition, installed-payload checks and reproducible local ZIPs.
-- Rerun-safe installed policies, junction-safe script entry checks and `--config-env` alias blocks.
+- Rerun-safe installed policies, junction-safe script entry checks and `--config-env` alias blocks;
+  other spellings of the control files, the manifest and the catalog runtime targets (ASCII case,
+  a trailing dot or space, a `:` stream suffix) are refused with `APPLY_PATH`
+  (`unsafe path: <target>`, exit 3).
 
 ## Compatibility and rollback
 
