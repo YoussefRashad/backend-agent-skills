@@ -1,6 +1,6 @@
-# project-setup 3.0.0-rc.1 - skill source
+# project-setup 3.0.0-rc.2 - skill source
 
-**Release candidate 3.0.0-rc.1.** See `RELEASE-NOTES-3.0.0-rc.1.md` for acceptance requirements,
+**Release candidate 3.0.0-rc.2.** See `RELEASE-NOTES-3.0.0-rc.2.md` for acceptance requirements,
 compatibility and pending host measurements.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
@@ -152,7 +152,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.0.0-rc.1 in the distribution repository.
+requires or creates project-setup-v3.0.0-rc.2 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -161,5 +161,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.0.0-rc.1 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>
 ```

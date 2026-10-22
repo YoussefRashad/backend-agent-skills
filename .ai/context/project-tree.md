@@ -16,7 +16,7 @@ claude-backend-skills/
 ├── toolchain-config/           skill 2 — the canonical ESLint/Prettier/tsconfig baseline
 │   ├── SKILL.md                diff-and-ask workflow
 │   └── templates/              eslint · prettier · tsconfig · husky · security-scan
-├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0-rc.1)
+├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0-rc.2)
 ├── pr-review/SKILL.md          skill 4 — per-PR multi-lane review (general-purpose)
 ├── audit/SKILL.md              skill 5 — full-codebase safety net (general-purpose)
 ├── scripts/check-versions.mjs  version-stamp guard (run by `npm run check` and CI)
@@ -30,12 +30,12 @@ it does not apply to any of them, and none carries a `templates/version.json`. T
 skills" in `backend-standards/SKILL.md`.
 
 `pr-review` and `audit` are single `SKILL.md` files. `project-setup` is a versioned release
-candidate (`project-setup/VERSION` is `3.0.0-rc.1`) with its own layout: `SKILL.md`,
+candidate (`project-setup/VERSION` is `3.0.0-rc.2`) with its own layout: `SKILL.md`,
 `references/`, `assets/`, `data/`, `scripts/`, `install/` (installer and local release builder),
 `tests/`, `evals/`, `README.md`, `CHANGELOG.md` and release notes. Its test suite and its
 `scripts/check-agent-baselines.mjs` pin SHA-256 digests of several of its files, so it is excluded
 from Prettier (`.prettierignore`) — do not edit it as a side effect of other work. Final 3.0.0 is
-blocked on host measurements that are still pending (`project-setup/RELEASE-NOTES-3.0.0-rc.1.md`).
+blocked on host measurements that are still pending (`project-setup/RELEASE-NOTES-3.0.0-rc.2.md`).
 
 ## `backend-standards/`
 

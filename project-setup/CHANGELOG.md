@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.0.0-rc.2
+
+Review rules candidate: Adversarial, Consumer, Boundary and Contract passes; reachable
+findings beyond the plan and sibling-instance checks; recorded-drift documentation updates.
+Adds capture-once validation, per-item isolation, guarded stack prerequisites, real-validator
+fallback checks, outcome contracts, trusted log classification and computed-overflow handling.
+Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.
+
+Manifest schema 3 remains unchanged. V2 validation rejects schema 3;
+this is not a retrofitted pre-write guard in every old command.
+Roll back project state with the tooling used for the update before reverting the installed skill.
+Existing projects receive the instructions through reviewed managed updates.
+
+Automated acceptance and pending host measurements are described in
+RELEASE-NOTES-3.0.0-rc.2.md. Publication remains a separate authorized action.
+
 ## 3.0.0-rc.1
 
 Security and permissions candidate: anchored policy migration, trusted-checkout review,

@@ -78,7 +78,32 @@ review rules do not go into the canonical reviewer; they live in the optional, p
 | `error-contract.md` | Error shapes, exception filters, status mapping | Filters, pipes, handlers. If inconsistent: describe, propose one in `TODO.md` |
 | `configuration.md` | Variable / required / secret/non-secret / used by / description / source | Config/validation code via local file tools + `env-keys.mjs keys --template auto`; never values |
 | `glossary.md` | Domain terms, enum values, abbreviations | Entity/enum/service names |
-| `development-rules.md` | Scope discipline, backward compatibility, reuse of patterns | Code style + linter config |
+| `development-rules.md` | Scope discipline, backward compatibility, reuse of patterns, contract coverage and test-run hygiene | Code style + linter config + project-setup testing and hygiene requirements below |
+
+The testing and hygiene requirements below are skill-template inputs to development-rules.md,
+including during update mode when application code and configuration have not changed.
+
+For each rule "X is invalid, unknown or rejected when Y", tests MUST cover Y absent, Y present
+but inconsistent, and the boundary. Every documented promise MUST have a test that proves it.
+
+Agents MUST run only the specs they touch; only one full-suite or acceptance run MUST run at a time.
+Timing-sensitive specs can fail under concurrent test load.
+
+A red run is loaded only when another test or acceptance run was observably running at the same
+time; focused specs count. Record the red run and the overlap evidence, then rerun it alone.
+The isolated rerun is the counting result. A red isolated rerun is a failure. Without observed
+overlap, do not dismiss a failure as load. Use the same rule in the acceptance record.
+
+Treat development-rules.md as merged living documentation. On update, draft a reviewed merged
+edit adding only missing testing and hygiene requirements, even if code and configuration are
+unchanged. Keep equivalent existing wording and stricter project requirements. Show conflicts
+for an explicit decision; do not silently weaken project text.
+
+Do not re-add a file removed by the user; ask. If code exists and the file was never generated,
+propose its creation through the normal reviewed workflow. If absence cannot be distinguished
+from user removal, ask before proposing restoration. An empty repository gets no context document
+until code exists. If the requirements are already satisfied and nothing else changed, produce
+zero diff.
 
 ## `.ai/decisions/` (ADRs, template `assets/templates/adr.md`)
 

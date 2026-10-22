@@ -147,6 +147,13 @@ mentions `git diff` is permitted.
 Malformed input (invalid JSON, an unparseable command, unexpected arguments, a missing core) is deliberately fail-open
 but loud: exit 1 with the malformed message, never a silent allow. Known gaps are listed in the skill README.
 
+Built-in review skills whose preamble runs raw `git diff`, `git log` or `git show` can fail to
+load under the managed raw-Git hook; affected `/security-review` versions have shown this behavior.
+This is observed workflow evidence, not host-verified behavior. Apply the skill's review method
+through `node .ai/tools/git-safe.mjs` instead, without executing the blocked preamble. You MUST NOT
+allow-list raw `git diff`, including `--name-only`, or disable the hook to load the skill. Keep
+host behavior TO VERIFY; this guidance does not establish that a particular host loads the hook.
+
 ### When the hook is added
 
 Insertion is conditional: the merge ensures the entry only when the reviewed guard (`guard-raw-git.mjs` and its core

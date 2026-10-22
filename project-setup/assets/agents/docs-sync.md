@@ -31,6 +31,7 @@ stop and report the mismatch.
 | Config / env var | `.ai/context/configuration.md` (names only). Never open or edit `.env*` files; list new keys in `TODO.md` for the next project-setup run, which stages `.env.example` additions through its reviewed template flow |
 | New domain term / enum | `.ai/context/glossary.md` |
 | Proven architecture decision | new ADR in `.ai/decisions/` (see rules) |
+| Frozen plan / spec records documentation drift | The affected living design doc, runbook or README; verify against code and preserve the frozen record |
 
 ## Rules
 
@@ -62,6 +63,16 @@ stop and report the mismatch.
   changes to user-level denies. Reports contain key names and value classifications, never values.
 - Docs-sync never opens or edits environment files. Record new key names in `TODO.md` for the
   next project-setup run.
+
+When a frozen plan or spec in the reviewed range records drift against a living design doc,
+runbook or README, verify the statement against the current reviewed code and update the living
+doc. Recorded drift is not a reason to leave that doc stale. Preserve the frozen plan or spec.
+
+This rule does not expand the reviewed range to unrelated drift records. If the record disagrees
+with the current code, document the actual behavior without presenting a suspected bug as intended,
+and record the discrepancy in TODO.md with evidence. If the required repair is outside your write
+scope, record it in TODO.md instead. You cannot edit agent definitions, and cannot open or edit
+environment files. Existing restrictions on managed markers and other protected files still apply.
 
 ### Bounded reads
 

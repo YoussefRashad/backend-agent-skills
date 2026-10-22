@@ -358,8 +358,8 @@ informational rows:
 
 ## 5. Commit, rerun and rollback
 
-Roll back project state with the rc.1 tooling before reverting the installed skill. If later
-independent runs exist, roll them back newest first. Do not split this migration into
+Roll back project state with the tooling used for the update before reverting the installed skill.
+If later independent runs exist, roll them back newest first. Do not split this migration into
 successive manifest commits.
 
 Keep recovery material until the user confirms the update. Exit 2 or 4 before a journal
