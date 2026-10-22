@@ -48,7 +48,7 @@ import {
 } from './lib.mjs';
 import { blockHashes, outsideContent } from './blocks.mjs';
 import { readManagedMetadata, readManifest, readOmissions } from './ownership.mjs';
-import { matchesPolicyPath, parseSecurityPolicy, validateRepoPath } from '../assets/tools/security-policy.mjs';
+import { matchesPolicyPath, parseSecurityPolicy, policyEntryKey, validateRepoPath } from '../assets/tools/security-policy.mjs';
 import { renderSecurityControls } from './render-permissions.mjs';
 import { mergeManagedDenies } from './merge-claude-settings.mjs';
 import { checkSecurityToolUnit, classifySecurityMigration, readRuntimeUnits, resolveSecurityMigration } from './migrate-security-paths.mjs';
@@ -453,14 +453,73 @@ function loadRefusalSet() {
 }
 
 /**
+ * Decisions I12-2, I12-2a and I12-4: the policy gate, the C3 workflow gate, the control-file handling and the manifest
+ * refusal select targets by exact string, so the check is a conservative match on C1's PQ2 forms. It refuses the
+ * spellings that reach the protected file (letter case on a case-insensitive filesystem; on Win32 an NTFS stream suffix
+ * after the first ':' of a component, `.ai/security-paths.json::$DATA` or `.ai::$INDEX_ALLOCATION/security-paths.json`)
+ * and the spellings that stay distinct files under Node's extended-prefix paths but that other Win32 tools would
+ * normalize to it (a trailing ASCII dot or space, `.ai/security-paths.json.`).
+ * Each component of a name is compared through the forms C1 uses for PQ2 (security-policy.mjs `alternatives`): its
+ * ASCII case fold (A-Z to a-z only; toLowerCase would also fold non-ASCII letters such as the Kelvin sign), the nonempty
+ * prefix before its first ':', and both with trailing ASCII dots and spaces removed. A name with the same number of
+ * components as a protected target, every component having a form equal to the target's, and a spelling that differs
+ * from it, is refused as APPLY_PATH on every platform (elsewhere it is a distinct file nobody needs). 8.3 short names
+ * are not modelled (a recorded residual).
+ * Protected: the two control files, the manifest and every runtime-unit target of the shipped catalog, taken from the
+ * catalog's validated target list alone (never from reading runtime sources, so a missing source cannot empty it). If
+ * the catalog itself cannot be read or validated, the check fails closed under `.ai/tools/`: a name whose forms fall
+ * under it and whose spelling is not its own canonical form (lowercase ASCII, no trailing dot or space, no ':' in any
+ * component) is refused too.
+ */
+const asciiFold = (s) => s.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
+function trimDotsAndSpaces(s) {
+  let end = s.length;
+  while (end > 0 && (s[end - 1] === '.' || s[end - 1] === ' ')) end--;
+  return s.slice(0, end);
+}
+/** The PQ2 forms of one component under the ASCII fold: itself, the nonempty prefix before ':', both trimmed. */
+function componentForms(component) {
+  const c = asciiFold(component);
+  const colon = c.indexOf(':');
+  const prefix = colon > 0 ? c.slice(0, colon) : null;
+  const out = new Set([c, trimDotsAndSpaces(c)]);
+  if (prefix !== null) { out.add(prefix); out.add(trimDotsAndSpaces(prefix)); }
+  return out;
+}
+const isCanonicalComponent = (c) => c === asciiFold(c) && c === trimDotsAndSpaces(c) && !c.includes(':');
+let protectedCache = null;
+function protectedTargets() {
+  if (protectedCache) return protectedCache;
+  let units = null;
+  try { units = readRuntimeUnits(JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'data', 'runtime-units.json'), 'utf8'))).units.map((u) => u.target); } catch { units = null; }
+  protectedCache = { targets: [POLICY_REL, SETTINGS_REL, MANIFEST_REL, ...(units || [])], catalogRead: units !== null };
+  return protectedCache;
+}
+function isProtectedAlias(t) {
+  const parts = t.split('/');
+  const forms = parts.map(componentForms);
+  const { targets, catalogRead } = protectedTargets();
+  const aliasOf = (p) => {
+    const q = p.split('/');
+    return p !== t && q.length === parts.length && q.every((c, i) => forms[i].has(c));
+  };
+  if (targets.some(aliasOf)) return true;
+  // C12-R4: no validated catalog, so no runtime target is known; any non-canonical spelling under .ai/tools/ is refused.
+  return !catalogRead && parts.length > 2 && forms[0].has('.ai') && forms[1].has('tools') && !parts.every(isCanonicalComponent);
+}
+
+/**
  * The per-target checks that need no body (plan 6.2, decision I2-2), shared by prepare, the unprepared review and the
- * prepared review, in one order: path safety (throws, exit 2), the drafted manifest, the common refusal set, write
- * denial and scope, vault eligibility, the target type. Returns { code, error } for a refusal, else { abs, exists }.
+ * prepared review, in one order: path safety (throws, exit 2), a case alias of a protected target (I12-2, before the
+ * manifest test and the write scope, so it is the same on every platform), the drafted manifest, the common refusal
+ * set, write denial and scope, vault eligibility, the target type. Returns { code, error } for a refusal, else
+ * { abs, exists }.
  */
 function checkSource(s, isSecret, mode) {
   const t = s.target;
   try { validateRepoPath(t); } catch { throw Object.assign(new Error('unsafe target'), { unsafePath: `${RUN_REL}/${s.source}` }); }
   const { abs } = ioTagged(t, () => safeResolve(root, t));
+  if (isProtectedAlias(t)) return { code: 'APPLY_PATH', error: `unsafe path: ${t}` };
   if (t === MANIFEST_REL) return { code: 'APPLY_MANIFEST_DRAFT', error: 'the manifest is written by commit, not drafted' };
   if (s.origin === 'draft' && isSecret(t)) {
     return { code: 'APPLY_SECRET_TARGET', error: mode === 'diff' ? `refusing textual diff of secret target: ${t}` : 'agent drafts may not target secret-pattern paths' };
@@ -476,10 +535,12 @@ function checkSource(s, isSecret, mode) {
 }
 
 /**
- * Plan 4.1 rules for a declared transaction input (structurally valid already): never under the run area or the lock,
+ * Plan 4.1 rules for a declared transaction input (structurally valid already): never a case alias of a protected
+ * target (I12-2; the canonical spellings, the manifest included, stay legal), never under the run area or the lock,
  * never in the refusal set, never write-denied, always inside the write scope. Shared by prepare and plan loading.
  */
 function declaredInputRefusal(p, isSecret) {
+  if (isProtectedAlias(p)) return { code: 'APPLY_PATH', error: `unsafe path: ${p}` };
   const lower = p.toLowerCase();
   if (['.ai/.run', '.ai/.setup.lock'].some((d) => lower === d || lower.startsWith(`${d}/`)) || isSecret(p)) return { code: 'APPLY_PATH', error: `unsafe path: ${p}` };
   if (matchesAny(p, WRITE_DENYLIST)) return { code: 'APPLY_WRITE_DENIED', error: `write denied by policy: ${p}` };
@@ -791,6 +852,53 @@ function needsMigrationWorkflow(ops, draftOf) {
   return loadCatalog().some((u) => ops.some((o) => o.target === u.target) || targetExists(u.target));
 }
 
+/**
+ * Decision I12-3: the installed bytes a prepared operation is judged by in the prepared review and at commit, read again
+ * and compared (absence included) with the operation's bound precondition, the hash bindingDrift checked. A replacement
+ * between that check and the gate is the existing APPLY_DRIFT (exit 4) with the existing drift row, never a verdict on
+ * bytes nobody bound.
+ */
+function boundCur(o) {
+  const buf = projectBytes(o.target);
+  if ((buf === null ? null : sha256(buf)) !== o.preRawSha) failCode('APPLY_DRIFT', DRIFT_ERROR, 4, { drift: [{ target: o.target, what: DRIFT.target }] });
+  return buf;
+}
+
+const POLICY_REGRESSION = 'policy draft is invalid, lowers the schema, or removes installed entries outside the reviewed migration workflow';
+/**
+ * C12 plan C12-4: the policy regression gate. Applies only when a policy is installed and the plan creates or modifies
+ * it; no policy op, an unchanged one, or no installed policy adds nothing (a fresh draft keeps C2's ordinary handling).
+ * Both texts are read through C1, and identities are policyEntryKey of the parsed entries (schema-1 anchors already
+ * inferred), compared as sets per collection, so case, order, duplicates and inferred anchors never count as a loss.
+ * Refused: a draft C1 rejects (its message and content are never echoed), a lower sourceSchema, the loss of an installed
+ * projectPatterns identity (also by moving it into patterns) and, unless the run carries validated migration evidence
+ * (prepare and the reviews) or plan.security (commit), the loss of an installed patterns identity: moving it to the
+ * project or replacing it with broader coverage is C3's reviewed migration. The installed text is already validated by
+ * the refusal set; if it ever failed to read here the gate fails closed. No approval can bypass it. Throws the c3 refusal.
+ *   draftOf(op), curOf(op)  the bound draft and installed bytes     reviewedMigration  migration evidence or plan.security
+ */
+function checkPolicyRegression(ops, { draftOf, curOf, reviewedMigration }) {
+  const op = ops.find((o) => o.target === POLICY_REL && (o.action === 'create' || o.action === 'modify'));
+  if (!op) return;
+  const installedBuf = curOf(op);
+  if (installedBuf === null) return;
+  const refuse = () => c3Fail(POLICY_REL, 'APPLY_POLICY_REGRESSION', POLICY_REGRESSION);
+  const read = (buf) => {
+    try { return parseSecurityPolicy(buf.toString('utf8')); } catch (e) {
+      if (e instanceof Error && typeof e.code === 'string' && e.code.startsWith('POLICY_')) return null;
+      throw e;
+    }
+  };
+  const installed = read(installedBuf);
+  const draft = read(draftOf(op));
+  if (installed === null || draft === null) throw refuse();
+  if (draft.sourceSchema < installed.sourceSchema) throw refuse();
+  const keys = (r, collection) => new Set(r.policy[collection].map((e) => policyEntryKey(e)));
+  const lost = (collection) => { const kept = keys(draft, collection); return [...keys(installed, collection)].some((k) => !kept.has(k)); };
+  if (lost('projectPatterns')) throw refuse();
+  if (!reviewedMigration && lost('patterns')) throw refuse();
+}
+
 function shippedPolicies() {
   try {
     const b = fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths-v2.0.0.json'));
@@ -1018,6 +1126,8 @@ function analyze(mode, approvals = new Set()) {
         const evidence = securityEvidence({ decisionsBuf: dec.buf, ops, data: reqData, prior: priorState.manifest, hasInput: (t) => declaredSet.has(t), isSecret, prepared: false });
         security = { decisionsSha256: sha256(dec.buf), evidence };
       }
+      // C12 plan C12-4: after the workflow gate or the validated evidence, before the complete-unit check and approvals.
+      checkPolicyRegression(ops, { draftOf: (o) => o.draft, curOf: (o) => o.cur, reviewedMigration: security !== null });
       // C4 plan 3.10 step 4: after C3's checks, before approvals and any write-producing prepare work.
       checkCompleteUnit(ops, { draftOf: (o) => o.draft, curOf: (o) => o.cur, hasInput: (t) => declaredSet.has(t), isSecret });
       if (mode === 'prepare' && ops.length) ordered = runtimeOrder(ops, loadCatalog());
@@ -1271,6 +1381,10 @@ function preparedReview(planBuf) {
     }
   }
   try {
+    // C12 plan C12-4: the policy regression gate after the evidence block, before the complete-unit check. Only the
+    // evidence rebuilt above counts as a reviewed migration; no new workflow check is added here.
+    // Decision I12-3: the installed policy is re-read and checked against its bound precondition first.
+    checkPolicyRegression(ops, { draftOf: (o) => o.draft, curOf: boundCur, reviewedMigration: security !== null });
     checkCompleteUnit(ops, { draftOf: (o) => o.draft, curOf: (o) => o.cur, hasInput: (t) => inputs.has(t), isSecret: requireRefusalSet().isSecret });
   } catch (e) {
     if (!e || !e.c3) throw e;
@@ -1467,6 +1581,11 @@ else if (cmd === 'commit') {
       return r.buf;
     };
     if (!plan.security && needsMigrationWorkflow(plan.ops, draftOf)) failCode('MIGRATION_REQUIRED', MIGRATION_REQUIRED, 3, { target: POLICY_REL });
+    // C12 plan C12-4: the bound installed and draft bytes only; decisions are not resolved again. plan.security keeps its
+    // meaning (managed-pattern loss is C3's reviewed migration); an invalid draft, a lower schema and a lost project
+    // identity are refused with or without it.
+    // Decision I12-3: the installed bytes are compared with the bound precondition before the gate reads them.
+    checkPolicyRegression(plan.ops, { draftOf, curOf: boundCur, reviewedMigration: Boolean(plan.security) });
     if (plan.security) commitToolUnit(plan, draftOf);
     // C4 plan 3.10: current trusted sources against the bound candidates, every plan, never cached from prepare.
     const inputs = new Set(plan.inputs.map((i) => i.target));

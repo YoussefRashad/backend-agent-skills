@@ -174,7 +174,7 @@ async function withStreamGuard(fn) {
 }
 
 // ================================================ plan literals (generated from the frozen plan text) ====
-// Plan 3.6: the CHANGELOG entry inserted after "# Changelog" and one blank line (the last line is the blank separator).
+// Plan 3.6 plus the C12 review-corrections paragraph (C12-15, decision I12-1): the CHANGELOG entry inserted after "# Changelog" and one blank line (the last line is the blank separator).
 const CHANGELOG_ENTRY_LINES = [
   "## 3.0.0-rc.1",
   "",
@@ -185,6 +185,12 @@ const CHANGELOG_ENTRY_LINES = [
   "Roll back project state with rc.1 tooling before reverting the installed skill.",
   "Automated acceptance and pending host measurements are described in",
   "RELEASE-NOTES-3.0.0-rc.1.md. Publication remains a separate authorized action.",
+  "",
+  "Review corrections: a rerun never copies the shipped policy defaults over an installed policy, and",
+  "apply refuses a policy draft that is invalid, lowers the schema or drops installed entries outside",
+  "the reviewed migration workflow (APPLY_POLICY_REGRESSION, exit 3). The never-read boundary is the",
+  "shipped defaults plus the installed policy. Script entry checks accept junction and real-path",
+  "launches, the raw-Git hook blocks --config-env alias overrides, and stale wording is corrected.",
   "",
 ];
 // Plan 3.6: the SKILL.md release heading.
@@ -205,7 +211,7 @@ const README_OPENING_LINES = [
 const README_INVENTORY_ROW_LINES = [
   "install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)",
 ];
-// Plan 3.6: the complete RELEASE-NOTES-3.0.0-rc.1.md.
+// Plan 3.6 plus the C12 "Changes" bullet (C12-15, decision I12-1): the complete RELEASE-NOTES-3.0.0-rc.1.md.
 const RELEASE_NOTES_LINES = [
   "# project-setup 3.0.0-rc.1",
   "",
@@ -221,6 +227,7 @@ const RELEASE_NOTES_LINES = [
   "- Script-only root-template handling that preserves existing values.",
   "- Validation and doctor diagnostics with explicit evidence limits.",
   "- Complete candidate case composition, installed-payload checks and reproducible local ZIPs.",
+  "- Rerun-safe installed policies, junction-safe script entry checks and `--config-env` alias blocks.",
   "",
   "## Compatibility and rollback",
   "",
@@ -2376,8 +2383,8 @@ const PINS = deepFreeze({
   installer: '9e22d4192aed1c504053e9c499bdaf98450a7bd0a80e44b0aeb4b11b19d5b947',
   notes200: '27711d116ec2ee4ba012b9cdaec198703e154055341cba793472d2ee79886eba',
   changelogSuffix: '390782771ef21740d67e8c3c53a8d90a3d2f113fc45d42dee460141ebb769aaf',
-  skillWithOldHeading: 'b71ad80b2d1bb0b3842fedaabd4b8824141379ee89e8ff90e2b5234549b70dfe',
-  readmeTopRest: '299f75452cf0256cfe27448aa945542856b05506f159d20e7456e1cf2e70257a',
+  skillWithOldHeading: 'e5a0acabaaf5627d34de13162f229e176850cdb605ce67e26f9488c6f906bd80',
+  readmeTopRest: '8fadcdcd4c7c7dd256b710b023d4f5f4283fbf2db40fa1859d64a9b39df7ff62',
   readmeSections: {
     '## Claude raw-Git hook': 'f3a4c0b1f33d156cc08dbcbec50c84ed842ecaf9ed28c9de2ddfcd5b9e7ba5e1',
     '## Trusted-checkout reviews': 'a502dc650bd566d05485a1b0891de8aaeebe06072371701de3db020ae2859bd9',

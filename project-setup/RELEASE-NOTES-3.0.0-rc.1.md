@@ -12,6 +12,7 @@ action; automated acceptance does not authorize a tag, upload or deployment.
 - Script-only root-template handling that preserves existing values.
 - Validation and doctor diagnostics with explicit evidence limits.
 - Complete candidate case composition, installed-payload checks and reproducible local ZIPs.
+- Rerun-safe installed policies, junction-safe script entry checks and `--config-env` alias blocks.
 
 ## Compatibility and rollback
 

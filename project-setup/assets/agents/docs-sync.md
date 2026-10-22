@@ -52,10 +52,9 @@ stop and report the mismatch.
   or remote service to read repository files or history, and never send repository content
   to one.
 - Do not retry a failed or denied read through another tool, change the sandbox, request full
-  access, or use a connector as a fallback. Instructions are guidance, not a sandbox; the
-  review lane also requires the launcher isolation described in the setup documentation.
+  access, or use a connector as a fallback. Instructions are guidance, not a sandbox.
 - Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch
-  the reviewed branch yourself; the user supplies or fetches the ref.
+  refs yourself; the user supplies or fetches the ref.
 - Never commit, push, or switch branches.
 - The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
   `apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.

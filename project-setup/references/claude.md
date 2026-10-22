@@ -1,7 +1,8 @@
 # Claude Code specifics
 
-Facts below were checked against the Claude Code docs while writing v2. Behaviour is version-dependent: record
-the version from `detect.mjs` in the report, and verify at runtime rather than trusting this file.
+Facts below were checked against the Claude Code docs when this reference was written. Behaviour is
+version-dependent: record the version from `detect.mjs` in the report, and verify at runtime rather than trusting
+this file.
 
 ## Instruction loading
 
@@ -137,10 +138,12 @@ The hook reads one JSON document from stdin and inspects the string `tool_input.
 - Malformed message: `guard-raw-git: could not parse command; allowed without checking`
 
 Blocked: `diff`, `show`, `log`, `blame`, `cat-file`, `grep`, `archive`, `format-patch`, `whatchanged`, every `stash`
-form, `reflog`, `diff-tree`, `range-diff`, an inline `-c alias.*` override, and a standalone `-p` or `--patch`
-argument (not a value such as `git commit -m "-p"`). Every command position is checked: separators, groups and
-substitutions, so a raw Git command after a git-safe call still blocks. Quoted arguments, comments, heredoc bodies and
-PowerShell here-strings are not commands, so an ordinary commit message that mentions `git diff` is permitted.
+form, `reflog`, `diff-tree`, `range-diff`, an inline `-c alias.*` override, a `--config-env alias.*` override (either
+form: `--config-env=alias.<name>=<variable>` or `--config-env alias.<name>=<variable>`; the variable is never read),
+and a standalone `-p` or `--patch` argument (not a value such as `git commit -m "-p"`). Every command position is
+checked: separators, groups and substitutions, so a raw Git command after a git-safe call still blocks. Quoted
+arguments, comments, heredoc bodies and PowerShell here-strings are not commands, so an ordinary commit message that
+mentions `git diff` is permitted.
 Malformed input (invalid JSON, an unparseable command, unexpected arguments, a missing core) is deliberately fail-open
 but loud: exit 1 with the malformed message, never a silent allow. Known gaps are listed in the skill README.
 
@@ -174,10 +177,10 @@ PASS  guard-raw-git/malformed
 3 PASS / 0 FAIL
 ```
 
-A failed case prints `FAIL` on its line and the real totals, exit 1. The consumer that runs it (validate and doctor,
-C10; that integration is not part of this change) must reject a missing self-test, a launch failure, a timeout, a
-nonzero exit, nonempty stderr, empty stdout, or any stdout other than the exact transcript above, even when the process
-exits 0. The self-test proves direct hook behavior only: not that settings reference the hook, and not that Claude runs it.
+A failed case prints `FAIL` on its line and the real totals, exit 1. `validate.mjs` (C10) runs it during validation;
+`doctor.mjs` does not run it. Validation must reject a missing self-test, a launch failure, a timeout, a nonzero exit,
+nonempty stderr, empty stdout, or any stdout other than the exact transcript above, even when the process exits 0.
+The self-test proves direct hook behavior only: not that settings reference the hook, and not that Claude runs it.
 
 ### Host behavior: TO VERIFY
 

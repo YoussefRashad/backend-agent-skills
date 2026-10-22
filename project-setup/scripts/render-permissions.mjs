@@ -10,6 +10,7 @@
 //   pathspec       -> the git pathspec excludes, one per line
 // --project renders the installed .ai/security-paths.json of that root; without it (or when the root has none) the
 // shipped defaults render. A present malformed policy fails with C1's error and never falls back to the defaults.
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readSecurityPolicy } from '../assets/tools/security-policy.mjs';
@@ -125,9 +126,17 @@ function parseCli(argv) {
   return o;
 }
 
-const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
-const isMain = Boolean(process.argv[1]) && norm(process.argv[1]) === norm(fileURLToPath(import.meta.url));
-if (isMain) {
+// The entry check compares resolved paths and, failing that, native real paths, so a launch through a junction or an
+// 8.3 short name still runs the CLI (an alternate launch path that missed it would print nothing).
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(import.meta.url);
+  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  if (fold(path.resolve(process.argv[1])) === fold(path.resolve(self))) return true;
+  try { return fold(fs.realpathSync.native(process.argv[1])) === fold(fs.realpathSync.native(self)); } catch { return false; }
+}
+
+if (isEntryPoint()) {
   const o = parseCli(process.argv.slice(2));
   if (!o) failF('RENDER_USAGE', USAGE, 1);
   let loaded; let controls;

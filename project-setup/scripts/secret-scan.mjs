@@ -84,5 +84,14 @@ function cli() {
   ok({ status: 'scanned', scope, tool: `gitleaks ${probe.stdout}`, findings: items, count: items.length, note: 'Matches are redacted and not shown. Protected paths, run vaults and canary files are included. Report file:line:rule to the user; never open the files.' });
 }
 
-const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
-if (Boolean(process.argv[1]) && norm(process.argv[1]) === norm(fileURLToPath(import.meta.url))) cli();
+// The entry check compares resolved paths and, failing that, native real paths, so a launch through a junction or an
+// 8.3 short name still runs the CLI (an alternate launch path that missed it would print nothing).
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(import.meta.url);
+  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  if (fold(path.resolve(process.argv[1])) === fold(path.resolve(self))) return true;
+  try { return fold(fs.realpathSync.native(process.argv[1])) === fold(fs.realpathSync.native(self)); } catch { return false; }
+}
+
+if (isEntryPoint()) cli();

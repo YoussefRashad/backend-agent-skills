@@ -13,7 +13,7 @@ SKILL.md            entrypoint (workflow, rules, script index)
 VERSION, CHANGELOG.md
 references/         loaded on demand by the agent
 assets/             agent definitions, wrappers, templates, project tools (git-safe)
-data/               secret-paths.json (single source for every secret control)
+data/               secret-paths.json (shipped default secret paths; an installed project policy adds its own)
 scripts/            zero-dependency Node scripts (JSON output)
 install/install.mjs installer (not copied into installs)
 install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)

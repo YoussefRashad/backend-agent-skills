@@ -30,8 +30,12 @@ Read this file fully, then read references only when the step says so.
    allowlist; do not write project files any other way.
 2. **Never read secrets.** No tool, command, or script you write may open a path matched by
    `data/secret-paths.json` (`.env`, `.env.*` including `.env.example`, keys, certs, `secrets/`, `credentials/`,
-   `.npmrc`, the run vault). Env variable **names** come from config/validation code or from
-   `scripts/env-keys.mjs` (names and value classifications only). Read diffs and history only through
+   `.npmrc`, the run vault) or by the installed `.ai/security-paths.json` (its managed `patterns` and the project's
+   `projectPatterns`). The boundary is the union of both: a path the shipped defaults do not name may still be
+   protected by the installed policy. With no installed policy, the shipped defaults alone are the fallback; an
+   invalid or unreadable installed policy fails closed (it is an error, never a reason to read).
+   Env variable **names** come from config/validation code or from `scripts/env-keys.mjs` (names and value
+   classifications only). Read diffs and history only through
    `.ai/tools/git-safe.mjs` (or `assets/tools/git-safe.mjs` before it is installed), never raw `git diff/log -p/show`.
    Before any reader and policy exist, Phase 0 uses names-only discovery. If a value surfaces anyway:
    do not repeat it, do not store it, report file and variable name only.
@@ -209,10 +213,20 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 2. Generate content into `.ai/.run/<id>/drafts/<repo-path>` following `references/docs-generation.md` and the
    templates in `assets/templates/`. For Markdown and `.gitignore`, write managed sections with
    `blocks.mjs upsert` so user content outside the markers is preserved.
-3. Security policy and tooling. In a policy migration, run the report, record the user's explicit decisions in
+3. Security policy and tooling. With no installed policy (`.ai/security-paths.json` absent), copy
+   `data/secret-paths.json` → `.ai/security-paths.json` as a draft: this is the fresh-install path, with `full`
+   ownership. With an installed policy, never copy `data/secret-paths.json` over it. Stage no policy draft unless
+   detect reports mode `update` with a schema-2 manifest, the security-state inspection reports managed patterns
+   behind this skill, an unknown installed baseline or managed patterns edited since install, or the user requests a
+   policy change. Then run the report, record the user's explicit decisions in
    `.ai/.run/<id>/security-decisions.json` and run the stage, exactly as `references/migration-v2.md` section 4
-   describes; the stage supplies the policy, the settings projection and the runtime drafts. Otherwise copy
-   `data/secret-paths.json` → `.ai/security-paths.json` as a draft (`full` ownership). A complete update stages all
+   describes (a deleted managed entry offers `restore` or `omit`; an addition offers `project`, `keep` or
+   `omit`); the stage supplies the policy, the settings projection and the runtime drafts. A migration-staged policy
+   has `keys` ownership, and its managed metadata holds the managed `patterns`, never `projectPatterns`. A rerun
+   without a policy draft preserves the installed ownership record. An invalid or unreadable installed policy is an
+   error, never evidence of absence: report it and never fall back to the shipped copy. `apply.mjs` refuses (exit 3,
+   `APPLY_POLICY_REGRESSION`) an installed-policy draft that is invalid, lowers the schema, or drops an installed
+   entry outside that workflow; `--approve-user-content` does not bypass it. A complete update stages all
    seven files under `.ai/tools/`, each from the corresponding `assets/tools/` member in the same skill copy (the
    agents and AGENTS.md depend on them):
 

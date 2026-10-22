@@ -9,6 +9,14 @@
 | `keys` | `.claude/settings.json`, `.ai/security-paths.json` | Append missing managed entries; record the approved managed list | Never removes or reorders without approval; reports conflicts |
 | `merged` | Living docs, `.env.example`, pre-existing files without markers | Targeted, reviewed edits | Not tracked |
 
+`.ai/security-paths.json` is `full` only when a fresh install (no installed policy) creates it from the shipped
+`data/secret-paths.json`. That record never permits replacing an installed policy with the shipped defaults. A rerun
+without a policy draft keeps the installed ownership record; a reviewed migration (`references/migration-v2.md`)
+records `keys` ownership whose managed metadata holds the managed `patterns`, never `projectPatterns`. When a
+policy is installed, `apply.mjs` refuses a policy draft that is invalid, lowers the schema, or drops an installed
+entry outside that workflow (`APPLY_POLICY_REGRESSION`, exit 3) in prepare, both reviews and commit;
+`--approve-user-content` does not bypass it.
+
 A matching hash means "the skill's region is as the skill left it". It is **not** permission to rewrite the whole
 file: user content outside managed regions is never regenerated.
 
@@ -66,6 +74,20 @@ reordering, or omission change needs `--approve-user-content <target>` even when
 commit and one journal apply both, the manifest last, exactly as approved. Every bound input (targets, drafts, declared
 `transaction-inputs.json` consumers, the installed policy, the manifest) is rechecked before anything is written. Run
 ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
+
+Protected targets are matched by exact spelling: `.ai/security-paths.json`, `.claude/settings.json`,
+`.ai/manifest.json` and every `.ai/tools/` runtime-unit target listed in the shipped catalog
+(`data/runtime-units.json`). A draft target or declared input that is another spelling of one of them is refused on
+every platform as `APPLY_PATH` (`unsafe path: <target>`, exit 3). Each path component is compared through its ASCII
+case fold, its prefix before the first `:` (an NTFS stream such as `::$DATA`) and both with trailing dots and spaces
+removed, so `.ai/SECURITY-PATHS.JSON`, `.ai/security-paths.json.` and `.ai/security-paths.json::$DATA` are all
+refused, while `.ai/security-paths.json.bak` is not; 8.3 short names are not modelled. If the catalog itself cannot be
+read, every spelling under `.ai/tools/` that is not already lowercase ASCII without a trailing dot, space or `:` is
+refused the same way. The refusal comes before any approval, in prepare, the unprepared review and, as a plan
+operation, the prepared review and commit; a prepared plan that declares such an input is invalid
+(`APPLY_PLAN_INVALID`, exit 1). The canonical spellings stay legal inputs, and a drafted canonical manifest keeps
+`APPLY_MANIFEST_DRAFT`. Before the policy gate judges an installed policy in the prepared review or at commit, it
+re-reads it and compares it with the bound hash; a change is `APPLY_DRIFT` (exit 4).
 
 Stage policy and deny changes first, hooks second, and allow retirement last. Use
 `merge-claude-settings.mjs --run-id <id> --retire-allow-file <path>` with a selection file inside

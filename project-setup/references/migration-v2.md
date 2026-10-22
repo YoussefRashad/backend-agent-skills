@@ -226,6 +226,16 @@ Metadata-only runs and unchanged policy content do not trigger the policy migrat
 gate. A later content edit to a schema-2 policy does trigger it and must use report, decisions
 and stage again.
 
+An installed policy is never replaced by copying the shipped defaults over it. A rerun stages a policy draft only
+when detect reports mode `update` with a schema-2 manifest, when the security-state inspection reports managed
+patterns behind this skill, an unknown installed baseline or managed patterns edited since install, or when the user
+requests a policy change; then it uses this report, decisions and stage. Independently of the gate above, `apply.mjs`
+refuses an installed-policy draft that is invalid, lowers the schema, or drops an installed entry
+(`APPLY_POLICY_REGRESSION`, exit 3) in prepare, both reviews and commit. Validated decisions (`plan.security` at
+commit) allow only what they decide for managed `patterns` (a move to the project, an omission, a broader
+replacement); an installed `projectPatterns` entry is never dropped and the schema never lowers. A content approval
+does not bypass it.
+
 The stage supplies the policy, the settings projection and all seven runtime drafts under `.ai/tools/`
 (`security-policy.mjs`, `git-safe-core.mjs`, `guard-raw-git-core.mjs`, `review-diff.mjs`, `git-safe.mjs`,
 `guard-raw-git.mjs`, `hooks-selftest.mjs`), each from the corresponding `assets/tools/` member of the same skill

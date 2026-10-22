@@ -10,6 +10,12 @@ Roll back project state with rc.1 tooling before reverting the installed skill.
 Automated acceptance and pending host measurements are described in
 RELEASE-NOTES-3.0.0-rc.1.md. Publication remains a separate authorized action.
 
+Review corrections: a rerun never copies the shipped policy defaults over an installed policy, and
+apply refuses a policy draft that is invalid, lowers the schema or drops installed entries outside
+the reviewed migration workflow (APPLY_POLICY_REGRESSION, exit 3). The never-read boundary is the
+shipped defaults plus the installed policy. Script entry checks accept junction and real-path
+launches, the raw-Git hook blocks --config-env alias overrides, and stale wording is corrected.
+
 ## 2.0.0
 Release of the `2.0.0-rc.13` source, unchanged in function. Only `VERSION` and release documentation changed
 (`RELEASE-NOTES-2.0.0.md`, `README.md` status and limitations, this entry, the version placeholder in

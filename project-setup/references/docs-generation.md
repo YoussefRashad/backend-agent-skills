@@ -34,7 +34,7 @@ Never move the critical rules into nested files only; the root keeps the short v
 
 | File | Source |
 |---|---|
-| `.ai/security-paths.json` | Created from the skill's `data/secret-paths.json`. Afterwards it is the project's effective policy: the managed `patterns` plus, from schema 2, the project's own `projectPatterns`. It legitimately differs from the shipped file; ownership comes from the installed record, never from comparing bytes. A v2 project's policy changes through `references/migration-v2.md` |
+| `.ai/security-paths.json` | Not a plain copy. Only a fresh install (no installed policy) creates it from the skill's `data/secret-paths.json`, with `full` ownership. Afterwards it is the project's effective policy: the managed `patterns` plus, from schema 2, the project's own `projectPatterns`. It legitimately differs from the shipped file and is never replaced by it; ownership comes from the installed record (`keys` after a reviewed migration), never from comparing bytes. Its managed patterns change only through the report, decisions and stage of `references/migration-v2.md` |
 | `.ai/tools/security-policy.mjs` | Copy of `assets/tools/security-policy.mjs`: the shared policy helper |
 | `.ai/tools/git-safe-core.mjs` | Copy of `assets/tools/git-safe-core.mjs`: the bounded reader core |
 | `.ai/tools/guard-raw-git-core.mjs` | Copy of `assets/tools/guard-raw-git-core.mjs`: the raw-Git hook core |

@@ -12,7 +12,8 @@
 //   - Text that is not a command is not inspected: quoted arguments, comments and literal bodies (heredocs and
 //     PowerShell here-strings). An ordinary commit message that mentions "git diff" never blocks.
 //   - Option values are consumed where Git consumes them, so "git commit -m -p" is a message, "git commit -p" is an
-//     interactive patch, and "git -C -p" never hides a subcommand.
+//     interactive patch, and "git -C -p" never hides a subcommand. An alias defined before the subcommand, through
+//     -c alias.*=... or --config-env alias.*=<variable> (either form), blocks whatever the subcommand is.
 //   - A command it cannot scan is MALFORMED (fail open, but loud): exit 1 with a fixed warning, never a silent allow.
 //     A lexical failure anywhere wins over a block anywhere, so the result never depends on where the scan stopped.
 //
@@ -330,7 +331,11 @@ const PS_VARIABLE = /^\$(?:[A-Za-z_][A-Za-z0-9_]*:)?[A-Za-z_][A-Za-z0-9_]*/;
 const REDIRECT = /^[0-9]*(?:[<>]|&>)/;
 const REDIRECT_OPERATOR = /^[0-9]*(?:<|>|>>|<>|>&|<&|>\||&>|&>>|<<<)$/;
 // Plan 3.5: global options that take a value, and the post-subcommand options whose separate value is skipped.
-const GLOBAL_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace']);
+// C12 plan C12-9 adds --config-env (both forms): like -c it can define an alias, so its key (the text before the first
+// "=") gets the same alias.* check. The named environment variable is never read or expanded; this module reads no
+// environment at all. GIT_CONFIG_COUNT/GIT_CONFIG_KEY_n injection stays an accepted residual.
+const GLOBAL_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env']);
+const CONFIG_ENV_ATTACHED = '--config-env=';
 const GLOBAL_ATTACHED = ['--git-dir=', '--work-tree=', '--namespace='];
 const SUB_VALUE = new Set([
   '-m', '--message', '-F', '--file', '-C', '--reuse-message', '-c', '--reedit-message',
@@ -379,11 +384,12 @@ function judgeCommand(words, ps) {
     const a = args[j];
     if (GLOBAL_VALUE.has(a)) {
       if (j + 1 >= args.length) return alias || patch ? 'block' : 'missing';
-      if (a === '-c' && isAliasKey(args[j + 1])) alias = true;
+      if ((a === '-c' || a === '--config-env') && isAliasKey(args[j + 1])) alias = true;
       j += 2;
       continue;
     }
     if ((a.startsWith('-C') || a.startsWith('-c')) && a.length > 2) { if (a[1] === 'c' && isAliasKey(a.slice(2))) alias = true; j++; continue; }
+    if (a.startsWith(CONFIG_ENV_ATTACHED)) { if (isAliasKey(a.slice(CONFIG_ENV_ATTACHED.length))) alias = true; j++; continue; }
     if (GLOBAL_ATTACHED.some((p) => a.startsWith(p))) { j++; continue; }
     if (isPatch(a)) patch = true;
     if (a.startsWith('-')) { j++; continue; }

@@ -1,7 +1,7 @@
 # Codex specifics
 
-Checked against the Codex docs while writing v2; several features are marked beta upstream. Record the Codex
-version from `detect.mjs` and verify at runtime.
+Checked against the Codex docs when this reference was written; several features are marked beta upstream.
+Record the Codex version from `detect.mjs` and verify at runtime.
 
 ## Instructions
 

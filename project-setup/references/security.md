@@ -4,9 +4,22 @@
 
 `data/secret-paths.json` holds the shipped defaults. A project's effective policy is its installed
 `.ai/security-paths.json`: the managed `patterns` plus the project's own `projectPatterns`, validated by the shared
-helper `.ai/tools/security-policy.mjs`. Rendered controls and the git-safe reader use that effective policy. To
-change the defaults, edit the skill's file and re-run setup; to protect more in one project, add `projectPatterns`
-there. Never hand-edit rendered output in a project.
+helper `.ai/tools/security-policy.mjs`. Rendered controls and the git-safe reader use that installed effective
+policy. Setup's own refusal set is wider: setup scripts refuse a path matched by the shipped defaults or by the
+installed policy (the union of both). With no installed policy the shipped defaults alone apply; an invalid or
+unreadable installed policy fails closed. To protect more in one project, add `projectPatterns` there. Never
+hand-edit rendered output in a project.
+
+Setup never replaces an installed policy by copying the shipped defaults over it. Only a fresh install, with no
+installed policy, copies `data/secret-paths.json` (with `full` ownership). An installed policy gets a policy draft
+only when detect reports mode `update` with a schema-2 manifest, when the security-state inspection reports managed
+patterns behind this skill, an unknown installed baseline or managed patterns edited since install, or when the user
+requests a policy change. Then run the migration report, record the user's explicit decisions and run the stage
+(`references/migration-v2.md` section 4): new default coverage arrives as a reviewed change, the project's
+`projectPatterns` are kept, and the staged policy is recorded with `keys` ownership. `apply.mjs` refuses a policy
+draft that is invalid, lowers the schema, or drops an installed entry outside that workflow
+(`APPLY_POLICY_REGRESSION`, exit 3); a content approval does not bypass it. To change the shipped defaults, edit the
+skill's file; installed projects receive the change through that workflow.
 
 `.env.example` is in the list on purpose: real values end up in templates often enough that no agent reads any
 `.env*` file.
