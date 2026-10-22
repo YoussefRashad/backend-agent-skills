@@ -2121,7 +2121,7 @@ async function documentation(context) {
 
 
 // ================================================================ RC1/C12/pins ====
-// Plan C12-15: VERSION stays exactly 3.0.0-rc.1 with no version stamp; the six baseline-checker digests (historical snapshots) do not move; in tests/c11b.test.mjs only the four pins of intentionally edited files
+// Plan C12-15 (amended by C13-14, which moves the current VERSION to 3.0.0-rc.2): VERSION carries no version stamp; the six baseline-checker digests (historical snapshots) do not move; in tests/c11b.test.mjs only the four pins of intentionally edited files
 // change (skillWithOldHeading and readmeTopRest here; the exact CHANGELOG_ENTRY_LINES and RELEASE_NOTES_TEXT with them, under decision I11b-2), while the installer, the 2.0.0 notes, the changelog suffix and every README section
 // pin stay and PAYLOAD_INVENTORY keeps its 60 files; assertion descriptions no longer claim post-C10 byte identity for files C12 edits; the candidate documentation gains one correction paragraph and one release-notes bullet.
 // PLAN-GAP: the plan does not fix the wording of the CHANGELOG paragraph or the release-notes bullet (the "exact" expectations of c11b are updated to the implemented bytes in a second pass), so only their count, placement
@@ -2167,9 +2167,9 @@ async function pins(context) {
   startClock(context);
   const mark = processMark(context);
   return runAssertion(async ({ failures, check, step }) => {
-    await step('plan C12-15: VERSION is exactly 3.0.0-rc.1 plus LF, no version.json stamp exists, and the six baseline-checker digests (historical snapshots) are unchanged', async () => {
+    await step('plan C12-15 as amended by C13-14: VERSION is exactly 3.0.0-rc.2 plus LF, no version.json stamp exists, and the six baseline-checker digests (historical snapshots) are unchanged', async () => {
       const v = readBytes(skillPath(context, 'VERSION'));
-      check(v !== null && v.toString('latin1') === '3.0.0-rc.1\n', 'VERSION is exactly "3.0.0-rc.1\\n"', v && v.toString('latin1'));
+      check(v !== null && v.toString('latin1') === '3.0.0-rc.2\n', 'VERSION is exactly "3.0.0-rc.2\\n" (C13-14)', v && v.toString('latin1'));
       check(!exists(skillPath(context, 'version.json')) && !exists(skillPath(context, 'install/version.json')) && !exists(skillPath(context, 'data/version.json')), 'no version.json stamp is added');
       const baselines = await importOrFail(failures, skillUrl(context, 'scripts/check-agent-baselines.mjs'), 'scripts/check-agent-baselines.mjs');
       if (baselines) check(eq(baselines.AGENT_BASELINES.map((p) => [p.path, p.sha256]), BASELINE_PIN_TABLE), 'AGENT_BASELINES holds exactly the six historical snapshot digests in table order (none moved)', baselines.AGENT_BASELINES);
@@ -2269,7 +2269,7 @@ async function contracts(context) {
       check(Object.isFrozen(C12_IMPLEMENTATIONS) && eq(C12_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C12_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C12_IMPLEMENTATIONS is a frozen array of the eight IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {});
       const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C12']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C12']), 'both registries list the earlier components unchanged and then C12', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13']), 'both registries list the earlier components unchanged, then C12 and then C13 (C13 appends to the registry tail)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
     });
     await step('plan C12-13: registerRc1Cases still registers exactly the 40 ordered complete cases with function callbacks, adds no C12 case (R47, R80 and R51 prefixes do not add C12 to the case table), executes nothing, writes nothing and starts no process', async () => {
@@ -2311,11 +2311,11 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C12-13: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 21 without duplicates', async () => {
+    await step('plan C12-13 as amended by C13-15: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 26 without duplicates (C13 appends 22-26)', async () => {
       const file = readJson(skillPath(context, 'evals/evals.json'));
       check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
       if (!file || !Array.isArray(file.evals)) return;
-      check(file.evals.length === 21 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 21 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 21, 'ids 1 through 21 in order without duplicates', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 26 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 26 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 26, 'ids 1 through 26 in order without duplicates', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 20)))) === EVALS_1_20_SHA, 'evaluations 1-20 are unchanged from the committed file (canonical JSON digest)');
       check(eq(file.evals[20], EVAL_21) && eq(Object.keys(file.evals[20]), ['id', 'name', 'prompt', 'files', 'expected_output']), 'evaluation 21 equals the plan object exactly, with its keys in the plan order (an expectation, not observed agent behavior)', file.evals[20]);
     });

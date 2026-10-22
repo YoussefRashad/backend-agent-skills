@@ -174,8 +174,27 @@ async function withStreamGuard(fn) {
 }
 
 // ================================================ plan literals (generated from the frozen plan text) ====
-// Plan 3.6 plus the C12 review-corrections paragraph (C12-15, decision I12-1): the CHANGELOG entry inserted after "# Changelog" and one blank line (the last line is the blank separator).
+// C13-14: the exact rc.2 CHANGELOG entry, inserted after "# Changelog" and one blank line (the last line is the blank separator); the complete rc.1 entry follows it unchanged.
 const CHANGELOG_ENTRY_LINES = [
+  "## 3.0.0-rc.2",
+  "",
+  "Review rules candidate: Adversarial, Consumer, Boundary and Contract passes; reachable",
+  "findings beyond the plan and sibling-instance checks; recorded-drift documentation updates.",
+  "Adds capture-once validation, per-item isolation, guarded stack prerequisites, real-validator",
+  "fallback checks, outcome contracts, trusted log classification and computed-overflow handling.",
+  "Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.",
+  "",
+  "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
+  "this is not a retrofitted pre-write guard in every old command.",
+  "Roll back project state with the tooling used for the update before reverting the installed skill.",
+  "Existing projects receive the instructions through reviewed managed updates.",
+  "",
+  "Automated acceptance and pending host measurements are described in",
+  "RELEASE-NOTES-3.0.0-rc.2.md. Publication remains a separate authorized action.",
+  "",
+];
+// Historical (C13-16, decision I13-2: the rc.1 bytes as they stand after the rc.1 fix batch): the rc.1 entry, preserved after the rc.2 entry. Plan 3.6 plus the C12 review-corrections paragraph and the APPLY_PATH alias sentence; the last line is the blank separator.
+const RC1_CHANGELOG_ENTRY_LINES = [
   "## 3.0.0-rc.1",
   "",
   "Security and permissions candidate: anchored policy migration, trusted-checkout review,",
@@ -196,15 +215,15 @@ const CHANGELOG_ENTRY_LINES = [
   "stale wording is corrected.",
   "",
 ];
-// Plan 3.6: the SKILL.md release heading.
+// Plan 3.6 and C13-14: the SKILL.md release heading.
 const SKILL_HEADING_LINES = [
-  "# project-setup 3.0.0-rc.1",
+  "# project-setup 3.0.0-rc.2",
 ];
-// Plan 3.6: the complete resulting opening seven lines of README.md.
+// Plan 3.6 and C13-14: the complete resulting opening seven lines of README.md.
 const README_OPENING_LINES = [
-  "# project-setup 3.0.0-rc.1 - skill source",
+  "# project-setup 3.0.0-rc.2 - skill source",
   "",
-  "**Release candidate 3.0.0-rc.1.** See `RELEASE-NOTES-3.0.0-rc.1.md` for acceptance requirements,",
+  "**Release candidate 3.0.0-rc.2.** See `RELEASE-NOTES-3.0.0-rc.2.md` for acceptance requirements,",
   "compatibility and pending host measurements.",
   "",
   "Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent",
@@ -214,8 +233,87 @@ const README_OPENING_LINES = [
 const README_INVENTORY_ROW_LINES = [
   "install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)",
 ];
-// Plan 3.6 plus the C12 "Changes" bullet (C12-15, decision I12-1): the complete RELEASE-NOTES-3.0.0-rc.1.md.
+// C13-14: the complete RELEASE-NOTES-3.0.0-rc.2.md, exactly (ASCII, LF, one final LF).
 const RELEASE_NOTES_LINES = [
+  "# project-setup 3.0.0-rc.2",
+  "",
+  "This is the review rules release candidate, following the rc.1 security and permissions work.",
+  "Publication is a separate authorized action; automated acceptance does not authorize a tag,",
+  "upload or deployment.",
+  "",
+  "## Changes",
+  "",
+  "- Adversarial, Consumer, Boundary and Contract passes in the shared canonical reviewer.",
+  "- Reachable findings beyond the plan and checks for every sibling instance of a defective pattern.",
+  "- Unknown values, throwing-logger handling, monotonic deadlines and promise-rejection checks.",
+  "- Capture-once validation through bounded named-field projections, including reachable getter cases.",
+  "- Per-item fault isolation that preserves healthy siblings and restores shared state.",
+  "- Stack prerequisites only for work explicitly assigned by a cited frozen plan or amendment.",
+  "- Fallback tests using real downstream validators and outcomes with their defined contract meaning.",
+  "- Trusted class labels in logs without changing the project's policy for permitted log payloads.",
+  "- Computed-overflow handling and row validation that prevent invalid output and poisoned batches.",
+  "- Living documentation updates when an in-range frozen plan or spec records drift.",
+  "- External-review exclusion and scanning prerequisites and guidance for blocked review preambles.",
+  "- Generated contract-testing standards and test-run hygiene through reviewed merged updates.",
+  "",
+  "## Compatibility and rollback",
+  "",
+  "The project manifest schema is 3. C13 adds no policy or apply migration.",
+  "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
+  "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
+  "Do not use v2 commands to repair a schema-3 project.",
+  "",
+  "Existing projects receive the instructions through reviewed managed updates. User-modified",
+  "canonical files require explicit dispositions. Keeping an old canonical file leaves that",
+  "instruction update incomplete. Project-owned reviewer rules remain intact.",
+  "",
+  "Roll back project state with the tooling used for the update before reverting the installed skill.",
+  "If later independent runs exist, roll them back newest first. Do not split this migration into",
+  "successive manifest commits.",
+  "Keep recovery material until the user confirms the update. Incomplete rollback preserves later",
+  "user edits and requires retaining the unresolved backups.",
+  "",
+  "## Verification",
+  "",
+  "The complete automated gate requires 100 case results: 99 PASS / 0 FAIL / 1 SKIP when R13d",
+  "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
+  "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
+  "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
+  "C13 contributes through R29 without adding numbered case records.",
+  "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
+  "the required totals in this document are not a claim that an unrecorded run passed.",
+  "The release builder alone does not establish automated acceptance.",
+  "Static instruction checks and evaluation expectations do not prove agent behavior.",
+  "",
+  "## Pending host measurements",
+  "",
+  "TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling;",
+  "A3 trusted-checkout live review; A5 host negative capability.",
+  "Synthetic doctor fixtures, direct Node hook tests and static instructions are not host proof.",
+  "These measurements remain pending and block final 3.0.0, not rc.2 implementation acceptance.",
+  "",
+  "## Limitations",
+  "",
+  "Path policy cannot detect secret content copied or hard-linked under an allowed name.",
+  "The raw-Git hook is an incomplete shell parser and depends on a trusted checkout.",
+  "Agent instructions and configuration checks do not create an operating-system sandbox.",
+  "Doctor results describe the measured configuration, processes and permitted historical log;",
+  "they do not establish the behavior of a future launch.",
+  "Blocked review-preamble loading is observed workflow evidence, not new host verification.",
+  "External-review prerequisites are reference-only: C13 adds no wrapper, preflight or installed",
+  "project-wide external-review instruction. Reconsider that known gap with C14; C13 does not",
+  "implement C14. Canonical reviewer and docs-sync instructions still prohibit external transmission.",
+  "",
+  "## Provenance and release artifacts",
+  "",
+  "Historical v2 provenance is retained in the frozen design and architecture records.",
+  "The historical v2 archive is not rebuilt or replaced.",
+  "Historical rc.1 release notes and changelog text remain unchanged.",
+  "The local release builder records tag, commit, subtree identity and archive SHA256 only in",
+  "external publication notes. Those notes and the ZIP remain outside the source skill tree.",
+];
+// Historical (C13-16, decision I13-2): the complete RELEASE-NOTES-3.0.0-rc.1.md, as plan 3.6 plus the C12 "Changes" bullet and the rc.1 fix batch left it. It stays pinned independently.
+const RC1_RELEASE_NOTES_LINES = [
   "# project-setup 3.0.0-rc.1",
   "",
   "This is the security and permissions release candidate. Publication is a separate authorized",
@@ -289,7 +387,7 @@ const README_TEST_FIRST_LINES = [
   "node tests/accept-rc1.mjs",
   "```",
 ];
-// Plan 5.9: the complete README section appended at the end.
+// Plan 5.9 and C13-14: the complete README section appended at the end (its two candidate tag occurrences are rc.2).
 const README_RELEASE_SECTION_LINES = [
   "## Local candidate release",
   "",
@@ -298,7 +396,7 @@ const README_RELEASE_SECTION_LINES = [
   "the skill. Run complete candidate acceptance before a later authorized release action.",
   "",
   "S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never",
-  "requires or creates project-setup-v3.0.0-rc.1 in the distribution repository.",
+  "requires or creates project-setup-v3.0.0-rc.2 in the distribution repository.",
   "",
   "The installer payload hash, archive SHA256 and backup snapshot digest identify different",
   "bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;",
@@ -307,7 +405,7 @@ const README_RELEASE_SECTION_LINES = [
   "Later local build, after the reviewed tag already exists:",
   "",
   "```text",
-  "node install/release.mjs --tag project-setup-v3.0.0-rc.1 --out <unused-directory>",
+  "node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>",
   "```",
 ];
 // Plan 5.9: the LIVE-ACCEPTANCE candidate evidence text.
@@ -402,6 +500,7 @@ const PAYLOAD_ABSENT = [
   "README.md",
   "RELEASE-NOTES-2.0.0.md",
   "RELEASE-NOTES-3.0.0-rc.1.md",
+  "RELEASE-NOTES-3.0.0-rc.2.md",
   "RELEASE-NOTES.md",
   "install/",
   "tests/",
@@ -582,7 +681,7 @@ const ERRORS = deepFreeze({
 });
 const failResult = (code) => ({ exitCode: ERRORS[code][0], stdout: '', stderr: `${code}: ${ERRORS[code][1]}\n` });
 const USAGE_MESSAGE = `RELEASE_USAGE: ${ERRORS.RELEASE_USAGE[1]}`;
-const CANDIDATE_VERSION = '3.0.0-rc.1';
+const CANDIDATE_VERSION = '3.0.0-rc.2';
 const OP_ORDER = ['toplevel', 'commit', 'tree', 'type', 'version', 'notes', 'archive'];
 // Plan 3.3: the validated hexadecimal check of the tagged notes, and the version grammar.
 const NOTES_HEX_RE = /(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])/i;
@@ -693,7 +792,7 @@ const THROW = Symbol('throw');
 const asBuf = (s) => Buffer.from(s, 'utf8');
 const FAKE_COMMIT = 'a1'.repeat(20);
 const FAKE_TREE = 'b2'.repeat(20);
-const FAKE_NOTES = asBuf(lines(['# project-setup 3.0.0-rc.1', '', 'Fixture notes without any object identifier.']));
+const FAKE_NOTES = asBuf(lines(['# project-setup 3.0.0-rc.2', '', 'Fixture notes without any object identifier.']));
 const FAKE_ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from([0x0d, 0x0a, 0xff, 0xfe, 0x00, 0x7f, 0x80]), Buffer.from('raw zip bytes are never decoded or rewritten')]);
 // The scripted executor answers each of the seven operations from `spec` (a value, a function of the call, THROW or REJECT) and records every call.
 function scriptedExecutor(spec = {}) {
@@ -1391,7 +1490,7 @@ async function identity(context) {
         }
       });
     });
-    await step('plan 3.3 and 5.2: tagged VERSION validation (grammar, LF, no BOM or CR, missing blob) and the derived note path, ZIP name, success version and publication heading for 3.0.0-rc.1, 3.0.0 and 4.2.1-rc.12', async () => {
+    await step('plan 3.3 and 5.2: tagged VERSION validation (grammar, LF, no BOM or CR, missing blob) and the derived note path, ZIP name, success version and publication heading for 3.0.0-rc.1, 3.0.0-rc.2, 3.0.0 and 4.2.1-rc.12 (the matrix keeps the earlier candidate and the final version)', async () => {
       await withScratch(context, 'version', async (dir) => {
         const repo = miniRepo(dir);
         const bom = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -1405,7 +1504,7 @@ async function identity(context) {
         }
         const missing = await scriptedRun(rel, dir, repo, { over: { version: nonzero() }, label: 'v-missing' });
         expectFail(check, 'a missing VERSION blob', missing.rec, 'RELEASE_VERSION');
-        for (const v of ['3.0.0-rc.1', '3.0.0', '4.2.1-rc.12']) {
+        for (const v of ['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']) {
           const notes = asBuf(lines([`# project-setup ${v}`, '', `Notes for ${v} without identifiers.`]));
           const r = await scriptedRun(rel, dir, repo, { over: { version: okRes(`${v}\n`), notes: okRes(notes) }, label: `derive-${v}` });
           const sha = sha256(FAKE_ZIP); const o = r.out;
@@ -1568,7 +1667,10 @@ async function archiveGroup(context) {
 // tagged note bytes are the committed blob. The builder's printed fields are never the oracle.
 const Q6_TEXT = 'Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3. This is a compatibility signal, not a retrofitted pre-write guard in every old command. Do not use v2 commands to repair a schema-3 project.';
 const ROLLBACK_TEXT = 'Roll back project state with the rc.1 tooling before reverting the installed skill. If later independent runs exist, roll them back newest first. Do not split this migration into successive manifest commits.';
+// ROLLBACK_TEXT is the historical rc.1 wording (the preserved rc.1 notes); CURRENT_ROLLBACK_TEXT is C13-13's version-neutral paragraph (the rc.2 notes and migration section 5).
+const CURRENT_ROLLBACK_TEXT = 'Roll back project state with the tooling used for the update before reverting the installed skill. If later independent runs exist, roll them back newest first. Do not split this migration into successive manifest commits.';
 const RELEASE_NOTES_TEXT = lines(RELEASE_NOTES_LINES);
+const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);
 // The text of "## <heading>" up to the next level-1 or level-2 heading (or the end).
 function sectionOf(doc, heading) {
   const ls = String(doc).split('\n');
@@ -1602,21 +1704,24 @@ async function notesGroup(context) {
     });
     await step('plan 3.6 and 5.4: Q6 is stated by section in the in-tree notes, the embedded publication copy and C8\'s migration reference (sections 1 and 5), checked after whitespace normalization', async () => {
       const inTree = RELEASE_NOTES_TEXT;
-      const wantSec = (label, doc) => {
+      const wantSec = (label, doc, rollback = CURRENT_ROLLBACK_TEXT) => {
         const s = doc === null ? null : sectionOf(doc, 'Compatibility and rollback');
         check(s !== null, `${label}: has the "Compatibility and rollback" section`);
-        if (s !== null) { check(squash(s).includes(Q6_TEXT), `${label}: the Q6 paragraph is exact in that section`); check(squash(s).includes(ROLLBACK_TEXT), `${label}: the rollback-order paragraph is exact in that section`); }
+        if (s !== null) { check(squash(s).includes(Q6_TEXT), `${label}: the Q6 paragraph is exact in that section`); check(squash(s).includes(rollback), `${label}: the rollback-order paragraph is exact in that section`); }
       };
       wantSec('the in-tree notes', inTree);
       const sourceNotes = readText(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`));
-      check(sourceNotes === RELEASE_NOTES_TEXT, 'the working-tree RELEASE-NOTES-3.0.0-rc.1.md is exactly the candidate text (byte equality)', sourceNotes === null ? 'missing' : sourceNotes.slice(0, 120));
+      check(sourceNotes === RELEASE_NOTES_TEXT, 'the working-tree RELEASE-NOTES-3.0.0-rc.2.md is exactly the candidate text (byte equality)', sourceNotes === null ? 'missing' : sourceNotes.slice(0, 120));
       wantSec('the working-tree notes file', sourceNotes);
+      const rc1Notes = readText(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.1.md'));
+      check(rc1Notes === RC1_RELEASE_NOTES_TEXT, 'the preserved RELEASE-NOTES-3.0.0-rc.1.md is exactly the historical rc.1 text (byte equality, still pinned independently)', rc1Notes === null ? 'missing' : rc1Notes.slice(0, 120));
+      wantSec('the preserved rc.1 notes file', rc1Notes, ROLLBACK_TEXT);
       if (have) wantSec('the embedded publication copy', w.notesA.toString('utf8'));
       const mig = readText(skillPath(context, 'references/migration-v2.md'));
       const s1 = mig === null ? null : sectionOf(mig, '1. Upgrade boundary');
       const s5 = mig === null ? null : sectionOf(mig, '5. Commit, rerun and rollback');
       check(s1 !== null && squash(s1).includes(Q6_TEXT), 'references/migration-v2.md section 1 carries the Q6 paragraph (C8 text, not rewritten here)');
-      check(s5 !== null && squash(s5).includes(ROLLBACK_TEXT), 'references/migration-v2.md section 5 carries the rollback-order paragraph (C8 text, not rewritten here)');
+      check(s5 !== null && squash(s5).includes(CURRENT_ROLLBACK_TEXT), 'references/migration-v2.md section 5 carries the current rollback-order paragraph (C13-13 wording)');
     });
   });
 }
@@ -2403,10 +2508,10 @@ const LF = (s) => String(s).replace(/\r\n/g, '\n');
 async function documentation(context) {
   return runAssertion(async ({ failures, check, step }) => {
     const text = (rel) => { const t = readText(skillPath(context, rel)); if (t === null) check(false, `${rel} is readable`); return t === null ? null : LF(t); };
-    await step('plan 3.6: VERSION is exactly 3.0.0-rc.1 plus LF; the release builder and the candidate notes exist in the source tree; the installer, the runtime catalog and the v2 notes are unchanged', async () => {
+    await step('plan 3.6 and C13-14: VERSION is exactly 3.0.0-rc.2 plus LF; the release builder and the candidate notes exist in the source tree beside the preserved rc.1 notes; the installer, the runtime catalog and the v2 notes are unchanged', async () => {
       const v = readBytes(skillPath(context, 'VERSION'));
-      check(v !== null && v.toString('latin1') === `${CANDIDATE_VERSION}\n`, 'VERSION is exactly "3.0.0-rc.1\\n"', v && v.toString('latin1'));
-      check(exists(skillPath(context, 'install/release.mjs')) && exists(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`)), 'install/release.mjs and RELEASE-NOTES-3.0.0-rc.1.md exist under project-setup/');
+      check(v !== null && v.toString('latin1') === `${CANDIDATE_VERSION}\n`, 'VERSION is exactly "3.0.0-rc.2\\n"', v && v.toString('latin1'));
+      check(exists(skillPath(context, 'install/release.mjs')) && exists(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`)) && exists(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.1.md')), 'install/release.mjs, RELEASE-NOTES-3.0.0-rc.2.md and the preserved RELEASE-NOTES-3.0.0-rc.1.md exist under project-setup/');
       const installer = text('install/install.mjs'); const old = text('RELEASE-NOTES-2.0.0.md');
       check(installer !== null && sha256(installer) === PINS.installer, 'install/install.mjs is unchanged (no second installer, no inclusion-rule change, no version.json)');
       check(old !== null && sha256(old) === PINS.notes200, 'RELEASE-NOTES-2.0.0.md is unchanged');
@@ -2416,27 +2521,29 @@ async function documentation(context) {
     });
     await step('plan 3.6: the candidate release notes are exactly the plan bytes (ASCII, no BOM, LF, final LF) and state the Q6 compatibility paragraphs and the pending host measurements', async () => {
       const raw = readBytes(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`));
-      check(raw !== null && raw.toString('utf8') === RELEASE_NOTES_TEXT && Buffer.compare(raw, Buffer.from(RELEASE_NOTES_TEXT, 'utf8')) === 0, 'RELEASE-NOTES-3.0.0-rc.1.md equals the exact candidate text byte for byte', raw && raw.toString('utf8').slice(0, 120));
+      check(raw !== null && raw.toString('utf8') === RELEASE_NOTES_TEXT && Buffer.compare(raw, Buffer.from(RELEASE_NOTES_TEXT, 'utf8')) === 0, 'RELEASE-NOTES-3.0.0-rc.2.md equals the exact candidate text byte for byte', raw && raw.toString('utf8').slice(0, 120));
       check(raw !== null && !/[^\x00-\x7f]/.test(raw.toString('latin1')) && !raw.includes(0x0d) && raw[0] !== 0xef && raw[raw.length - 1] === 0x0a, 'the notes are ASCII, UTF-8 without BOM, LF only, with a final LF');
       check(!NOTES_HEX_RE.test(RELEASE_NOTES_TEXT), 'the notes carry no standalone 40- or 64-hex ID (no resolved identity or digest in tree)');
       const sec = sectionOf(RELEASE_NOTES_TEXT, 'Pending host measurements') || '';
       check(squash(sec).includes('TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling; A3 trusted-checkout live review; A5 host negative capability.'), 'the pending host measurements are listed exactly');
       check(squash(sectionOf(RELEASE_NOTES_TEXT, 'Verification') || '').includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.'), 'the verification totals and the no-skip rule are exact');
     });
-    await step('plan 3.6: CHANGELOG.md is "# Changelog", the exact candidate entry, then the unchanged historical suffix beginning "## 2.0.0"', async () => {
+    await step('plan 3.6 and C13-14: CHANGELOG.md is "# Changelog", the exact rc.2 entry, the exact preserved rc.1 entry, then the unchanged historical suffix beginning "## 2.0.0"', async () => {
       const cl = text('CHANGELOG.md');
       if (cl === null) return;
-      const head = `# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}`;
-      check(cl.startsWith(head), 'the file starts with "# Changelog", a blank line and the exact candidate entry (ending in one blank line)', cl.slice(0, 200));
+      const head = `# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}${lines(RC1_CHANGELOG_ENTRY_LINES)}`;
+      check(cl.startsWith(`# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}`), 'the file starts with "# Changelog", a blank line and the exact rc.2 entry (ending in one blank line)', cl.slice(0, 200));
+      check(cl.startsWith(head), 'the exact rc.2 entry is followed by the exact preserved rc.1 entry (the last line of each is the blank separator)', cl.slice(0, 200));
       const suffix = cl.startsWith(head) ? cl.slice(head.length) : '';
       check(suffix.startsWith('## 2.0.0\n') && sha256(suffix) === PINS.changelogSuffix, 'the historical entries from "## 2.0.0" onward are byte-identical to the post-C10 file', { starts: suffix.slice(0, 20), bytes: suffix.length });
-      check(cl.split('\n## 3.0.0-rc.1\n').length === 2, 'the candidate entry appears once');
+      check(cl.split('\n## 3.0.0-rc.2\n').length === 2, 'the candidate entry appears once');
+      check(cl.split('\n## 3.0.0-rc.1\n').length === 2, 'exactly one historical rc.1 entry remains');
     });
-    await step('plan 3.6 and C12-15: SKILL.md carries the top-level release heading "# project-setup 3.0.0-rc.1" and every other byte is the pinned text', async () => {
+    await step('plan 3.6, C12-15 and C13-14: SKILL.md carries the top-level release heading "# project-setup 3.0.0-rc.2" and every other byte is the pinned text', async () => {
       const skill = text('SKILL.md');
       if (skill === null) return;
       const ls = skill.split('\n');
-      check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.1"', ls[5]);
+      check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.2"', ls[5]);
       const restored = [...ls]; restored[5] = '# project-setup v2';
       check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits)', sha256(restored.join('\n')));
       check(ls.filter((l) => l === SKILL_HEADING_LINES[0]).length === 1 && !ls.includes('# project-setup v2'), 'the new heading appears once and the old heading is gone');
@@ -2468,7 +2575,7 @@ async function documentation(context) {
       }
       const last = secs[secs.length - 1];
       check(last.startsWith('## Local candidate release') && squash(last) === squash(lines(README_RELEASE_SECTION_LINES)), 'the appended "Local candidate release" section is exact (whitespace normalized) and last', last && squash(last).slice(0, 160));
-      check(last && last.includes('```text\nnode install/release.mjs --tag project-setup-v3.0.0-rc.1 --out <unused-directory>\n```') && readme.endsWith('\n') && !readme.endsWith('\n\n'), 'the section ends with the exact later-build command fence and the file ends with one LF');
+      check(last && last.includes('```text\nnode install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>\n```') && readme.endsWith('\n') && !readme.endsWith('\n\n'), 'the section ends with the exact later-build command fence and the file ends with one LF');
     });
     await step('plan 5.9: tests/live/LIVE-ACCEPTANCE.md ends with "## Candidate 3.0.0-rc.1 evidence" carrying the exact status text, after the earlier procedures and without marking any pending host measurement as passed', async () => {
       const live = text('tests/live/LIVE-ACCEPTANCE.md');
@@ -2480,13 +2587,13 @@ async function documentation(context) {
       check(sec !== null && squash(sec) === squash(lines(LIVE_SECTION_LINES)), 'its text is exactly the plan paragraphs after whitespace normalization', sec && squash(sec).slice(0, 200));
       check(live.includes('### C5 review-diff procedure (host evidence pending)') && ls.includes('## 2. Stop conditions'), 'the C5 and C8 procedures and the stop conditions are retained (their own checks keep their text)');
     });
-    await step('plan 5.9 and C12-13: evals/evals.json holds evaluations 1 to 21 without duplicates and evaluation 20 is exactly the plan object', async () => {
+    await step('plan 5.9, C12-13 and C13-15: evals/evals.json holds evaluations 1 to 26 without duplicates and evaluation 20 is exactly the plan object', async () => {
       let file = null;
       try { file = JSON.parse(readText(skillPath(context, 'evals/evals.json'))); } catch { file = null; }
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array');
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 21 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 21 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 21, 'IDs 1 through 21 in order without duplicates (C12 appends 21)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 26 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 26 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 26, 'IDs 1 through 26 in order without duplicates (C12 appends 21, C13 appends 22-26)', file.evals.map((e) => e && e.id));
       check(eq(file.evals[19], EVAL_20), 'evaluation 20 equals the plan object exactly (an expectation, not proof that an agent followed it)', file.evals[19]);
     });
     await step('plan 3.6 and 3.7: the working-tree release builder exists with the pinned public surface; nothing in the documentation claims publication or a real tag', async () => {

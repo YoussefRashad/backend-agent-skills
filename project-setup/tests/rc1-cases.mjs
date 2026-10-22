@@ -19,6 +19,7 @@ import { C9_IMPLEMENTATIONS } from './c9.test.mjs';
 import { C10_IMPLEMENTATIONS } from './c10.test.mjs';
 import { C11B_IMPLEMENTATIONS } from './c11b.test.mjs';
 import { C12_IMPLEMENTATIONS } from './c12.test.mjs';
+import { C13_IMPLEMENTATIONS } from './c13.test.mjs';
 import { RC1_CASE_DESCRIPTORS, CASE_REQUIREMENTS, composeCaseOutcome } from './helpers/rc1-integration.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
@@ -260,6 +261,17 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'RC1/C12/pins', name: 'intentional documentation edits update only affected pins' },
     { id: 'V2/C12/contracts', name: 'C12 registration and evaluation contracts are exact' },
   ],
+  // C13 plan (docs/plans/2026-10-22-project-setup-v3-rc2-c13.md) sections C13-17 and C13-18, in their exact order. These are sub-assertions: no complete numbered case is composed from them and the 40-case table is unchanged.
+  C13: [
+    { id: 'A5-templates/C13/reviewer', name: 'review passes cover reachable defects beyond the plan' },
+    { id: 'A5-templates/C13/docs-sync', name: 'recorded drift requires living documentation updates' },
+    { id: 'A5-templates/C13/external-review', name: 'external review requires exclusion and content scanning' },
+    { id: 'A5-templates/C13/claude', name: 'blocked review preambles retain the managed Git boundary' },
+    { id: 'A5-templates/C13/development-rules', name: 'generated rules require contract coverage and serial full suites' },
+    { id: 'V2/C13/update', name: 'managed updates deliver rules without replacing project customizations' },
+    { id: 'RC1/C13/release', name: 'rc2 bookkeeping preserves historical and payload identities' },
+    { id: 'V2/C13/contracts', name: 'C13 registration and evaluation contracts are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -276,6 +288,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C10: Object.freeze([...C10_IMPLEMENTATIONS]),
   C11b: Object.freeze([...C11B_IMPLEMENTATIONS]),
   C12: Object.freeze([...C12_IMPLEMENTATIONS]),
+  C13: Object.freeze([...C13_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
