@@ -4,10 +4,19 @@
 
 | Ownership | Applies to | The skill may | On drift |
 |---|---|---|---|
-| `full` | Files the skill created entirely: `.ai/agents/*`, wrappers | Regenerate when unchanged | Ask before replacing user edits |
+| `full` | Canonical `.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`, and wrappers | Regenerate when unchanged | Ask before replacing user edits |
 | `blocks` | Markdown and `#`-comment files with managed blocks: `AGENTS.md`, `CLAUDE.md`, `.gitignore` | Rewrite inside its blocks only | Per-block: unchanged / edited-by-user / removed-by-user |
 | `keys` | `.claude/settings.json`, `.ai/security-paths.json` | Append missing managed entries; record the approved managed list | Never removes or reorders without approval; reports conflicts |
 | `merged` | Living docs, `.env.example`, pre-existing files without markers | Targeted, reviewed edits | Not tracked |
+
+The optional project extensions ".ai/agents/reviewer.project.md" and
+".ai/agents/docs-sync.project.md" use merged ownership. Their records contain no full-file
+regeneration hash. Routine setup MUST omit their drafts unless a project-rule change was
+requested, so project guidance cannot be regenerated as a canonical agent. Existing unowned
+content still needs its applicable approval. A changed file with prior ownership needs
+approval for an ownership transition; a matching hash is not proof of template-only content.
+Setup MUST review and commit ownership metadata with the existing transaction, so content
+and ownership cannot receive separate, unbound approvals.
 
 `.ai/security-paths.json` is `full` only when a fresh install (no installed policy) creates it from the shipped
 `data/secret-paths.json`. That record never permits replacing an installed policy with the shipped defaults. A rerun

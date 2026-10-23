@@ -275,6 +275,10 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
    survive. Approved reviewer-specific text moves to ".ai/agents/reviewer.project.md" with a merged ownership
    request (`references/docs-generation.md`, "Ownership hints"). Keep existing agent names other skills rely on
    (e.g. `.claude/agents/reviewer.md`); check before renaming anything.
+   Approved docs-sync-specific text MUST move to ".ai/agents/docs-sync.project.md" with a
+   merged ownership request, so replacing the canonical agent preserves project requirements.
+   Follow the same approved-text and existing-byte preservation rules as for reviewer.project.md.
+   Do not create either project file without approved content.
 6. Allow retirement, only for exact installed managed entries the user approved retiring. Stage denies and hooks
    before retiring allows. Normal merge refuses a pending allow-omission request. Start a new run to amend a
    pending retirement selection. Staging is not approval.

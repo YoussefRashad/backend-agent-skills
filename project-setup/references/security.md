@@ -208,8 +208,9 @@ you MUST re-establish the exclusions and rescan the actual outgoing payload agai
 trusted policy. A previous scan is not evidence for changed policy or changed outgoing content.
 
 These are prerequisites, not permission to send repository content. Canonical reviewer and
-docs-sync instructions still prohibit external transmission. C13 adds reference guidance only;
-it adds no wrapper or preflight and does not install a project-wide external-review rule.
+docs-sync instructions still prohibit external transmission. C14 also installs these prerequisites
+in the root AGENTS.md critical-rules block, so project sessions receive them without reading this
+reference. No wrapper or automated preflight is added; instruction checks do not prove enforcement.
 
 ## 3. Secret scan (optional, bounded)
 

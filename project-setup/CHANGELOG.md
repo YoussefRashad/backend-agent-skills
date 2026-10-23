@@ -8,6 +8,14 @@ Adds capture-once validation, per-item isolation, guarded stack prerequisites, r
 fallback checks, outcome contracts, trusted log classification and computed-overflow handling.
 Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.
 
+C14 adds the optional docs-sync project-rules hook with reviewed merged ownership and documents
+backend-standards adoption without losing project rules, Claude imports or the version stamp.
+It also closes the C13 prose-check command and fence residuals. Backend-standards 3.0.0 and
+toolchain-config integration remain separate work.
+
+External-review prerequisites also reach installed projects through the root AGENTS.md managed
+block. They remain instructions, not an automated preflight or permission to transmit content.
+
 Manifest schema 3 remains unchanged. V2 validation rejects schema 3;
 this is not a retrofitted pre-write guard in every old command.
 Roll back project state with the tooling used for the update before reverting the installed skill.

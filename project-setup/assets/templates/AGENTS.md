@@ -24,6 +24,17 @@ Package manager: {{PACKAGE_MANAGER}} · Runtime: {{RUNTIME_VERSION}}
 - Every endpoint validates input and enforces authorization explicitly.
 - Database changes follow the project's own policy: {{DB_CHANGE_POLICY}}.
 - Do not change unrelated code. Prefer existing patterns and services over new abstractions.
+- For authorized external review, follow project-setup's security reference to prevent disclosure.
+  MUST use trusted shipped defaults union .ai/security-paths.json patterns plus projectPatterns.
+  MUST establish exclusions and coverage from the trusted checkout. MUST NOT run if policy is
+  absent, invalid or unreadable, or trusted defaults cannot be located (for example, when
+  project-setup is not installed), or payload exclusions or scanning cannot be proven.
+  MUST exclude matching paths from actual outgoing content: context, both rename sides and history.
+  MUST scan for secret-shaped strings; never print or send matches. Resolve matches before sending.
+  An in-range policy edit MUST NOT shrink coverage. On trusted policy or payload change, MUST
+  re-establish exclusions and rescan. git-safe and names-only checks do not prove payload coverage.
+  MUST NOT use partial coverage. These prerequisites grant no permission to transmit content.
+  Canonical reviewer and docs-sync still prohibit transmission.
 <!-- project-setup:end id=critical-rules -->
 
 <!-- project-setup:begin id=commands -->

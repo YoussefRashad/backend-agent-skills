@@ -292,8 +292,38 @@ JSON with a final LF. Without this request a newly created project file would be
 unowned project-file content still requires its applicable approval; `merged` does not grant permission to
 silently replace pre-existing text.
 
-Docs-sync customizations are listed and preserved in the reviewed replacement, or otherwise explicitly decided.
-There is no docs-sync project file.
+Docs-sync customizations MUST be listed for explicit disposition before replacement, so none
+are silently lost. Compatible approved project rules move to the project file below; other
+customizations require an explicit decision before the canonical replacement is drafted.
+
+Approved docs-sync-specific text MUST move to ".ai/agents/docs-sync.project.md", so replacing
+the canonical agent does not discard project requirements. Setup MUST preserve existing
+project-file bytes and append only the exact approved text. It MUST NOT deduplicate, rewrite
+or resolve conflicting rules silently; a collision requires an explicit decision.
+A customization that relaxes a canonical docs-sync rule MUST NOT move;
+its disposition stays pending.
+
+If an existing file lacks a final newline, setup MUST add one EOL before the approved append,
+so the last existing line and the first appended line cannot join. The appended text MUST use
+the file's EOL; apply's withEol preserves CRLF. No other separator or blank line is added.
+
+Setup MUST request merged ownership for a created or changed docs-sync project file, so later
+updates do not treat project guidance as a fully managed agent. Merge the following entry into
+the existing ownership.json request, preserving all other entries. Serialize the request as
+two-space JSON with a final LF.
+
+```json
+{
+  ".ai/agents/docs-sync.project.md": "merged"
+}
+```
+
+Without this request, a newly created project file would be inferred as full. Merged ownership
+does not authorize replacing existing text or bypassing the applicable user-content approval.
+
+If no docs-sync customization is approved, setup MUST NOT create the file. Routine updates
+MUST omit its draft unless the user requested a project-rule change, so setup cannot regenerate
+or erase project-owned rules.
 
 Preserve user-added top-level settings and tables, including `default_permissions`. Compare
 both the installed v2 baseline difference and the installed wrapper against the shipped

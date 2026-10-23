@@ -1,6 +1,7 @@
 # project-setup 3.0.0-rc.2
 
-This is the review rules release candidate, following the rc.1 security and permissions work.
+This is the review rules and project-rules integration release candidate, following the rc.1
+security and permissions work.
 Publication is a separate authorized action; automated acceptance does not authorize a tag,
 upload or deployment.
 
@@ -18,17 +19,23 @@ upload or deployment.
 - Living documentation updates when an in-range frozen plan or spec records drift.
 - External-review exclusion and scanning prerequisites and guidance for blocked review preambles.
 - Generated contract-testing standards and test-run hygiene through reviewed merged updates.
+- Optional docs-sync project rules with reviewed merged ownership and canonical-rule precedence.
+- Backend-standards adoption preserving project rules, Claude imports and the version stamp.
+- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.
+- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.
 
 ## Compatibility and rollback
 
-The project manifest schema is 3. C13 adds no policy or apply migration.
+The project manifest schema is 3. C13 and C14 add no policy or apply migration.
 Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.
 This is a compatibility signal, not a retrofitted pre-write guard in every old command.
 Do not use v2 commands to repair a schema-3 project.
 
 Existing projects receive the instructions through reviewed managed updates. User-modified
 canonical files require explicit dispositions. Keeping an old canonical file leaves that
-instruction update incomplete. Project-owned reviewer rules remain intact.
+instruction update incomplete. Project-owned reviewer and docs-sync rules remain intact.
+A missing docs-sync project file is created only when content is explicitly approved.
+Existing extension files are preserved; routine updates do not regenerate them.
 
 Roll back project state with the tooling used for the update before reverting the installed skill.
 If later independent runs exist, roll them back newest first. Do not split this migration into
@@ -42,7 +49,7 @@ The complete automated gate requires 100 case results: 99 PASS / 0 FAIL / 1 SKIP
 cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.
 No rc.1 case may skip. R91 requires real junction coverage on Windows.
 The rc.1 case names and accept-rc1.mjs are retained for rc.2.
-C13 contributes through R29 without adding numbered case records.
+C13 and C14 contribute through R29 without adding numbered case records.
 Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;
 the required totals in this document are not a claim that an unrecorded run passed.
 The release builder alone does not establish automated acceptance.
@@ -63,9 +70,14 @@ Agent instructions and configuration checks do not create an operating-system sa
 Doctor results describe the measured configuration, processes and permitted historical log;
 they do not establish the behavior of a future launch.
 Blocked review-preamble loading is observed workflow evidence, not new host verification.
-External-review prerequisites are reference-only: C13 adds no wrapper, preflight or installed
-project-wide external-review instruction. Reconsider that known gap with C14; C13 does not
-implement C14. Canonical reviewer and docs-sync instructions still prohibit external transmission.
+External-review prerequisites are installed in the root AGENTS.md managed block. No wrapper or
+automated preflight enforces them, and canonical reviewer and docs-sync instructions still
+prohibit external transmission. Missing trusted defaults or policy evidence prevents external
+review under these instructions. If trusted shipped defaults cannot be located, for example
+because project-setup is not installed on the machine, the external-review tool is not run.
+
+C14 supplies the PS extension interface. BS 3.0.0 and toolchain-config integration remain open.
+Nothing has been verified on a real BS scaffold; synthetic tests do not establish that result.
 
 ## Provenance and release artifacts
 

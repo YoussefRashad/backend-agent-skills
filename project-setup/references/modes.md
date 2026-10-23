@@ -44,6 +44,35 @@ docs, ADRs, or business rules. Record "re-run project-setup once code exists" in
 moving them into `AGENTS.md` and leaving `@AGENTS.md` plus Claude-only content in `CLAUDE.md`. Show exactly
 which lines move.
 
+**backend-standards adoption.** For a backend-standards-shaped CLAUDE.md, setup MUST preserve
+the BS-marked block as project content, including hand edits. BS markers do not grant
+project-setup ownership; treating them as its own markers could erase standards or local decisions.
+
+Setup MUST keep the @-imports of .ai/standards/ in CLAUDE.md and retain the human-facing
+standards version line. Codex treats those imports as plain text, so moving them into AGENTS.md
+would not preserve Claude's import behavior. Shared rules may be proposed separately, with
+explicit approval, without removing those imports or the version line.
+
+Setup MUST offer the existing reviewed replacement for BS standalone reviewer and docs-sync
+files in .claude/agents/. Before replacement, inventory their rules, including frontmatter settings
+such as model and tools, and obtain a disposition for every customization. Move approved review
+rules to ".ai/agents/reviewer.project.md" and approved documentation rules to
+".ai/agents/docs-sync.project.md". Preserve existing extension bytes and request merged ownership,
+so the wrapper replacement does not discard project rules.
+
+A conflicting rule MUST remain pending until explicitly resolved. Approval cannot make a
+project rule relax a canonical restriction. If replacement is declined, keep the installed
+file and report the incomplete agent update; do not claim the PS agent layer is fully installed.
+
+Validate checks backticked or linked references inside project extensions. Moved text that
+references absent docs fails validation until fixed. Setup MUST report that failure and obtain
+a reviewed correction, so adoption cannot claim a valid installation with broken references.
+
+Source inspection confirms that existing Claude instructions or agents without a valid manifest
+or v1 provenance select adopt. A valid manifest selects update, and invalid metadata selects
+invalid. A BS name or marker is not v1 provenance.
+This behavior has not been verified on a real backend-standards scaffold.
+
 **add-claude.** Leave `AGENTS.md` content intact; add managed blocks only where sections are missing. Create
 `CLAUDE.md` as `@AGENTS.md` plus the `claude` block.
 

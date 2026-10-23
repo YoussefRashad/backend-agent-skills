@@ -63,10 +63,16 @@ unreviewed readers.
 The shared agents and AGENTS.md depend on the policy and the reader. They are what lets an agent in the project
 follow the secret rules without knowing where the skill is installed.
 
-The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed and rendered from
-`assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs you did not generate. Project-specific
-review rules do not go into the canonical reviewer; they live in the optional, project-owned
-".ai/agents/reviewer.project.md" (see "Ownership hints").
+The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed.
+Render them from `assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs
+you did not generate. Project-specific rules MUST use the optional, project-owned extensions
+".ai/agents/reviewer.project.md" and ".ai/agents/docs-sync.project.md" with merged ownership,
+so canonical updates do not erase project requirements (see "Ownership hints").
+
+Project maintainers and explicitly authorized setup or standards workflows MAY write these
+extensions. Docs-sync MUST NOT write either extension. Project rules MAY add or tighten
+requirements; they MUST NOT relax canonical restrictions. Setup MUST NOT copy an extension
+from a default template or synthesize one without approved content.
 
 ## `.ai/context/`
 
@@ -153,8 +159,36 @@ migration or merge scripts already wrote, and serialize the merged request as tw
 Without this request a newly created project file would be inferred as `full`. `merged` does not grant
 permission to replace pre-existing text: existing unowned project-file content still needs its applicable
 approval. If no reviewer customization is approved for movement, do not create the file, and routine later
-updates omit its draft unless the user asked for a project-rule change. Docs-sync has no project file; its
-customizations are preserved in the reviewed replacement or explicitly decided.
+updates omit its draft unless the user asked for a project-rule change.
+
+Approved docs-sync-specific text MUST move to ".ai/agents/docs-sync.project.md", so replacing
+the canonical agent does not discard project requirements. Setup MUST preserve existing
+project-file bytes and append only the exact approved text. It MUST NOT deduplicate, rewrite
+or resolve conflicting rules silently; a collision requires an explicit decision.
+A customization that relaxes a canonical docs-sync rule MUST NOT move;
+its disposition stays pending.
+
+If an existing file lacks a final newline, setup MUST add one EOL before the approved append,
+so the last existing line and the first appended line cannot join. The appended text MUST use
+the file's EOL; apply's withEol preserves CRLF. No other separator or blank line is added.
+
+Setup MUST request merged ownership for a created or changed docs-sync project file, so later
+updates do not treat project guidance as a fully managed agent. Merge the following entry into
+the existing ownership.json request, preserving all other entries. Serialize the request as
+two-space JSON with a final LF.
+
+```json
+{
+  ".ai/agents/docs-sync.project.md": "merged"
+}
+```
+
+Without this request, a newly created project file would be inferred as full. Merged ownership
+does not authorize replacing existing text or bypassing the applicable user-content approval.
+
+If no docs-sync customization is approved, setup MUST NOT create the file. Routine updates
+MUST omit its draft unless the user requested a project-rule change, so setup cannot regenerate
+or erase project-owned rules.
 
 ### Environment template
 
