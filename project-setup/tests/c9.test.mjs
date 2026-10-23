@@ -2242,7 +2242,7 @@ async function instructionsGroup(context) {
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 26 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 26 }, (_, i) => i + 1)), 'ids 1 through 26 in order (C11b appends 20, C12 appends 21, C13 appends 22-26)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 31 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 31 }, (_, i) => i + 1)), 'ids 1 through 31 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS_11_16), 'C8 evaluations 11-16 are retained exactly', file.evals.slice(10, 16).map((e) => e && e.name));
       check(eq(file.evals.slice(16, 19), EVALS_17_19), 'evaluations 17-19 equal the plan objects exactly', file.evals.slice(16, 19).map((e) => e && e.name));

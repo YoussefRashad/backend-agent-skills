@@ -2269,7 +2269,7 @@ async function contracts(context) {
       check(Object.isFrozen(C12_IMPLEMENTATIONS) && eq(C12_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C12_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C12_IMPLEMENTATIONS is a frozen array of the eight IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {});
       const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13']), 'both registries list the earlier components unchanged, then C12 and then C13 (C13 appends to the registry tail)', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14']), 'both registries list the earlier components unchanged, then C12, C13 and C14 (C14 is the appended tail)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
     });
     await step('plan C12-13: registerRc1Cases still registers exactly the 40 ordered complete cases with function callbacks, adds no C12 case (R47, R80 and R51 prefixes do not add C12 to the case table), executes nothing, writes nothing and starts no process', async () => {
@@ -2311,11 +2311,11 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C12-13 as amended by C13-15: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 26 without duplicates (C13 appends 22-26)', async () => {
+    await step('plan C12-13 as amended by C13-15 and C14-19: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 31 without duplicates (C13 appends 22-26, C14 appends 27-31)', async () => {
       const file = readJson(skillPath(context, 'evals/evals.json'));
       check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
       if (!file || !Array.isArray(file.evals)) return;
-      check(file.evals.length === 26 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 26 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 26, 'ids 1 through 26 in order without duplicates', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 31 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 31, 'ids 1 through 31 in order without duplicates', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 20)))) === EVALS_1_20_SHA, 'evaluations 1-20 are unchanged from the committed file (canonical JSON digest)');
       check(eq(file.evals[20], EVAL_21) && eq(Object.keys(file.evals[20]), ['id', 'name', 'prompt', 'files', 'expected_output']), 'evaluation 21 equals the plan object exactly, with its keys in the plan order (an expectation, not observed agent behavior)', file.evals[20]);
     });

@@ -20,6 +20,7 @@ import { C10_IMPLEMENTATIONS } from './c10.test.mjs';
 import { C11B_IMPLEMENTATIONS } from './c11b.test.mjs';
 import { C12_IMPLEMENTATIONS } from './c12.test.mjs';
 import { C13_IMPLEMENTATIONS } from './c13.test.mjs';
+import { C14_IMPLEMENTATIONS } from './c14.test.mjs';
 import { RC1_CASE_DESCRIPTORS, CASE_REQUIREMENTS, composeCaseOutcome } from './helpers/rc1-integration.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
@@ -272,6 +273,17 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'RC1/C13/release', name: 'rc2 bookkeeping preserves historical and payload identities' },
     { id: 'V2/C13/contracts', name: 'C13 registration and evaluation contracts are exact' },
   ],
+  // C14 plan (docs/plans/2026-10-23-project-setup-v3-rc2-c14.md) section C14-18, in its exact order. These are sub-assertions: no complete numbered case is composed from them and the 40-case table is unchanged.
+  C14: [
+    { id: 'A5-templates/C14/docs-sync', name: 'project rules tighten docs-sync without widening its scope' },
+    { id: 'A5-templates/C14/ownership', name: 'both project extensions preserve reviewed merged ownership' },
+    { id: 'A5-templates/C14/adopt', name: 'backend-standards adoption preserves imports and project rules' },
+    { id: 'A5-templates/C14/external-review', name: 'installed external-review guidance matches the recorded decision' },
+    { id: 'V2/C14/update', name: 'managed updates preserve project extensions across supported versions' },
+    { id: 'V2/C14/path-boundaries', name: 'project extensions retain path and marker protections' },
+    { id: 'RC1/C14/release', name: 'C14 bookkeeping preserves current and historical release contracts' },
+    { id: 'V2/C14/contracts', name: 'C14 registration evaluations and prose controls are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -289,6 +301,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C11b: Object.freeze([...C11B_IMPLEMENTATIONS]),
   C12: Object.freeze([...C12_IMPLEMENTATIONS]),
   C13: Object.freeze([...C13_IMPLEMENTATIONS]),
+  C14: Object.freeze([...C14_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

@@ -174,7 +174,7 @@ async function withStreamGuard(fn) {
 }
 
 // ================================================ plan literals (generated from the frozen plan text) ====
-// C13-14: the exact rc.2 CHANGELOG entry, inserted after "# Changelog" and one blank line (the last line is the blank separator); the complete rc.1 entry follows it unchanged.
+// C13-14: the exact rc.2 CHANGELOG entry, inserted after "# Changelog" and one blank line (the last line is the blank separator); the complete rc.1 entry follows it unchanged. C14-14 amendment L (two paragraphs) is part of this current-candidate array.
 const CHANGELOG_ENTRY_LINES = [
   "## 3.0.0-rc.2",
   "",
@@ -183,6 +183,14 @@ const CHANGELOG_ENTRY_LINES = [
   "Adds capture-once validation, per-item isolation, guarded stack prerequisites, real-validator",
   "fallback checks, outcome contracts, trusted log classification and computed-overflow handling.",
   "Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.",
+  "",
+  "C14 adds the optional docs-sync project-rules hook with reviewed merged ownership and documents",
+  "backend-standards adoption without losing project rules, Claude imports or the version stamp.",
+  "It also closes the C13 prose-check command and fence residuals. Backend-standards 3.0.0 and",
+  "toolchain-config integration remain separate work.",
+  "",
+  "External-review prerequisites also reach installed projects through the root AGENTS.md managed",
+  "block. They remain instructions, not an automated preflight or permission to transmit content.",
   "",
   "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
   "this is not a retrofitted pre-write guard in every old command.",
@@ -233,11 +241,12 @@ const README_OPENING_LINES = [
 const README_INVENTORY_ROW_LINES = [
   "install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)",
 ];
-// C13-14: the complete RELEASE-NOTES-3.0.0-rc.2.md, exactly (ASCII, LF, one final LF).
+// C13-14: the complete RELEASE-NOTES-3.0.0-rc.2.md, exactly (ASCII, LF, one final LF). C14-14 amendment N (opening description, four Changes bullets, the schema, compatibility, R29 and limitation sentences) is part of this current-candidate array.
 const RELEASE_NOTES_LINES = [
   "# project-setup 3.0.0-rc.2",
   "",
-  "This is the review rules release candidate, following the rc.1 security and permissions work.",
+  "This is the review rules and project-rules integration release candidate, following the rc.1",
+  "security and permissions work.",
   "Publication is a separate authorized action; automated acceptance does not authorize a tag,",
   "upload or deployment.",
   "",
@@ -255,17 +264,23 @@ const RELEASE_NOTES_LINES = [
   "- Living documentation updates when an in-range frozen plan or spec records drift.",
   "- External-review exclusion and scanning prerequisites and guidance for blocked review preambles.",
   "- Generated contract-testing standards and test-run hygiene through reviewed merged updates.",
+  "- Optional docs-sync project rules with reviewed merged ownership and canonical-rule precedence.",
+  "- Backend-standards adoption preserving project rules, Claude imports and the version stamp.",
+  "- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.",
+  "- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.",
   "",
   "## Compatibility and rollback",
   "",
-  "The project manifest schema is 3. C13 adds no policy or apply migration.",
+  "The project manifest schema is 3. C13 and C14 add no policy or apply migration.",
   "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
   "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
   "Do not use v2 commands to repair a schema-3 project.",
   "",
   "Existing projects receive the instructions through reviewed managed updates. User-modified",
   "canonical files require explicit dispositions. Keeping an old canonical file leaves that",
-  "instruction update incomplete. Project-owned reviewer rules remain intact.",
+  "instruction update incomplete. Project-owned reviewer and docs-sync rules remain intact.",
+  "A missing docs-sync project file is created only when content is explicitly approved.",
+  "Existing extension files are preserved; routine updates do not regenerate them.",
   "",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
   "If later independent runs exist, roll them back newest first. Do not split this migration into",
@@ -279,7 +294,7 @@ const RELEASE_NOTES_LINES = [
   "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
   "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
   "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
-  "C13 contributes through R29 without adding numbered case records.",
+  "C13 and C14 contribute through R29 without adding numbered case records.",
   "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
   "the required totals in this document are not a claim that an unrecorded run passed.",
   "The release builder alone does not establish automated acceptance.",
@@ -300,9 +315,14 @@ const RELEASE_NOTES_LINES = [
   "Doctor results describe the measured configuration, processes and permitted historical log;",
   "they do not establish the behavior of a future launch.",
   "Blocked review-preamble loading is observed workflow evidence, not new host verification.",
-  "External-review prerequisites are reference-only: C13 adds no wrapper, preflight or installed",
-  "project-wide external-review instruction. Reconsider that known gap with C14; C13 does not",
-  "implement C14. Canonical reviewer and docs-sync instructions still prohibit external transmission.",
+  "External-review prerequisites are installed in the root AGENTS.md managed block. No wrapper or",
+  "automated preflight enforces them, and canonical reviewer and docs-sync instructions still",
+  "prohibit external transmission. Missing trusted defaults or policy evidence prevents external",
+  "review under these instructions. If trusted shipped defaults cannot be located, for example",
+  "because project-setup is not installed on the machine, the external-review tool is not run.",
+  "",
+  "C14 supplies the PS extension interface. BS 3.0.0 and toolchain-config integration remain open.",
+  "Nothing has been verified on a real BS scaffold; synthetic tests do not establish that result.",
   "",
   "## Provenance and release artifacts",
   "",
@@ -2494,7 +2514,7 @@ const PINS = deepFreeze({
   installer: '9e22d4192aed1c504053e9c499bdaf98450a7bd0a80e44b0aeb4b11b19d5b947',
   notes200: '27711d116ec2ee4ba012b9cdaec198703e154055341cba793472d2ee79886eba',
   changelogSuffix: '390782771ef21740d67e8c3c53a8d90a3d2f113fc45d42dee460141ebb769aaf',
-  skillWithOldHeading: 'e5a0acabaaf5627d34de13162f229e176850cdb605ce67e26f9488c6f906bd80',
+  skillWithOldHeading: '16a836b7a231cb3fec1670455650a43a278ba3540c579bbedb4630b9ffba0d4b',
   readmeTopRest: '8fadcdcd4c7c7dd256b710b023d4f5f4283fbf2db40fa1859d64a9b39df7ff62',
   readmeSections: {
     '## Claude raw-Git hook': 'f3a4c0b1f33d156cc08dbcbec50c84ed842ecaf9ed28c9de2ddfcd5b9e7ba5e1',
@@ -2545,7 +2565,7 @@ async function documentation(context) {
       const ls = skill.split('\n');
       check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.2"', ls[5]);
       const restored = [...ls]; restored[5] = '# project-setup v2';
-      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits)', sha256(restored.join('\n')));
+      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits and C14 project-rule insertion)', sha256(restored.join('\n')));
       check(ls.filter((l) => l === SKILL_HEADING_LINES[0]).length === 1 && !ls.includes('# project-setup v2'), 'the new heading appears once and the old heading is gone');
     });
     await step('plan 3.6 and 5.9: README.md has the exact seven-line opening with a separate security paragraph, the overview after it, the release-builder inventory row after the installer row, the exact Test first paragraph and fence, the retained sections unchanged and the exact "Local candidate release" section last', async () => {
@@ -2587,13 +2607,13 @@ async function documentation(context) {
       check(sec !== null && squash(sec) === squash(lines(LIVE_SECTION_LINES)), 'its text is exactly the plan paragraphs after whitespace normalization', sec && squash(sec).slice(0, 200));
       check(live.includes('### C5 review-diff procedure (host evidence pending)') && ls.includes('## 2. Stop conditions'), 'the C5 and C8 procedures and the stop conditions are retained (their own checks keep their text)');
     });
-    await step('plan 5.9, C12-13 and C13-15: evals/evals.json holds evaluations 1 to 26 without duplicates and evaluation 20 is exactly the plan object', async () => {
+    await step('plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 31 without duplicates and evaluation 20 is exactly the plan object', async () => {
       let file = null;
       try { file = JSON.parse(readText(skillPath(context, 'evals/evals.json'))); } catch { file = null; }
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array');
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 26 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 26 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 26, 'IDs 1 through 26 in order without duplicates (C12 appends 21, C13 appends 22-26)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 31 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 31, 'IDs 1 through 31 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31)', file.evals.map((e) => e && e.id));
       check(eq(file.evals[19], EVAL_20), 'evaluation 20 equals the plan object exactly (an expectation, not proof that an agent followed it)', file.evals[19]);
     });
     await step('plan 3.6 and 3.7: the working-tree release builder exists with the pinned public surface; nothing in the documentation claims publication or a real tag', async () => {

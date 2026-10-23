@@ -1010,6 +1010,13 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c13context.tmp, { recursive: true });
   const rep13 = await runComponentAssertions('C13', c13context);
   check(rep13.ok === true, 'C13 component assertions pass', { errors: rep13.errors, failed: rep13.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C14 component assertions (the project rules: the docs-sync hook, the merged extension ownership, backend-standards adoption, the installed external-review prerequisites, the managed update and the path and marker boundaries, the
+  // release bookkeeping and the registration contracts) run once, after the C13 aggregation, inside the same case. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the
+  // whole C14 report is ok. The run is not also invoked from any other baseline case. (C14 plan C14-20.)
+  const c14context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c14'), env: { ...ENV } };
+  fs.mkdirSync(c14context.tmp, { recursive: true });
+  const rep14 = await runComponentAssertions('C14', c14context);
+  check(rep14.ok === true, 'C14 component assertions pass', { errors: rep14.errors, failed: rep14.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {

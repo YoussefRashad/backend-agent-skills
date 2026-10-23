@@ -26,6 +26,11 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
+
+// C14 (docs/plans/2026-10-23-project-setup-v3-rc2-c14.md, C14-13 and C14-17): the prose checks and their controls moved to the shared test-only module tests/helpers/prose-check.mjs, where the C13-R2 and C13-R3
+// residuals are corrected; C14 amends the files this component reads, so the historical C13 checks first verify the exact C14 amendments (copied from the C14 plan below) and reverse them, and the current-candidate release
+// text gains exactly C14's changelog paragraphs and release-note amendments. Nothing else of this component changed: eight descriptors, their IDs, six proveFenceRules call sites and the sole public export.
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -397,6 +402,14 @@ const F_CHANGELOG_ENTRY = [
   "fallback checks, outcome contracts, trusted log classification and computed-overflow handling.",
   "Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.",
   "",
+  "C14 adds the optional docs-sync project-rules hook with reviewed merged ownership and documents",
+  "backend-standards adoption without losing project rules, Claude imports or the version stamp.",
+  "It also closes the C13 prose-check command and fence residuals. Backend-standards 3.0.0 and",
+  "toolchain-config integration remain separate work.",
+  "",
+  "External-review prerequisites also reach installed projects through the root AGENTS.md managed",
+  "block. They remain instructions, not an automated preflight or permission to transmit content.",
+  "",
   "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
   "this is not a retrofitted pre-write guard in every old command.",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
@@ -409,7 +422,8 @@ const F_CHANGELOG_ENTRY = [
 const F_RELEASE_NOTES = [
   "# project-setup 3.0.0-rc.2",
   "",
-  "This is the review rules release candidate, following the rc.1 security and permissions work.",
+  "This is the review rules and project-rules integration release candidate, following the rc.1",
+  "security and permissions work.",
   "Publication is a separate authorized action; automated acceptance does not authorize a tag,",
   "upload or deployment.",
   "",
@@ -427,17 +441,23 @@ const F_RELEASE_NOTES = [
   "- Living documentation updates when an in-range frozen plan or spec records drift.",
   "- External-review exclusion and scanning prerequisites and guidance for blocked review preambles.",
   "- Generated contract-testing standards and test-run hygiene through reviewed merged updates.",
+  "- Optional docs-sync project rules with reviewed merged ownership and canonical-rule precedence.",
+  "- Backend-standards adoption preserving project rules, Claude imports and the version stamp.",
+  "- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.",
+  "- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.",
   "",
   "## Compatibility and rollback",
   "",
-  "The project manifest schema is 3. C13 adds no policy or apply migration.",
+  "The project manifest schema is 3. C13 and C14 add no policy or apply migration.",
   "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
   "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
   "Do not use v2 commands to repair a schema-3 project.",
   "",
   "Existing projects receive the instructions through reviewed managed updates. User-modified",
   "canonical files require explicit dispositions. Keeping an old canonical file leaves that",
-  "instruction update incomplete. Project-owned reviewer rules remain intact.",
+  "instruction update incomplete. Project-owned reviewer and docs-sync rules remain intact.",
+  "A missing docs-sync project file is created only when content is explicitly approved.",
+  "Existing extension files are preserved; routine updates do not regenerate them.",
   "",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
   "If later independent runs exist, roll them back newest first. Do not split this migration into",
@@ -451,7 +471,7 @@ const F_RELEASE_NOTES = [
   "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
   "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
   "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
-  "C13 contributes through R29 without adding numbered case records.",
+  "C13 and C14 contribute through R29 without adding numbered case records.",
   "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
   "the required totals in this document are not a claim that an unrecorded run passed.",
   "The release builder alone does not establish automated acceptance.",
@@ -472,9 +492,14 @@ const F_RELEASE_NOTES = [
   "Doctor results describe the measured configuration, processes and permitted historical log;",
   "they do not establish the behavior of a future launch.",
   "Blocked review-preamble loading is observed workflow evidence, not new host verification.",
-  "External-review prerequisites are reference-only: C13 adds no wrapper, preflight or installed",
-  "project-wide external-review instruction. Reconsider that known gap with C14; C13 does not",
-  "implement C14. Canonical reviewer and docs-sync instructions still prohibit external transmission.",
+  "External-review prerequisites are installed in the root AGENTS.md managed block. No wrapper or",
+  "automated preflight enforces them, and canonical reviewer and docs-sync instructions still",
+  "prohibit external transmission. Missing trusted defaults or policy evidence prevents external",
+  "review under these instructions. If trusted shipped defaults cannot be located, for example",
+  "because project-setup is not installed on the machine, the external-review tool is not run.",
+  "",
+  "C14 supplies the PS extension interface. BS 3.0.0 and toolchain-config integration remain open.",
+  "Nothing has been verified on a real BS scaffold; synthetic tests do not establish that result.",
   "",
   "## Provenance and release artifacts",
   "",
@@ -622,6 +647,265 @@ const F_I131 = [
   "work and the component that owns it; an assignment of a category of work (\"C14 handles",
   "validation\") is non-assigning.",
 ];
+
+// ===================================================== C14 amendments ====
+// Copied verbatim from the frozen C14 plan (C14-5 to C14-11) by a generator script: the plan's own text blocks as arrays of lines. Only the amendments this component reverses are carried here.
+const F_H = [
+  "### Project rules",
+  "",
+  "If \".ai/agents/docs-sync.project.md\" exists, you MUST read it as project-specific",
+  "documentation guidance before selecting or editing docs, so project requirements are not missed.",
+  "Its absence is allowed. If it is present but unreadable, you MUST stop and report the failure;",
+  "a failed or denied read is not absence, and unreadable guidance is not an empty rule set.",
+  "",
+  "Project rules MAY add requirements or tighten this canonical definition. They MUST NOT relax",
+  "any rule in this definition or the AGENTS.md critical rules, widen permitted reads or writes,",
+  "or authorize another tool, checkout or external transmission. This prevents project text from",
+  "bypassing the shared boundary. On conflict, you MUST follow the canonical rule and report it.",
+  "",
+  "The project owns this file. You MUST NOT edit it or any other file under .ai/agents/ during",
+  "docs-sync; reading project guidance does not grant permission to rewrite agent instructions.",
+];
+
+const F_H_ANCHOR = [
+  "environment files. Existing restrictions on managed markers and other protected files still apply.",
+];
+
+const F_M_P1 = [
+  "Approved docs-sync-specific text MUST move to \".ai/agents/docs-sync.project.md\", so replacing",
+  "the canonical agent does not discard project requirements. Setup MUST preserve existing",
+  "project-file bytes and append only the exact approved text. It MUST NOT deduplicate, rewrite",
+  "or resolve conflicting rules silently; a collision requires an explicit decision.",
+  "A customization that relaxes a canonical docs-sync rule MUST NOT move;",
+  "its disposition stays pending.",
+  "",
+  "If an existing file lacks a final newline, setup MUST add one EOL before the approved append,",
+  "so the last existing line and the first appended line cannot join. The appended text MUST use",
+  "the file's EOL; apply's withEol preserves CRLF. No other separator or blank line is added.",
+  "",
+  "Setup MUST request merged ownership for a created or changed docs-sync project file, so later",
+  "updates do not treat project guidance as a fully managed agent. Merge the following entry into",
+  "the existing ownership.json request, preserving all other entries. Serialize the request as",
+  "two-space JSON with a final LF.",
+];
+
+const F_M_JSON = [
+  "{",
+  "  \".ai/agents/docs-sync.project.md\": \"merged\"",
+  "}",
+];
+
+const F_M_P2 = [
+  "Without this request, a newly created project file would be inferred as full. Merged ownership",
+  "does not authorize replacing existing text or bypassing the applicable user-content approval.",
+  "",
+  "If no docs-sync customization is approved, setup MUST NOT create the file. Routine updates",
+  "MUST omit its draft unless the user requested a project-rule change, so setup cannot regenerate",
+  "or erase project-owned rules.",
+];
+
+const F_D1_OLD = [
+  "The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed and rendered from",
+  "`assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs you did not generate. Project-specific",
+  "review rules do not go into the canonical reviewer; they live in the optional, project-owned",
+  "\".ai/agents/reviewer.project.md\" (see \"Ownership hints\").",
+];
+
+const F_D1_NEW = [
+  "The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed.",
+  "Render them from `assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs",
+  "you did not generate. Project-specific rules MUST use the optional, project-owned extensions",
+  "\".ai/agents/reviewer.project.md\" and \".ai/agents/docs-sync.project.md\" with merged ownership,",
+  "so canonical updates do not erase project requirements (see \"Ownership hints\").",
+  "",
+  "Project maintainers and explicitly authorized setup or standards workflows MAY write these",
+  "extensions. Docs-sync MUST NOT write either extension. Project rules MAY add or tighten",
+  "requirements; they MUST NOT relax canonical restrictions. Setup MUST NOT copy an extension",
+  "from a default template or synthesize one without approved content.",
+];
+
+const F_D1_ANCHOR = [
+  "follow the secret rules without knowing where the skill is installed.",
+];
+
+const F_D2_OLD = [
+  "updates omit its draft unless the user asked for a project-rule change. Docs-sync has no project file; its",
+  "customizations are preserved in the reviewed replacement or explicitly decided.",
+];
+
+const F_D2_NEW = [
+  "updates omit its draft unless the user asked for a project-rule change.",
+];
+
+const F_D2_PREV = [
+  "approval. If no reviewer customization is approved for movement, do not create the file, and routine later",
+];
+
+const F_V_OLD = [
+  "Docs-sync customizations are listed and preserved in the reviewed replacement, or otherwise explicitly decided.",
+  "There is no docs-sync project file.",
+];
+
+const F_V_NEW = [
+  "Docs-sync customizations MUST be listed for explicit disposition before replacement, so none",
+  "are silently lost. Compatible approved project rules move to the project file below; other",
+  "customizations require an explicit decision before the canonical replacement is drafted.",
+];
+
+const F_V_PREV = [
+  "silently replace pre-existing text.",
+];
+
+const F_V_NEXT = [
+  "Preserve user-added top-level settings and tables, including `default_permissions`. Compare",
+];
+
+const F_S = [
+  "   Approved docs-sync-specific text MUST move to \".ai/agents/docs-sync.project.md\" with a",
+  "   merged ownership request, so replacing the canonical agent preserves project requirements.",
+  "   Follow the same approved-text and existing-byte preservation rules as for reviewer.project.md.",
+  "   Do not create either project file without approved content.",
+];
+
+const F_S_ANCHOR = [
+  "   (e.g. `.claude/agents/reviewer.md`); check before renaming anything.",
+];
+
+const F_S_NEXT = [
+  "6. Allow retirement, only for exact installed managed entries the user approved retiring. Stage denies and hooks",
+];
+
+const F_O1_OLD = [
+  "| `full` | Files the skill created entirely: `.ai/agents/*`, wrappers | Regenerate when unchanged | Ask before replacing user edits |",
+];
+
+const F_O1_NEW = [
+  "| `full` | Canonical `.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`, and wrappers | Regenerate when unchanged | Ask before replacing user edits |",
+];
+
+const F_MERGED_ROW = [
+  "| `merged` | Living docs, `.env.example`, pre-existing files without markers | Targeted, reviewed edits | Not tracked |",
+];
+
+const F_O2 = [
+  "The optional project extensions \".ai/agents/reviewer.project.md\" and",
+  "\".ai/agents/docs-sync.project.md\" use merged ownership. Their records contain no full-file",
+  "regeneration hash. Routine setup MUST omit their drafts unless a project-rule change was",
+  "requested, so project guidance cannot be regenerated as a canonical agent. Existing unowned",
+  "content still needs its applicable approval. A changed file with prior ownership needs",
+  "approval for an ownership transition; a matching hash is not proof of template-only content.",
+  "Setup MUST review and commit ownership metadata with the existing transaction, so content",
+  "and ownership cannot receive separate, unbound approvals.",
+];
+
+const F_O2_NEXT = [
+  "`.ai/security-paths.json` is `full` only when a fresh install (no installed policy) creates it from the shipped",
+];
+
+const F_B = [
+  "**backend-standards adoption.** For a backend-standards-shaped CLAUDE.md, setup MUST preserve",
+  "the BS-marked block as project content, including hand edits. BS markers do not grant",
+  "project-setup ownership; treating them as its own markers could erase standards or local decisions.",
+  "",
+  "Setup MUST keep the @-imports of .ai/standards/ in CLAUDE.md and retain the human-facing",
+  "standards version line. Codex treats those imports as plain text, so moving them into AGENTS.md",
+  "would not preserve Claude's import behavior. Shared rules may be proposed separately, with",
+  "explicit approval, without removing those imports or the version line.",
+  "",
+  "Setup MUST offer the existing reviewed replacement for BS standalone reviewer and docs-sync",
+  "files in .claude/agents/. Before replacement, inventory their rules, including frontmatter settings",
+  "such as model and tools, and obtain a disposition for every customization. Move approved review",
+  "rules to \".ai/agents/reviewer.project.md\" and approved documentation rules to",
+  "\".ai/agents/docs-sync.project.md\". Preserve existing extension bytes and request merged ownership,",
+  "so the wrapper replacement does not discard project rules.",
+  "",
+  "A conflicting rule MUST remain pending until explicitly resolved. Approval cannot make a",
+  "project rule relax a canonical restriction. If replacement is declined, keep the installed",
+  "file and report the incomplete agent update; do not claim the PS agent layer is fully installed.",
+  "",
+  "Validate checks backticked or linked references inside project extensions. Moved text that",
+  "references absent docs fails validation until fixed. Setup MUST report that failure and obtain",
+  "a reviewed correction, so adoption cannot claim a valid installation with broken references.",
+  "",
+  "Source inspection confirms that existing Claude instructions or agents without a valid manifest",
+  "or v1 provenance select adopt. A valid manifest selects update, and invalid metadata selects",
+  "invalid. A BS name or marker is not v1 provenance.",
+  "This behavior has not been verified on a real backend-standards scaffold.",
+];
+
+const F_B_NEXT = [
+  "**add-claude.** Leave `AGENTS.md` content intact; add managed blocks only where sections are missing. Create",
+];
+
+const F_A = [
+  "- For authorized external review, follow project-setup's security reference to prevent disclosure.",
+  "  MUST use trusted shipped defaults union .ai/security-paths.json patterns plus projectPatterns.",
+  "  MUST establish exclusions and coverage from the trusted checkout. MUST NOT run if policy is",
+  "  absent, invalid or unreadable, or trusted defaults cannot be located (for example, when",
+  "  project-setup is not installed), or payload exclusions or scanning cannot be proven.",
+  "  MUST exclude matching paths from actual outgoing content: context, both rename sides and history.",
+  "  MUST scan for secret-shaped strings; never print or send matches. Resolve matches before sending.",
+  "  An in-range policy edit MUST NOT shrink coverage. On trusted policy or payload change, MUST",
+  "  re-establish exclusions and rescan. git-safe and names-only checks do not prove payload coverage.",
+  "  MUST NOT use partial coverage. These prerequisites grant no permission to transmit content.",
+  "  Canonical reviewer and docs-sync still prohibit transmission.",
+];
+
+const F_A_PREV = [
+  "- Do not change unrelated code. Prefer existing patterns and services over new abstractions.",
+];
+
+const F_A_NEXT = [
+  "<!-- project-setup:end id=critical-rules -->",
+];
+
+const F_E_OLD = [
+  "These are prerequisites, not permission to send repository content. Canonical reviewer and",
+  "docs-sync instructions still prohibit external transmission. C13 adds reference guidance only;",
+  "it adds no wrapper or preflight and does not install a project-wide external-review rule.",
+];
+
+const F_E_NEW = [
+  "These are prerequisites, not permission to send repository content. Canonical reviewer and",
+  "docs-sync instructions still prohibit external transmission. C14 also installs these prerequisites",
+  "in the root AGENTS.md critical-rules block, so project sessions receive them without reading this",
+  "reference. No wrapper or automated preflight is added; instruction checks do not prove enforcement.",
+];
+
+const F_E_PREV = [
+  "trusted policy. A previous scan is not evidence for changed policy or changed outgoing content.",
+];
+
+const T = (lines) => `${lines.join('\n')}\n`;
+const F_M = `${T(F_M_P1)}\n\`\`\`json\n${T(F_M_JSON)}\`\`\`\n\n${T(F_M_P2)}`; // the complete counterpart M: prose block, one blank line, the json fence, one blank line, prose block
+// The amendment table: before + old + after is the HEAD slice, before + neu + after the amended slice (C14-4: every inserted or replacing block ends with one LF; blank lines are part of the anchors).
+const AM = {
+  H: { file: 'assets/agents/docs-sync.md', before: `${T(F_H_ANCHOR)}\n`, old: '', neu: `${T(F_H)}\n`, after: '### Bounded reads\n' },
+  D1: { file: 'references/docs-generation.md', before: `${T(F_D1_ANCHOR)}\n`, old: T(F_D1_OLD), neu: T(F_D1_NEW), after: '\n## `.ai/context/`\n' },
+  D2: { file: 'references/docs-generation.md', before: T(F_D2_PREV), old: T(F_D2_OLD), neu: T(F_D2_NEW), after: '\n### Environment template\n' },
+  D3: { file: 'references/docs-generation.md', before: `${T(F_D2_NEW)}\n`, old: '', neu: `${F_M}\n`, after: '### Environment template\n' },
+  V: { file: 'references/migration-v2.md', before: `${T(F_V_PREV)}\n`, old: T(F_V_OLD), neu: `${T(F_V_NEW)}\n${F_M}`, after: `\n${T(F_V_NEXT)}` },
+  S: { file: 'SKILL.md', before: T(F_S_ANCHOR), old: '', neu: T(F_S), after: T(F_S_NEXT) },
+  O1: { file: 'references/state-and-apply.md', before: '|---|---|---|---|\n', old: T(F_O1_OLD), neu: T(F_O1_NEW), after: '| `blocks` | Markdown and `#`-comment files with managed blocks: `AGENTS.md`, `CLAUDE.md`, `.gitignore` | Rewrite inside its blocks only | Per-block: unchanged / edited-by-user / removed-by-user |\n' },
+  O2: { file: 'references/state-and-apply.md', before: `${T(F_MERGED_ROW)}\n`, old: '', neu: `${T(F_O2)}\n`, after: T(F_O2_NEXT) },
+  B: { file: 'references/modes.md', before: 'which lines move.\n\n', old: '', neu: `${T(F_B)}\n`, after: T(F_B_NEXT) },
+  A: { file: 'assets/templates/AGENTS.md', before: T(F_A_PREV), old: '', neu: T(F_A), after: T(F_A_NEXT) },
+  E: { file: 'references/security.md', before: `${T(F_E_PREV)}\n`, old: T(F_E_OLD), neu: T(F_E_NEW), after: '\n## 3. Secret scan (optional, bounded)\n' },
+};
+
+// Amendments are verified and reversed only where they stand exactly once at their stated anchor (C14-4 and C14-17): before + neu + after must occur exactly once and neu exactly once. A missing, duplicate, altered or
+// misplaced amendment fails here, before any historical comparison; there is no substring deletion.
+const amendmentOnce = (text, a) => COUNT(text, a.before + a.neu + a.after) === 1 && COUNT(text, a.neu) === 1;
+// Verifies and reverses the given amendment IDs in order (the reverse of the order they were applied in); records one failure and returns null when one does not verify.
+function revertC14(check, label, text, ids) {
+  let s = text;
+  for (const id of ids) {
+    const a = AM[id];
+    if (!amendmentOnce(s, a)) { check(false, `${label}: C14 amendment ${id} does not stand exactly once at its stated anchor`); return null; }
+    s = s.replace(a.before + a.neu + a.after, () => a.before + a.old + a.after);
+  }
+  return s;
+}
 
 const UNCHANGED_FILE_PINS = [
   ["scripts/apply.mjs", '5f2ea3801be0ecae370a453e8a822c336e404c7622bac276a9a873d069da6874'],
@@ -783,83 +1067,7 @@ function additionsOnly(current, before, paragraphs, extra = (s) => s) {
   while (k < s.length && k < b.length && s[k] === b[k]) k++;
   return `the rest differs from the pre-C13 text at offset ${k}: now ${show(s.slice(Math.max(0, k - 30), k + 60), 120)} before ${show(b.slice(Math.max(0, k - 30), k + 60), 120)}`;
 }
-// Which lines of a text are exempt from the prose limits (plan C13-3 and C13-17: "Tables and code retain the plan's formatting exception", "Prose frozen inside a text fence is still prose", "Do not use a blanket text-fence
-// exemption for newly written prose"). Exempt: table rows, the fence markers themselves, every line inside a fence whose info string names a code language, and the command lines (node, npm, npx, git, gh, with an optional
-// prompt) inside any fence. A `text` or unlabeled fence is not code: its other lines are prose and keep both limits.
-const CODE_FENCE_LANGS = new Set(['js', 'javascript', 'mjs', 'cjs', 'ts', 'typescript', 'json', 'jsonc', 'sh', 'bash', 'shell', 'zsh', 'powershell', 'pwsh', 'ps1', 'toml', 'yaml', 'yml', 'diff', 'sql']);
-const COMMAND_LINE = /^\s*(?:\$ |PS> )?(?:node|npm|npx|git|gh)\s/;
-function proseExemptions(lines) {
-  const out = []; let fence = null; // null outside a fence, else { code }
-  for (const l of lines) {
-    const m = /^\s*```(\S*)/.exec(l);
-    if (m) { fence = fence === null ? { code: CODE_FENCE_LANGS.has(m[1].toLowerCase()) } : null; out.push(true); continue; }
-    out.push(fence !== null ? fence.code || COMMAND_LINE.test(l) : l.trim().startsWith('|'));
-  }
-  return out;
-}
-// Newly written prose: ASCII and at most 100 columns. A line is new prose when it is not a baseline line; tables and actual code keep the plan's exemption, fenced prose does not.
-function newProseIssues(text, baseline) {
-  const base = new Set(LF(baseline).split('\n').map((l) => l.trim()));
-  const lines = LF(text).split('\n');
-  const exempt = proseExemptions(lines);
-  const issues = [];
-  lines.forEach((l, i) => {
-    if (exempt[i] || base.has(l.trim())) return;
-    if (/[^\x00-\x7f]/.test(l)) issues.push(`line ${i + 1} is not ASCII`);
-    if (l.length > 100) issues.push(`line ${i + 1} is ${l.length} columns`);
-  });
-  return issues;
-}
-// The same limits for the lines that carry the given frozen paragraphs (files with no baseline copy): the lines overlapping the paragraph in the whitespace-normalized text.
-function proseLineIssues(text, paragraphs) {
-  const lines = LF(text).split('\n');
-  const exempt = proseExemptions(lines);
-  const segs = []; let S = '';
-  lines.forEach((l, i) => { const q = squash(l); if (q === '') return; const start = S === '' ? 0 : S.length + 1; S += (S === '' ? '' : ' ') + q; segs.push({ i, start, end: S.length }); });
-  const issues = [];
-  for (const p of paragraphs) {
-    const at = S.indexOf(p);
-    if (at < 0) { issues.push(`paragraph not found: ${clip(p)}`); continue; }
-    for (const g of segs) {
-      if (!(g.end > at && g.start < at + p.length) || exempt[g.i]) continue;
-      if (/[^\x00-\x7f]/.test(lines[g.i])) issues.push(`line ${g.i + 1} is not ASCII`);
-      if (lines[g.i].length > 100) issues.push(`line ${g.i + 1} is ${lines[g.i].length} columns`);
-    }
-  }
-  return issues;
-}
-// C13-R1, negative controls for both helpers. Injected in memory, an overlong line or a non-ASCII character inside a `text` (or unlabeled) fence MUST be reported, exactly like the same prose outside a fence; actual code stays exempt
-// (an overlong command line in a text fence, anything inside a code-language fence, a table row) and short ASCII prose in a text fence passes. `baseline` exercises newProseIssues; `paragraph` (a frozen paragraph of `text`) exercises
-// proseLineIssues by wrapping the paragraph itself in a fence and pushing its last line past the limit or adding a non-ASCII character to it.
-function proveFenceRules(check, label, { text, baseline = null, paragraph = null }) {
-  const NL = '\n';
-  const wide = 'A fenced prose line that is far too wide for the one hundred column limit of newly written prose.'.repeat(2).replace(/\.A/g, '. A');
-  const dash = String.fromCharCode(0x2014);
-  const bad = { columns: (issues) => issues.some((i) => /columns/.test(i)), ascii: (issues) => issues.some((i) => /not ASCII/.test(i)) };
-  const fenced = (info, body) => [`\`\`\`${info}`, ...body, '```'].join(NL);
-  if (baseline !== null) {
-    const issuesOf = (extra) => newProseIssues(`${text.trimEnd()}${NL}${NL}${extra}${NL}`, baseline);
-    check(wide.length > 100 && bad.columns(issuesOf(wide)), `${label}: overlong prose outside a fence is reported (the control for the fence cases)`, wide.length);
-    check(bad.columns(issuesOf(fenced('text', [wide]))), `${label}: an overlong prose line inside a text fence is reported (no blanket text-fence exemption)`);
-    check(bad.columns(issuesOf(fenced('', [wide]))), `${label}: an overlong prose line inside an unlabeled fence is reported`);
-    check(bad.ascii(issuesOf(fenced('text', [`A fenced prose line with a typographic dash ${dash} inside.`]))), `${label}: a non-ASCII character inside a text fence is reported`);
-    check(issuesOf(fenced('text', ['A short ASCII prose line inside a text fence.'])).length === 0, `${label}: short ASCII prose inside a text fence passes`);
-    check(issuesOf(fenced('text', [`node .ai/tools/git-safe.mjs cat <resolved-head> -- ${'x'.repeat(100)}`])).length === 0, `${label}: an overlong command line inside a text fence is actual code and stays exempt`);
-    check(issuesOf(fenced('js', [wide, `const dash = '${dash}';`])).length === 0, `${label}: a code-language fence keeps the exemption`);
-    check(issuesOf(`| ${wide} |`).length === 0, `${label}: a table row keeps the exemption`);
-  }
-  if (paragraph !== null) {
-    const m = new RegExp(paragraph.split(' ').map(escRe).join('\\s+')).exec(text);
-    check(m !== null, `${label}: the frozen paragraph used for the fence controls is in the text`, clip(paragraph));
-    if (m === null) return;
-    const wrap = (info, tail) => `${text.slice(0, m.index)}\`\`\`${info}${NL}${m[0]} ${tail}${NL}\`\`\`${NL}${text.slice(m.index + m[0].length)}`;
-    check(bad.columns(proseLineIssues(wrap('text', 'x'.repeat(110)), [paragraph])), `${label}: a frozen paragraph inside a text fence whose last line passes 100 columns is reported`);
-    check(bad.columns(proseLineIssues(wrap('', 'x'.repeat(110)), [paragraph])), `${label}: the same inside an unlabeled fence is reported`);
-    check(bad.ascii(proseLineIssues(wrap('text', dash), [paragraph])), `${label}: a frozen paragraph inside a text fence with a non-ASCII character is reported`);
-    check(proseLineIssues(wrap('js', `${'x'.repeat(110)} ${dash}`), [paragraph]).length === 0, `${label}: the same paragraph inside a code-language fence keeps the exemption`);
-    check(proseLineIssues(wrap('text', ''), [paragraph]).every((i) => !/columns|not ASCII/.test(i)), `${label}: a frozen paragraph inside a text fence within the limits passes`);
-  }
-}
+// The prose checks (the exempt-line classification, newProseIssues, proseLineIssues and the negative controls proveFenceRules) live in tests/helpers/prose-check.mjs, shared with C14 (plan C14-13).
 // The part of a markdown text between a heading line and the next heading of the same or higher level (null when absent).
 function sectionOf(text, heading) {
   const ls = LF(text).split('\n');
@@ -1141,9 +1349,10 @@ async function docsSync(context) {
       check(squash(source).includes('Docs-sync edits documentation only on the user\'s trusted checked-out branch.') && squash(source).includes('You may edit documentation files only.'), 'documentation-only writes and the trusted checked-out-branch scope are preserved');
       check(squash(source).includes('never add or remove markers') && /Never use an MCP server, connector, browser or remote service/.test(squash(source)), 'managed markers stay protected and no connector is permitted');
     });
-    await step('docs-sync is the pre-C13 docs-sync plus the mapping row and the frozen paragraphs (no other word changed), and its new prose is ASCII within 100 columns', async () => {
-      const diff = additionsOnly(source, before, [...P.docsRule, squash(F_DOCS_ROW)]);
-      check(diff === null, 'removing the frozen row and paragraphs leaves exactly the pre-C13 docs-sync (whitespace aside)', diff);
+    await step('docs-sync is the pre-C13 docs-sync plus the mapping row and the frozen paragraphs (no other word changed; C14 amendment H is verified once at its anchor and reversed for this comparison only), and its new prose is ASCII within 100 columns', async () => {
+      const noC14 = revertC14(check, 'docs-sync', source, ['H']);
+      const diff = noC14 === null ? 'C14 amendment H does not stand exactly once at its anchor' : additionsOnly(noC14, before, [...P.docsRule, squash(F_DOCS_ROW)]);
+      check(diff === null, 'removing the C14 subsection, the frozen row and the paragraphs leaves exactly the pre-C13 docs-sync (whitespace aside)', diff);
       check(eq(refsOf(source).sort(), refsOf(before).sort()), 'no new generated-file reference in docs-sync', refsOf(source));
       const issues = newProseIssues(source, before);
       check(issues.length === 0, 'every newly written line is ASCII and at most 100 columns (the table row and the preserved C12 paragraphs excepted; prose inside a text fence is checked too)', issues.slice(0, 6));
@@ -1226,8 +1435,12 @@ async function externalReview(context) {
   const mark = processMark(context);
   return runAssertion(async ({ failures, check, step }) => {
     const rel = 'references/security.md';
-    const raw = sourceText(context, rel);
-    check(raw !== null, `${rel} is readable`);
+    const rawCurrent = sourceText(context, rel);
+    check(rawCurrent !== null, `${rel} is readable`);
+    if (rawCurrent === null) return;
+    // C14: the historical C13 view of the reference. Amendment E (the final limitation paragraph) is verified exactly once at its anchor and reversed; every C13 rule evaluation, preservation check and mutant below runs on that
+    // view. The installed delivery of the same prerequisites and the new paragraph are asserted by C14.
+    const raw = revertC14(check, 'security reference', rawCurrent, ['E']);
     if (raw === null) return;
     await step('the exclusion set is the union of the shipped defaults and the effective installed policy (patterns plus projectPatterns), covers both rename names, history-only paths and generated context, and the remaining content is scanned without exposing a value', async () => {
       const failed = evalExternal(raw);
@@ -1256,7 +1469,7 @@ async function externalReview(context) {
         'A previous scan is not evidence for changed policy or changed outgoing content.',
       ]) check(s.includes(phrase), `refusal guidance: ${phrase}`);
     });
-    await step('the limits follow immediately: prerequisites, not permission; the canonical agents still prohibit external transmission; the guidance is reference-only with no wrapper, no preflight and no installed project-wide rule', async () => {
+    await step('historical C13 view after reversing C14: the limits follow immediately: prerequisites, not permission; the canonical agents still prohibit external transmission; the guidance is reference-only with no wrapper, no preflight and no installed project-wide rule', async () => {
       const failed = evalExternal(raw);
       check(!failed.includes('external-limits-adjacent') && !failed.includes('limits#1'), 'the limits paragraph directly follows the last prerequisite paragraph');
       const files = [];
@@ -1265,8 +1478,10 @@ async function externalReview(context) {
       }
       check(files.length > 20 && !files.some((f) => /preflight|external-review|review-wrapper|hosted-review/i.test(f)), 'no wrapper, preflight or external-review script or template is added to the payload directories', files.filter((f) => /preflight|external|wrapper|hosted/i.test(f)));
       for (const rel2 of ['assets/templates/AGENTS.md', 'assets/templates/CLAUDE.md', 'assets/templates/nested-AGENTS.md']) {
-        const t = sourceText(context, rel2);
-        check(t !== null && !/external[- ]review|hosted reviewer|review CLI/i.test(t), `${rel2} installs no project-wide external-review instruction`);
+        let t = sourceText(context, rel2);
+        // C14 (decision Q1) installs the rule in the root AGENTS.md: that template is read after exactly reversing amendment A, so this check keeps describing the pre-C14 delivery. CLAUDE and the nested template are read as they are.
+        if (t !== null && rel2 === 'assets/templates/AGENTS.md') t = revertC14(check, 'AGENTS template', t, ['A']);
+        check(t !== null && !/external[- ]review|hosted reviewer|review CLI/i.test(t), `${rel2} installs no project-wide external-review instruction${rel2 === 'assets/templates/AGENTS.md' ? ' (pre-C14 delivery, after reversing amendment A)' : ''}`);
       }
       for (const rel2 of ['assets/agents/reviewer.md', 'assets/agents/docs-sync.md']) {
         const t = sourceText(context, rel2);
@@ -1345,10 +1560,11 @@ async function claude(context) {
       check(issues.length === 0, 'the new bullet lines are ASCII and at most 100 columns', issues);
       proveFenceRules(check, 'template bullet prose limits', { text: tmpl, paragraph: P.claudeBullet[0] });
     });
-    await step('AGENTS.md, the nested instruction templates and every wrapper are byte-identical to their pre-C13 pins', async () => {
+    await step('AGENTS.md (after exactly reversing the C14 amendment A), the nested instruction templates and every wrapper are byte-identical to their pre-C13 pins', async () => {
       for (const [rel, digest] of UNCHANGED_FILE_PINS.filter(([f]) => /^assets\/(templates\/(AGENTS|nested-AGENTS|nested-CLAUDE)\.md|wrappers\/)/.test(f))) {
-        const b = readBytes(skillPath(context, rel));
-        check(b !== null && NH(b) === digest, `${rel} is unchanged`);
+        let b = readBytes(skillPath(context, rel));
+        if (b !== null && rel === 'assets/templates/AGENTS.md') { const r = revertC14(check, rel, b.toString('utf8'), ['A']); b = r === null ? null : Buffer.from(r, 'utf8'); }
+        check(b !== null && NH(b) === digest, `${rel} is unchanged${rel === 'assets/templates/AGENTS.md' ? ' after exactly reversing the C14 amendment A' : ''}`);
       }
     });
     await step('the reference paragraph is the pre-C13 reference plus the frozen text (nothing else changed) and its new prose is ASCII within 100 columns', async () => {
@@ -1463,8 +1679,9 @@ async function developmentRules(context) {
       const fresh = between(c8, 'const FRESH_PATHS = [', '];');
       check(fresh !== null && !/development-rules/.test(fresh) && fresh.includes("'docs/api-conventions.md'"), 'FRESH_PATHS (tests/c8.test.mjs) does not list development-rules.md and is still the fresh-setup path set');
     });
-    await step('docs-generation.md is the pre-C13 file with its development-rules row replaced and the frozen requirements added (nothing else changed), and the new prose is ASCII within 100 columns', async () => {
-      const diff = additionsOnlyPinned(raw, PRE_C13_SQUASH[DOCGEN], [...P.devRequirements, ...P.devUpdate], (s) => s.replace(squash(F_DEV_ROW), squash(OLD_DEV_ROW)));
+    await step('docs-generation.md is the pre-C13 file with its development-rules row replaced and the frozen requirements added (nothing else changed; the C14 amendments D3, D2 and D1 are verified once at their anchors and reversed first), and the new prose is ASCII within 100 columns', async () => {
+      const noC14 = revertC14(check, DOCGEN, raw, ['D3', 'D2', 'D1']);
+      const diff = noC14 === null ? 'a C14 amendment does not stand exactly once at its anchor' : additionsOnlyPinned(noC14, PRE_C13_SQUASH[DOCGEN], [...P.devRequirements, ...P.devUpdate], (s) => s.replace(squash(F_DEV_ROW), squash(OLD_DEV_ROW)));
       check(diff === null, 'removing the frozen paragraphs and restoring the old row leaves exactly the pre-C13 reference (whitespace aside)', diff);
       const issues = proseLineIssues(raw, [...P.devRequirements, ...P.devUpdate]);
       check(issues.length === 0, 'every line of the new prose is ASCII and at most 100 columns (prose inside a text fence is checked too)', issues.slice(0, 6));
@@ -1785,13 +2002,13 @@ const AMENDED_LITERALS = [
   ['tests/c11b.test.mjs', [
     "const CANDIDATE_VERSION = '3.0.0-rc.2';", 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);', 'const CURRENT_ROLLBACK_TEXT =',
     '"# project-setup 3.0.0-rc.2",', '"RELEASE-NOTES-3.0.0-rc.2.md",', 'node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>', "'# project-setup 3.0.0-rc.2', '', 'Fixture notes without any object identifier.'",
-    'const ROLLBACK_TEXT = \'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', "const WORLD_TAG = 'c11b-fixture-rc1';", "['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']",
+    'const ROLLBACK_TEXT = \'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', "const WORLD_TAG = 'c11b-fixture-rc1';", "['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']", 'file.evals.length === 31',
   ], [
-    "const CANDIDATE_VERSION = '3.0.0-rc.1';", 'file.evals.length === 21',
+    "const CANDIDATE_VERSION = '3.0.0-rc.1';", 'file.evals.length === 21', 'file.evals.length === 26',
   ]],
-  ['tests/c8.test.mjs', ['file.evals.length === 26', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 21', "rollback1: 'Roll back project state with the rc.1 tooling"]],
-  ['tests/c9.test.mjs', ['file.evals.length === 26'], ['file.evals.length === 21']],
-  ['tests/c12.test.mjs', ["'3.0.0-rc.2\\n'", "REGISTRY_ORDER_BEFORE, 'C12', 'C13'", 'file.evals.length === 26'], ["v.toString('latin1') === '3.0.0-rc.1\\n'", 'file.evals.length === 21']],
+  ['tests/c8.test.mjs', ['file.evals.length === 31', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 21', 'file.evals.length === 26', "rollback1: 'Roll back project state with the rc.1 tooling"]],
+  ['tests/c9.test.mjs', ['file.evals.length === 31'], ['file.evals.length === 21', 'file.evals.length === 26']],
+  ['tests/c12.test.mjs', ["'3.0.0-rc.2\\n'", "REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14'", 'file.evals.length === 31'], ["v.toString('latin1') === '3.0.0-rc.1\\n'", 'file.evals.length === 21', 'file.evals.length === 26']],
 ];
 async function release(context) {
   startClock(context);
@@ -1809,14 +2026,16 @@ async function release(context) {
       const catalog = readJson(skillPath(context, 'data/runtime-units.json'));
       check(catalog && Array.isArray(catalog.units) && catalog.units.length === 7 && eq(catalog.units.map((u) => path.posix.basename(u.source)), ['security-policy.mjs', 'git-safe-core.mjs', 'guard-raw-git-core.mjs', 'review-diff.mjs', 'git-safe.mjs', 'guard-raw-git.mjs', 'hooks-selftest.mjs']), 'data/runtime-units.json keeps the seven members in order');
     });
-    await step('plan C13-14: SKILL.md carries exactly the heading "# project-setup 3.0.0-rc.2" as line 6 and every other byte is the pinned text', async () => {
+    await step('plan C13-14: SKILL.md carries exactly the heading "# project-setup 3.0.0-rc.2" as line 6 and reversing the exact C14 insertion leaves the pinned text', async () => {
       const skill = text('SKILL.md');
       if (skill === null) { check(false, 'SKILL.md is readable'); return; }
       const ls = skill.split('\n');
       check(ls[5] === squash(F_SKILL_HEADING.join(' ')) && ls[5] === '# project-setup 3.0.0-rc.2', 'line 6 is exactly "# project-setup 3.0.0-rc.2"', ls[5]);
       check(ls.filter((l) => /^# project-setup /.test(l)).length === 1 && !ls.includes('# project-setup 3.0.0-rc.1') && !ls.includes('# project-setup v2'), 'the heading appears once and no older heading remains');
-      const restored = [...ls]; restored[5] = '# project-setup v2';
-      check(sha(Buffer.from(restored.join('\n'), 'utf8')) === C11B_PIN_VALUES.skillWithOldHeading, 'restoring the old heading gives exactly the pinned SKILL.md body (heading only, C13-2)');
+      const noC14 = revertC14(check, 'SKILL.md', skill, ['S']); // amendment S exactly once at its anchor, reversed before the heading is substituted
+      const restored = noC14 === null ? null : noC14.split('\n');
+      if (restored !== null) restored[5] = '# project-setup v2';
+      check(restored !== null && sha(Buffer.from(restored.join('\n'), 'utf8')) === C11B_PIN_VALUES.skillWithOldHeading, 'reversing the C14 insertion and restoring the old heading gives the pinned pre-C14 SKILL.md body (heading only, C13-2)');
     });
     await step('plan C13-14: README.md has the exact seven rc.2 opening lines, the retained sections stay pinned, and the Local candidate release section is the old section with exactly its two tag occurrences moved to rc.2', async () => {
       const readme = text('README.md');
@@ -1854,7 +2073,7 @@ async function release(context) {
       const issues = F_CHANGELOG_ENTRY.filter((l) => /[^\x00-\x7f]/.test(l) || l.length > 100);
       check(issues.length === 0 && !/[^\x00-\x7f]/.test(head), 'the new entry is ASCII with lines of at most 100 columns', issues);
     });
-    await step('plan C13-14 and C13-16: RELEASE-NOTES-3.0.0-rc.2.md is exactly the frozen text (ASCII, LF, final LF), keeps its six sections, the unchanged Q6 paragraph and the current rollback wording, the verification totals with the junction and no-skip rules, the exact pending host wording and the reference-only limitation', async () => {
+    await step('plan C13-14 and C13-16: RELEASE-NOTES-3.0.0-rc.2.md is exactly the frozen text (ASCII, LF, final LF), keeps its six sections, the unchanged Q6 paragraph and the current rollback wording, the verification totals with the junction and no-skip rules, the exact pending host wording and the installed external-review limitation', async () => {
       const raw = readBytes(skillPath(context, RC2_NOTES_REL));
       check(raw !== null && raw.toString('utf8') === RC2_NOTES_TEXT && Buffer.compare(raw, Buffer.from(RC2_NOTES_TEXT, 'utf8')) === 0, `${RC2_NOTES_REL} equals the exact frozen text byte for byte`, raw && raw.toString('utf8').slice(0, 120));
       check(raw !== null && !/[^\x00-\x7f]/.test(raw.toString('latin1')) && !raw.includes(0x0d) && raw[0] !== 0xef && raw[raw.length - 1] === 0x0a && raw[raw.length - 2] !== 0x0a, 'the notes are ASCII, LF only, without BOM, with exactly one final LF');
@@ -1865,13 +2084,14 @@ async function release(context) {
       const notes = raw === null ? '' : raw.toString('utf8');
       const compat = squash(sectionOf(notes, '## Compatibility and rollback') || '');
       check(compat.includes(Q6_TEXT) && compat.includes(CURRENT_ROLLBACK_TEXT) && !compat.includes('with the rc.1 tooling'), 'Compatibility and rollback holds the unchanged Q6 paragraph and the current rollback paragraph (no rc.1 tooling wording)');
-      check(compat.includes('Keeping an old canonical file leaves that instruction update incomplete.') && compat.includes('Project-owned reviewer rules remain intact.'), 'the notes say that a kept old canonical file leaves its update incomplete and that project-owned reviewer rules stay intact');
+      check(compat.includes('Keeping an old canonical file leaves that instruction update incomplete.') && compat.includes('Project-owned reviewer and docs-sync rules remain intact.'), 'the notes say that a kept old canonical file leaves its update incomplete and that project-owned reviewer and docs-sync rules stay intact');
+      check(compat.includes('A missing docs-sync project file is created only when content is explicitly approved.') && compat.includes('Existing extension files are preserved; routine updates do not regenerate them.'), 'the notes add the two C14 sentences: a missing docs-sync project file is created only for approved content, and existing extension files are preserved without routine regeneration');
       const ver = squash(sectionOf(notes, '## Verification') || '');
       check(ver.includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.'), 'the verification totals, the no-rc.1-skip rule and the junction requirement are exact');
       const pend = squash(sectionOf(notes, '## Pending host measurements') || '');
       check(pend.includes('TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling; A3 trusted-checkout live review; A5 host negative capability.') && pend.includes('These measurements remain pending and block final 3.0.0, not rc.2 implementation acceptance.'), 'the pending host measurements are listed exactly and stay pending');
       const lim = squash(sectionOf(notes, '## Limitations') || '');
-      check(lim.includes('External-review prerequisites are reference-only: C13 adds no wrapper, preflight or installed project-wide external-review instruction.') && lim.includes('Reconsider that known gap with C14; C13 does not implement C14.'), 'the reference-only external-review limitation and the C14 gap are stated');
+      check(lim.includes('External-review prerequisites are installed in the root AGENTS.md managed block. No wrapper or automated preflight enforces them, and canonical reviewer and docs-sync instructions still prohibit external transmission. Missing trusted defaults or policy evidence prevents external review under these instructions. If trusted shipped defaults cannot be located, for example because project-setup is not installed on the machine, the external-review tool is not run.') && lim.includes('C14 supplies the PS extension interface. BS 3.0.0 and toolchain-config integration remain open. Nothing has been verified on a real BS scaffold; synthetic tests do not establish that result.') && !lim.includes('reference-only'), 'the installed external-review limitation paragraph and the PS-interface and unverified-scaffold paragraph are exact (current text, not reversed)');
       check(!/\b(published|released to|uploaded)\b/i.test(notes), 'the notes make no publication claim');
     });
     await step('plan C13-16: the preserved rc.1 notes are byte-identical (pinned), keep all six sections, the old rollback wording, the old Q6 and the exact pending host wording', async () => {
@@ -1891,7 +2111,8 @@ async function release(context) {
       const first = squash(s5.split(/\n\s*\n/).filter((p) => p.trim() !== '')[0] || '');
       check(first === CURRENT_ROLLBACK_TEXT, 'the first paragraph of section 5 is exactly the current rollback paragraph', first);
       check(squash(sectionOf(mig, '## 1. Upgrade boundary') || '').includes(Q6_TEXT), 'section 1 still carries the Q6 paragraph');
-      const diff = additionsOnlyPinned(mig, PRE_C13_SQUASH['references/migration-v2.md'], [], (s) => s.replace(CURRENT_ROLLBACK_TEXT, RC1_ROLLBACK_TEXT));
+      const noC14 = revertC14(check, 'references/migration-v2.md', mig, ['V']); // C14 amendment V (with its counterpart M) first, then the current-to-rc.1 rollback reversal
+      const diff = noC14 === null ? 'C14 amendment V does not stand exactly once at its anchor' : additionsOnlyPinned(noC14, PRE_C13_SQUASH['references/migration-v2.md'], [], (s) => s.replace(CURRENT_ROLLBACK_TEXT, RC1_ROLLBACK_TEXT));
       check(diff === null, 'restoring the old first paragraph gives exactly the pre-C13 reference: nothing else in the file changed', diff);
       check(F_ROLLBACK_CURRENT.every((l) => l.length <= 100 && !/[^\x00-\x7f]/.test(l)), 'the new paragraph is ASCII within 100 columns');
     });
@@ -1901,7 +2122,11 @@ async function release(context) {
       if (c11b === null) return;
       const block = between(c11b, 'const PINS = deepFreeze({', '\n});') || '';
       const pinOf = (key) => { const m = new RegExp(`\\b${key}: '([0-9a-f]{64})'`).exec(block); return m ? m[1] : null; };
-      for (const [key, want] of Object.entries(C11B_PIN_VALUES)) check(pinOf(key) === want, `PINS.${key} does not move`, pinOf(key));
+      // C14: C11b's skillWithOldHeading pin moved on purpose (its SKILL.md gained the C14 insertion; C14 and C11b assert the new value). C13's historical value is not moved and is checked above, after reversing the insertion.
+      for (const [key, want] of Object.entries(C11B_PIN_VALUES)) {
+        if (key === 'skillWithOldHeading') continue;
+        check(pinOf(key) === want, `PINS.${key} does not move`, pinOf(key));
+      }
       for (const [h, want] of C11B_README_SECTION_PINS) { const m = new RegExp(`'${escRe(h)}': '([0-9a-f]{64})'`).exec(block); check(m !== null && m[1] === want, `PINS.readmeSections[${h}] does not move`, m && m[1]); }
       const inventory = between(c11b, 'const PAYLOAD_INVENTORY = [', '\n];');
       const entries = inventory === null ? [] : inventory.split('\n').filter((l) => /^\s*"/.test(l));
@@ -1910,7 +2135,7 @@ async function release(context) {
       for (const a of ['"README.md"', '"RELEASE-NOTES-2.0.0.md"', '"RELEASE-NOTES-3.0.0-rc.1.md"', '"RELEASE-NOTES-3.0.0-rc.2.md"', '"RELEASE-NOTES.md"', '"install/"', '"tests/"', '"evals/"', '".git/"']) check(absent.includes(a), `PAYLOAD_ABSENT lists ${a}`);
       check(c11b.includes('PAYLOAD_INVENTORY.length === 60'), 'the 60-file length assertion is kept');
     });
-    await step('plan C13-16: the amended tests carry the current literals (rc.2 candidate, 26 evaluations, the current rollback sentence) and keep the historical ones (rc.1 fixture tags, malformed parser bytes, the live acceptance section, the rc.1 constants)', async () => {
+    await step('plan C13-16: the amended tests carry the current literals (rc.2 candidate, 31 evaluations, the current rollback sentence) and keep the historical ones (rc.1 fixture tags, malformed parser bytes, the live acceptance section, the rc.1 constants)', async () => {
       for (const [rel, must, mustNot] of AMENDED_LITERALS) {
         const t = text(rel);
         check(t !== null, `${rel} is readable`);
@@ -1924,9 +2149,12 @@ async function release(context) {
       check(c12.includes("skillVersion: '3.0.0-rc.1', mode: 'update', agents: [], sourceCommit: null, files, ...over") && c12.includes('const CHANGELOG_ORIGINAL =') && c12.includes('const NOTES_PRESERVED = [') && c12.includes('RELEASE-NOTES-3.0.0-rc.1.md'), 'C12 keeps its schema-3 rc.1 manifest fixture and its historical changelog and notes constants');
     });
     await step('plan C13-2: every file C13 must leave alone is byte-identical to its pre-C13 pin (production scripts, runtime assets, wrappers, nested templates, untouched references, data, installers, the release builder and the runner files)', async () => {
+      // C14 intentionally amends three of these files; each is compared after its exact amendments (verified once at their anchors) are reversed, and the historical table entries stay unchanged.
+      const C14_REVERSALS = { 'assets/templates/AGENTS.md': ['A'], 'references/modes.md': ['B'], 'references/state-and-apply.md': ['O2', 'O1'] };
       for (const [rel, digest] of UNCHANGED_FILE_PINS) {
-        const b = readBytes(skillPath(context, rel));
-        check(b !== null && NH(b) === digest, `${rel} is unchanged`);
+        let b = readBytes(skillPath(context, rel));
+        if (b !== null && C14_REVERSALS[rel]) { const r = revertC14(check, rel, b.toString('utf8'), C14_REVERSALS[rel]); b = r === null ? null : Buffer.from(r, 'utf8'); }
+        check(b !== null && NH(b) === digest, `${rel} is unchanged${C14_REVERSALS[rel] ? ` after exactly reversing the C14 amendment${C14_REVERSALS[rel].length > 1 ? 's' : ''} ${C14_REVERSALS[rel].join(' and ')}` : ''}`);
       }
       check(UNCHANGED_FILE_PINS.length >= 45, 'the pin table covers the production scripts, assets, data and installers', UNCHANGED_FILE_PINS.length);
     });
@@ -1936,7 +2164,7 @@ async function release(context) {
 
 // ============================================ V2/C13/contracts ====
 // Plan C13-15, C13-17, C13-18 and decision I13-1: the eight ordered descriptors, the independent registry entries, exactly 40 complete cases (no C13 case), registration without execution, the single R29 aggregation with its
-// literal context and no output, the unchanged call sites of every other component, and the 26 evaluations (objects 22-26 exact, 1-21 unchanged). The evaluation objects are expectations, not evidence that an agent followed them.
+// literal context and no output, the unchanged call sites of every other component, and the evaluations (31 since C14: objects 22-26 exact with the C14 sentence of 24, 1-21 unchanged, 27-31 asserted by C14). The evaluation objects are expectations, not evidence that an agent followed them.
 const COMPONENT_INVENTORY = [
   ['A5-templates/C13/reviewer', 'review passes cover reachable defects beyond the plan'],
   ['A5-templates/C13/docs-sync', 'recorded drift requires living documentation updates'],
@@ -1964,6 +2192,16 @@ function amendedEval22() {
   e.expected_output = e.expected_output.replace(EVAL_22_EXEMPTION, () => `${EVAL_22_EXEMPTION} ${EVAL_22_ADDED_SENTENCE}`);
   return e;
 }
+// C14 (plan C14-17): evaluation 24's final sentence changes because the prerequisites are now also installed in the root AGENTS.md. F_EVALS stays the historical C13 expectation; the current comparison clones evaluation 24
+// and replaces only that final sentence. JSON stores each sentence as one string.
+const EVAL_24_OLD_SENTENCE = "States that the guidance is reference-only, adds no wrapper or preflight, and does not override the canonical agents' external-transmission ban.";
+const EVAL_24_NEW_SENTENCE = "States that the prerequisites also appear in installed root AGENTS.md, adds no wrapper or automated preflight, and does not override the canonical agents' external-transmission ban.";
+function amendedEval24() {
+  const e = JSON.parse(JSON.stringify(F_EVALS[2]));
+  if (!e.expected_output.endsWith(EVAL_24_OLD_SENTENCE)) return null;
+  e.expected_output = `${e.expected_output.slice(0, e.expected_output.length - EVAL_24_OLD_SENTENCE.length)}${EVAL_24_NEW_SENTENCE}`;
+  return e;
+}
 const IMPORT_PROBE = String.raw`const url = process.argv[2];
 const out = []; const ow = process.stdout.write;
 process.stdout.write = function (c) { out.push(String(c)); return true; };
@@ -1986,7 +2224,7 @@ async function contracts(context) {
       check(Object.isFrozen(C13_IMPLEMENTATIONS) && eq(C13_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C13_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C13_IMPLEMENTATIONS is a frozen array of the eight IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {});
       const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C13']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C13']), 'both registries list the earlier components unchanged (C12 included) and then C13', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14']), 'both registries list the earlier components unchanged (C12 included), then C13 and then C14 (C14 appends to the registry tail)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
     });
     await step('plan C13-18: registerRc1Cases still registers exactly the 40 ordered complete cases, adds no C13 case, executes nothing, writes nothing and starts no process; the inventories keep 40 cases and 100 required results', async () => {
@@ -2027,22 +2265,24 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C13-15 and I13-1: evals/evals.json holds 26 ordered unique evaluations, 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls) with their keys in plan order', async () => {
+    await step('plan C13-15, I13-1 and C14-17: evals/evals.json holds 31 ordered unique evaluations (C14 appends 27-31 and asserts them), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order', async () => {
       const file = readJson(skillPath(context, 'evals/evals.json'));
       check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
       if (!file || !Array.isArray(file.evals)) return;
       const ids = file.evals.map((e) => e && e.id);
-      check(file.evals.length === 26 && eq(ids, Array.from({ length: 26 }, (_, i) => i + 1)) && new Set(ids).size === 26, 'ids 1 through 26 in order without duplicates', ids);
+      check(file.evals.length === 31 && eq(ids, Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(ids).size === 31, 'ids 1 through 31 in order without duplicates (C14 appends 27-31)', ids);
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 20)))) === EVALS_1_20_JSON_SHA, 'evaluations 1-20 are unchanged from the committed file (canonical JSON digest)');
       check(file.evals[20] && sha(Buffer.from(JSON.stringify(file.evals[20]))) === EVAL_21_JSON_SHA, 'evaluation 21 is unchanged (its C12 assertion is not redefined by the appended evaluations)');
       const e22 = amendedEval22();
       check(e22 !== null, 'the plan\'s evaluation 22 holds the control line and the exemption sentence the I13-1 amendment attaches to');
-      const want = [e22, ...F_EVALS.slice(1)];
+      const e24 = amendedEval24();
+      check(e24 !== null, 'the historical evaluation 24 ends with the old delivery sentence that C14 replaces');
+      const want = [e22, F_EVALS[1], e24, F_EVALS[3], F_EVALS[4]]; // F_EVALS stays the historical C13 expectation; 24 is its clone with the C14 sentence
       want.forEach((w, i) => {
         const got = file.evals[21 + i];
         check(w !== null && eq(got, w) && eq(Object.keys(got || {}), ['id', 'name', 'prompt', 'files', 'expected_output']), `evaluation ${22 + i} equals the plan object exactly, with its keys in plan order (an expectation, not observed agent behavior)`, got && got.name);
       });
-      check(eq(file.evals.slice(21).map((e) => e.name), ['review-beyond-plan-contracts', 'recorded-drift-living-doc', 'external-review-protected-range', 'blocked-review-preamble', 'review-rules-managed-update']), 'the names of 22-26 are the plan names in order');
+      check(eq(file.evals.slice(21, 26).map((e) => e.name), ['review-beyond-plan-contracts', 'recorded-drift-living-doc', 'external-review-protected-range', 'blocked-review-preamble', 'review-rules-managed-update']), 'the names of 22-26 are the plan names in order');
       const ev22 = file.evals[21];
       check(ev22 && ev22.files.includes(EVAL_22_ADDED_FILES[0]) && ev22.files.includes(EVAL_22_ADDED_FILES[1]) && ev22.expected_output.includes(EVAL_22_ADDED_SENTENCE), 'evaluation 22 carries the unmarked-record and category-level controls of I13-1, each leaving a normal finding');
     });
