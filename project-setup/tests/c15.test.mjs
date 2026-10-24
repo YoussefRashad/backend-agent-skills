@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
 import { AM15, C15_BLOCKS, FORWARD_ORDER, REVERSAL_ORDER, amendmentOnce, applyOne, applySteps, reverseForFile, reverseOne, reverseSteps } from './helpers/c15-amendments.mjs';
@@ -1526,13 +1526,93 @@ const REGISTRY_ORDER_BEFORE = ['C11a', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
 const C15_CONTEXT_LITERAL = "{ repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c15'), env: { ...ENV } }";
 const HELPER_EXPORTS = ['AM15', 'C15_BLOCKS', 'FORWARD_ORDER', 'REVERSAL_ORDER', 'amendmentOnce', 'applyOne', 'applySteps', 'reverseForFile', 'reverseOne', 'reverseSteps'];
 const EVAL_FIELDS = ['id', 'name', 'prompt', 'files', 'expected_output'];
-const IMPORT_PROBE = String.raw`const url = process.argv[2];
+// The import probe (plan C15-17 probe P5) runs in its own process. Before it imports the module under test it replaces the seven node:child_process entry points with functions that record the call and then refuse it, so the
+// probe itself can never start a process, whatever the module tries; it re-synchronises the builtin's ES-module named exports (without that, a named import such as { spawnSync } would still see the original function);
+// it captures what the import prints; and it reports the exports, the printed text, the recorded launches and the entry points that really are instrumented (live named binding and default export both replaced).
+// `entryPoints` repeats LAUNCH_ENTRY_POINTS because the probe is a separate process; the evaluator compares its report with the literal list.
+const LAUNCH_ENTRY_POINTS = ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'];
+const IMPORT_PROBE = String.raw`import cp from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const url = process.argv[2];
+const entryPoints = ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'];
+const launches = [];
+const original = {};
+for (const name of entryPoints) { original[name] = cp[name]; cp[name] = function () { launches.push(name); throw new Error('the import probe refuses to start a process: ' + name); }; }
+syncBuiltinESMExports();
+const live = await import('node:child_process');
+const wrapped = entryPoints.filter((name) => cp[name] !== original[name] && live[name] === cp[name]);
 const out = []; const ow = process.stdout.write;
 process.stdout.write = function (c) { out.push(String(c)); return true; };
-const mod = await import(url);
+let mod = null; let error = null;
+try { mod = await import(url); } catch (e) { error = String((e && e.message) || e); }
 process.stdout.write = ow;
-process.stdout.write(JSON.stringify({ names: Object.keys(mod).sort(), printed: out.join('') }) + '\n');
+process.stdout.write(JSON.stringify({ names: mod === null ? null : Object.keys(mod).sort(), printed: out.join(''), launches, wrapped, error }) + '\n');
 `;
+// The negative control for the probe: a throwaway module that starts a process silently, through every entry point and through each of the three ways a module can reach one (named import, default import, require), and
+// swallows every failure. It prints nothing, writes nothing and exits 0, so only the recorded launches can give it away. It is written to a scratch directory outside the repository and removed afterwards; the probe refuses
+// each call, so it never starts a process. (The source is one line per array item so no line of this file begins at column 0 with a call.)
+const SILENT_LAUNCH_MODULE = [
+  "import { spawnSync as namedSpawnSync, execFileSync as namedExecFileSync } from 'node:child_process';",
+  "import cp from 'node:child_process';",
+  "import { createRequire } from 'node:module';",
+  'const req = createRequire(import.meta.url);',
+  'const attempt = (fn) => { try { fn(); } catch { /* the failure is swallowed: nothing is printed or written */ } };',
+  "attempt(() => namedSpawnSync(process.execPath, ['-e', '']));",
+  "attempt(() => namedExecFileSync(process.execPath, ['-e', '']));",
+  "attempt(() => cp.spawn(process.execPath, ['-e', '']));",
+  "attempt(() => cp.exec('exit 0'));",
+  "attempt(() => req('node:child_process').execSync('exit 0'));",
+  "attempt(() => req('child_process').execFile(process.execPath, ['-e', '']));",
+  "attempt(() => cp.fork('x.js'));",
+  'export const SILENT_LAUNCHES = true;',
+  '',
+].join('\n');
+const SILENT_LAUNCH_ORDER = ['spawnSync', 'execFileSync', 'spawn', 'exec', 'execSync', 'execFile', 'fork'];
+// Runs the probe on one module URL in a scratch directory and returns the probe's report. `dir` already holds nothing but what the caller wrote.
+function runImportProbe(context, dir, moduleUrl) {
+  const probe = path.join(dir, 'import-probe.mjs');
+  fs.writeFileSync(probe, IMPORT_PROBE);
+  const r = execNode(context, { cwd: dir, script: probe, args: [moduleUrl] });
+  let parsed = null;
+  try { parsed = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* reported by the evaluator */ }
+  return { r, parsed, files: fs.readdirSync(dir).sort().join('|') };
+}
+// The one evaluator, used for the real import and for the negative control. It names every way an import can be unsafe: the probe did not run, the import threw, the instrumentation is not in place (so "no launches" would
+// prove nothing), the exports are not the expected ones, anything was printed, anything was written, or a process was launched.
+function importProbeIssues({ r, parsed, files }, { names, written }) {
+  if (r.dead || r.code !== 0 || parsed === null) return ['probe-run'];
+  const issues = [];
+  if (parsed.error !== null) issues.push('import-error');
+  if (!eq(parsed.wrapped, LAUNCH_ENTRY_POINTS)) issues.push('instrumentation');
+  if (!eq(parsed.names, names)) issues.push('exports');
+  if (parsed.printed !== '' || r.stderr !== '') issues.push('output');
+  if (files !== written) issues.push('writes');
+  if (!eq(parsed.launches, [])) issues.push('launches');
+  return issues;
+}
+// A top-level statement of this module that writes a file or starts a process: a line that begins at column 0 with the call, direct (spawnSync(...), execNode(...)), as a method (fs.writeFileSync(...)), assigned or awaited.
+// This is supplementary to the probe: it cannot see an aliased or indirect call, the probe can.
+const TOP_LEVEL_LAUNCH_RE = /^(?:(?:const|let|var)\s+[\w$]+\s*=\s*)?(?:await\s+)?(?:(?:fs\.\w+|spawnSync|execNode|gitIn|putFile|makeRepo|copyTree|rmrf)(?:\.\w+)?\(|(?:fs|spawnSync)\.)/;
+// The literal descriptor-to-runner binding the module must have (plan C15-11): every id with the name of the function it runs, written out by hand. It MUST stay a literal; it is compared with RUNNERS by name.
+const EXPECTED_RUNNER_BINDINGS = [
+  ['A5-templates/C15/docs-sync', 'docsSync'],
+  ['A5-templates/C15/reviewer', 'reviewer'],
+  ['A5-templates/C15/preservation', 'preservation'],
+  ['V2/C15/update', 'update'],
+  ['RC1/C15/release', 'release'],
+  ['V2/C15/contracts', 'contracts'],
+];
+// Names every way a binding table (the module's RUNNERS object or a constructed copy of it) departs from the expected literal mapping: a missing or extra id, a value that is not a function, or a function with another name.
+function runnerBindingIssues(table, expected) {
+  const issues = [];
+  const ids = Object.keys(table).sort();
+  if (!eq(ids, expected.map(([id]) => id).sort())) issues.push(`ids ${show(ids)}`);
+  for (const [id, name] of expected) {
+    const actual = typeof table[id] === 'function' ? table[id].name : null;
+    if (actual !== name) issues.push(`${id} runs ${show(actual)}, expected ${name}`);
+  }
+  return issues;
+}
 async function contracts(context) {
   startClock(context);
   const mark = processMark(context);
@@ -1742,21 +1822,59 @@ async function contracts(context) {
       const stepped = await runAssertion(async ({ step: s }) => { await s('inner', async () => { throw new Error('inner boom'); }); });
       check(stepped.failures.length === 1 && stepped.failures[0].startsWith('inner: threw: ') && stepped.skipped === null, 'a throwing step isolates itself and names the step', stepped);
       const descriptors = C15_IMPLEMENTATIONS.map((d) => d.id);
-      check(eq(descriptors, EXPECTED_DESCRIPTORS.map((d) => d.id)), 'each of the six descriptors maps to its own runner (a missing file, an exception or a malformed fixture is a failure, never a skip)');
+      check(eq(descriptors, EXPECTED_DESCRIPTORS.map((d) => d.id)), 'the exported implementations carry exactly the six frozen descriptor ids in order (an inventory check only: the export is built from the same list, so it cannot show which runner a descriptor runs)', descriptors);
+      const bindingIssues = runnerBindingIssues(RUNNERS, EXPECTED_RUNNER_BINDINGS);
+      check(bindingIssues.length === 0, 'each of the six descriptors maps to its own runner, compared by function name with the literal expected mapping (a missing file, an exception or a malformed fixture is a failure, never a skip)', bindingIssues);
+      const own = LF(readText(fileURLToPath(import.meta.url)) || '');
+      const declStart = own.indexOf('const EXPECTED_RUNNER_BINDINGS = [\n');
+      const declEnd = declStart < 0 ? -1 : own.indexOf('\n];', declStart);
+      const declared = declEnd < 0 ? [] : own.slice(declStart + 'const EXPECTED_RUNNER_BINDINGS = [\n'.length, declEnd).split('\n');
+      const pairs = declared.map((l) => { const m = /^ {2}\['([^']+)', '([A-Za-z0-9]+)'\],$/.exec(l); return m === null ? null : [m[1], m[2]]; });
+      check(pairs.length === 6 && eq(pairs, EXPECTED_RUNNER_BINDINGS), 'the expected runner mapping is written out as six literal id/name pairs in this file, never derived from RUNNERS or from the descriptor list (a derived mapping would follow a swapped binding and agree with it)', declared);
+      // Negative controls on copies: the module's own RUNNERS object is never modified.
+      const [idA, idB] = [EXPECTED_RUNNER_BINDINGS[3][0], EXPECTED_RUNNER_BINDINGS[4][0]];
+      const swapped = { ...RUNNERS, [idA]: RUNNERS[idB], [idB]: RUNNERS[idA] };
+      const swapIssues = runnerBindingIssues(swapped, EXPECTED_RUNNER_BINDINGS);
+      check(eq(Object.keys(swapped), Object.keys(RUNNERS)) && swapped[idA] !== RUNNERS[idA] && swapped[idB] !== RUNNERS[idB], 'negative control setup: the swapped copy lists the same six ids as RUNNERS but binds two of them differently, so an id comparison alone cannot tell it apart', Object.keys(swapped));
+      check(swapIssues.length === 2 && swapIssues.some((i) => i.startsWith(`${idA} runs `)) && swapIssues.some((i) => i.startsWith(`${idB} runs `)), 'negative control: a copy of the binding table with two runners swapped is reported once for each swapped descriptor', swapIssues);
+      const { [idA]: dropped, ...withoutA } = RUNNERS;
+      check(typeof dropped === 'function' && runnerBindingIssues(withoutA, EXPECTED_RUNNER_BINDINGS).length === 2 && runnerBindingIssues({ ...RUNNERS, extra: RUNNERS[idA] }, EXPECTED_RUNNER_BINDINGS).length === 1, 'negative control: a copy with one binding removed, and a copy with an extra id, are each reported', { removed: runnerBindingIssues(withoutA, EXPECTED_RUNNER_BINDINGS), extra: runnerBindingIssues({ ...RUNNERS, extra: RUNNERS[idA] }, EXPECTED_RUNNER_BINDINGS) });
     });
-    await step('this module is import safe (plan C15-17 probe P5): importing it prints nothing, writes nothing, starts no process and exports exactly C15_IMPLEMENTATIONS', async () => {
+    await step('this module is import safe (plan C15-17 probe P5): importing it prints nothing, writes nothing, starts no process (observed by instrumenting every child-process entry point before the import) and exports exactly C15_IMPLEMENTATIONS', async () => {
+      // The evaluator itself, without any launch: each signal flipped alone is reported alone, and a clean report is clean.
+      const clean = { r: { dead: null, code: 0, stderr: '' }, parsed: { names: ['X'], printed: '', launches: [], wrapped: [...LAUNCH_ENTRY_POINTS], error: null }, files: 'import-probe.mjs' };
+      const flip = (patch) => importProbeIssues({ r: { ...clean.r, ...(patch.r || {}) }, parsed: patch.parsed === null ? null : { ...clean.parsed, ...(patch.parsed || {}) }, files: patch.files === undefined ? clean.files : patch.files }, { names: ['X'], written: 'import-probe.mjs' });
+      const flipped = [flip({}), flip({ parsed: { launches: ['execSync'] } }), flip({ parsed: { printed: 'x' } }), flip({ r: { stderr: 'e' } }), flip({ files: 'import-probe.mjs|x' }), flip({ parsed: { names: ['X', 'Y'] } }), flip({ parsed: { wrapped: ['spawn'] } }), flip({ parsed: { error: 'boom' } }), flip({ r: { code: 1 } }), flip({ parsed: null }), flip({ r: { dead: 'timeout' } })];
+      check(eq(flipped, [[], ['launches'], ['output'], ['output'], ['writes'], ['exports'], ['instrumentation'], ['import-error'], ['probe-run'], ['probe-run'], ['probe-run']]), 'the import-safety evaluator reports a launch, printed text, stderr, a written file, a wrong export set, missing instrumentation, an import error and a probe failure each on its own, and nothing for a clean report', flipped);
       await withScratch(context, 'contracts', async (dir) => {
-        const probe = path.join(dir, 'import-probe.mjs');
-        fs.writeFileSync(probe, IMPORT_PROBE);
-        const r = execNode(context, { cwd: dir, script: probe, args: [import.meta.url] });
-        let parsed = null;
-        try { parsed = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* reported below */ }
-        check(!r.dead && r.code === 0 && parsed && eq(parsed.names, ['C15_IMPLEMENTATIONS']) && parsed.printed === '' && r.stderr === '', 'the import prints nothing and the export set is exactly C15_IMPLEMENTATIONS', { code: r.code, out: r.stdout.slice(0, 200), err: r.stderr.slice(0, 200) });
-        check(fs.readdirSync(dir).join('|') === 'import-probe.mjs', 'the import wrote nothing next to the probe');
+        const run = runImportProbe(context, dir, import.meta.url);
+        const issues = importProbeIssues(run, { names: ['C15_IMPLEMENTATIONS'], written: 'import-probe.mjs' });
+        const detail = { code: run.r.code, out: run.r.stdout.slice(0, 200), err: run.r.stderr.slice(0, 200) };
+        check(!issues.some((i) => ['probe-run', 'import-error', 'exports', 'output'].includes(i)), 'the import prints nothing and the export set is exactly C15_IMPLEMENTATIONS', { issues, ...detail });
+        check(!issues.includes('writes'), 'the import wrote nothing next to the probe', run.files);
+        check(!issues.includes('instrumentation') && run.parsed !== null && eq(run.parsed.wrapped, LAUNCH_ENTRY_POINTS), 'the probe instrumented all seven child-process entry points (live named binding and default export) before the import, so an empty launch record means something', run.parsed && run.parsed.wrapped);
+        check(!issues.includes('launches') && run.parsed !== null && eq(run.parsed.launches, []), 'the import started no process: no spawn, spawnSync, exec, execSync, execFile, execFileSync or fork call was recorded', run.parsed && run.parsed.launches);
       });
-      const src = readText(path.join(context.skillRoot, 'tests', 'c15.test.mjs')) || '';
-      const topLevel = src.split('\n').filter((l) => /^(fs|spawnSync|execNode|gitIn|putFile)\.\w*\(|^(fs|spawnSync)\./.test(l));
+      // Negative control: a module that starts a process silently is detected, although every other signal (exit code, output, files, exports) is clean.
+      let controlDir = null;
+      await withScratch(context, 'launch-control', async (dir) => {
+        controlDir = dir;
+        const rel = path.relative(context.repository, dir);
+        check(rel.startsWith('..') || path.isAbsolute(rel), 'the throwaway probe module lives in a scratch directory outside the repository', dir);
+        const modulePath = path.join(dir, 'silent-launch.mjs');
+        fs.writeFileSync(modulePath, SILENT_LAUNCH_MODULE);
+        const run = runImportProbe(context, dir, pathToFileURL(modulePath).href);
+        const issues = importProbeIssues(run, { names: ['SILENT_LAUNCHES'], written: 'import-probe.mjs|silent-launch.mjs' });
+        check(run.parsed !== null && eq(run.parsed.launches, SILENT_LAUNCH_ORDER), 'negative control: a silent top-level launch through each of the seven entry points (named import, default import and require) is recorded in call order', run.parsed && run.parsed.launches);
+        check(eq(issues, ['launches']) && run.r.code === 0 && run.parsed !== null && run.parsed.printed === '' && run.r.stderr === '' && run.parsed.error === null, 'negative control: the launch is the only issue reported; the exit code, output, files and exports of that module are clean, so only the launch record could catch it', { issues, code: run.r.code, printed: run.parsed && run.parsed.printed, err: run.r.stderr.slice(0, 200) });
+      });
+      check(controlDir !== null && !exists(controlDir), 'the throwaway probe module and its scratch directory are removed afterwards', controlDir);
+      const src = LF(readText(fileURLToPath(import.meta.url)) || '');
+      const topLevel = src.split('\n').filter((l) => TOP_LEVEL_LAUNCH_RE.test(l));
       check(topLevel.length === 0, 'no top-level statement of this module writes a file or starts a process', topLevel);
+      const matches = ['spawnSync(process.execPath, []);', "execNode(context, { script: 'x' });", 'gitIn(context, dir, []);', "putFile('a', 'b');", "fs.writeFileSync('a', 'b');", "fs.promises.writeFile('a', 'b');", 'spawnSync.call(null);', "const r = spawnSync('git', []);", "const r = await execNode(context, {});", 'await gitIn(context, dir, []);'];
+      const misses = ['  spawnSync(process.execPath, []);', 'function execNode(context, opts) {', 'async function contracts(context) {', "import { spawnSync } from 'node:child_process';", 'const spawnSyncLike = 1;', '// spawnSync(process.execPath, []);', 'const x = () => spawnSync();'];
+      check(matches.every((l) => TOP_LEVEL_LAUNCH_RE.test(l)) && !misses.some((l) => TOP_LEVEL_LAUNCH_RE.test(l)), 'the source scan matches a direct, assigned, awaited or method call at column 0 (spawnSync, execNode, gitIn, putFile, fs) and ignores an indented call, a declaration, an import, a comment and a call inside an arrow function', { unmatched: matches.filter((l) => !TOP_LEVEL_LAUNCH_RE.test(l)), matched: misses.filter((l) => TOP_LEVEL_LAUNCH_RE.test(l)) });
     });
     diag(context, `C15 process budget record: ${processMark(context)} harness-counted launches in total by this component so far (counting method: every spawnSync launch of this file); the plan targets at most 50 launches and 30 s and records an overrun with its cause`);
     flushProcessCount(context, 'V2/C15/contracts', mark);
