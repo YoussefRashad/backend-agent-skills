@@ -1,5 +1,52 @@
 # Changelog
 
+## 3.0.0-rc.2
+
+Review rules candidate: Adversarial, Consumer, Boundary and Contract passes; reachable
+findings beyond the plan and sibling-instance checks; recorded-drift documentation updates.
+Adds capture-once validation, per-item isolation, guarded stack prerequisites, real-validator
+fallback checks, outcome contracts, trusted log classification and computed-overflow handling.
+Adds external-review prerequisites, blocked-preamble guidance and generated testing standards.
+
+C14 adds the optional docs-sync project-rules hook with reviewed merged ownership and documents
+backend-standards adoption without losing project rules, Claude imports or the version stamp.
+It also closes the C13 prose-check command and fence residuals. Backend-standards 3.0.0 and
+toolchain-config integration remain separate work.
+
+External-review prerequisites also reach installed projects through the root AGENTS.md managed
+block. They remain instructions, not an automated preflight or permission to transmit content.
+
+C15 adds client-visible value and response-path checks to docs-sync, with same-claim repairs
+across permitted living docs. The reviewer adds Adversarial pass checks for hand-copied value
+sets without exhaustiveness guards, preserving normal severity for misread fallbacks.
+
+Manifest schema 3 remains unchanged. V2 validation rejects schema 3;
+this is not a retrofitted pre-write guard in every old command.
+Roll back project state with the tooling used for the update before reverting the installed skill.
+Existing projects receive the instructions through reviewed managed updates.
+
+Automated acceptance and pending host measurements are described in
+RELEASE-NOTES-3.0.0-rc.2.md. Publication remains a separate authorized action.
+
+## 3.0.0-rc.1
+
+Security and permissions candidate: anchored policy migration, trusted-checkout review,
+raw-Git hooks, managed-allow retirement, script-only template handling and doctor diagnostics.
+Manifest schema 3 requires a paired skill/project upgrade. V2 validation rejects schema 3;
+this is not a retrofitted pre-write guard in every old command.
+Roll back project state with rc.1 tooling before reverting the installed skill.
+Automated acceptance and pending host measurements are described in
+RELEASE-NOTES-3.0.0-rc.1.md. Publication remains a separate authorized action.
+
+Review corrections: a rerun never copies the shipped policy defaults over an installed policy, and
+apply refuses a policy draft that is invalid, lowers the schema or drops installed entries outside
+the reviewed migration workflow (APPLY_POLICY_REGRESSION, exit 3). The never-read boundary is the
+shipped defaults plus the installed policy. Other spellings of a protected target (ASCII case, a
+trailing dot or space, a ":" stream suffix; the control files, the manifest and every catalog
+runtime target) are refused with APPLY_PATH (unsafe path: <target>, exit 3). Script entry checks
+accept junction and real-path launches, the raw-Git hook blocks --config-env alias overrides, and
+stale wording is corrected.
+
 ## 2.0.0
 Release of the `2.0.0-rc.13` source, unchanged in function. Only `VERSION` and release documentation changed
 (`RELEASE-NOTES-2.0.0.md`, `README.md` status and limitations, this entry, the version placeholder in

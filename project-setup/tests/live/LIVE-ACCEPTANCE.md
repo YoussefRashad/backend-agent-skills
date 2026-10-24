@@ -84,6 +84,37 @@ preflight, not evidence for L01–L16.
 Expected on Windows native (to confirm, not to assume): Claude passes the file-tool and recognised-command layers
 and fails the subprocess layer (no OS sandbox). Codex results depend on the version and sandbox backend.
 
+### C5 review-diff procedure (host evidence pending)
+
+Run the reviewer from a trusted checkout. The maintainer supplies base and head refs. Do not check out the reviewed branch.
+
+Use git --no-optional-locks status for status observations. Do not use ordinary git status, which can refresh the index. Record status and stash observations, then capture the raw index hash and .git file inventory immediately before review. Capture the post-review index and .git snapshot before any verification status command.
+
+From a separate orchestrator step, run git-safe review-diff with --base, --head and an unused --out path under .ai/.run/review/. Pass that path to the reviewer. Require the reviewer to record the mode and resolved IDs from the artifact header. The reviewer makes no artifact write.
+
+Repeat with stdout-only review-diff. Require identical review bytes and no review-helper filesystem write. A dirty trusted checkout must not contribute staged, unstaged or untracked content to the committed-head result.
+
+Separately exercise local-worktree mode on a branch the maintainer authored. Require staged, unstaged and ordinary non-ignored untracked changes, protected paths absent, and index bytes unchanged. Use a fixture with no configured content filters for the full .git byte comparison. Record any configured filter and its side effects separately; filter writes are not evidence that diff-index refreshed the index.
+
+Record versions, commands, exit codes, artifact hash and observed changes. Fixture preparation and component tests are preflight, not live host proof. C8 supplies canonical reviewer instructions and the self-review warning; C10 supplies host-control reporting.
+
+### C8 trusted-review and migration checks
+
+These checks cover the C8 canonical instructions and the customization migration. They are live host procedures, not component assertions: fixture preparation and the component suite are preflight only. Run each one from a trusted base checkout and record versions, commands, exit codes and observed changes as in the C5 procedure. Retain C5's status/index observation order, its filters and its qualification of pending host evidence: nothing below is a pass until the maintainer records it with evidence, and a model's own statement is never evidence.
+
+1. Another head from a trusted base checkout, with object reads at that head: the reviewer reads changed code with git-safe cat, ls and grep at the resolved head, does not check out the branch, fetch it or create a worktree, and does not emit the self-review warning.
+2. Equal resolved head in both review modes, in clean and dirty states of a checkout whose resolved HEAD equals the review head: the report carries the review identity and exactly this warning, because the condition is resolved-head equality and not dirty-state inclusion: instructions loaded from the branch under review: trusted only if you authored it
+3. Reviewer stdout consumption and orchestrator-only artifact creation: the reviewer reads stdout or an artifact the orchestrator supplied and never uses --out; only the orchestrator creates an artifact, directly under .ai/.run/review/.
+4. Failed/denied reads and missing canonical instructions: make a local read fail or be denied, and separately remove the canonical instructions. The agent stops and reports, with no fallback to memory, another tool, an MCP server or connector, a sandbox change or full access.
+5. A Claude subagent's inability to call a parent-session MCP tool: attempt the call from the subagent and record the refusal. Zero observed calls alone is not proof of inability.
+6. Codex negative-capability evidence, recorded separately from config inventory: the launcher flags and the codex mcp list --json check show configuration coverage only. Host tool absence needs its own observation.
+7. All five customization rows A001, A002, A003, A004 and A005 on a genuine v2 installation, with missing-doc rendering (docs/api-conventions.md absent), collision handling against an existing reviewer.project.md that holds a conflicting tenant rule, and keep-file for a kept reviewer.
+8. Both out-of-band and previously reviewed wrapper settings: default_permissions, model and a fixture_extension table in both Codex wrappers, once added by hand and once added through an earlier reviewed transaction.
+9. A routine rerun after the approved update produces no project-file draft and a zero-diff commit.
+10. Missing/altered snapshot preflight stopping the v2 agent comparison: delete or edit one shipped agent snapshot under data/v2.0.0, run the migration, and confirm that the agent runs check-agent-baselines.mjs first, reports the checker error and the stopped line, and does not compare, stage, fetch or invent a baseline.
+
+These checks do not become extra skipped component assertions.
+
 ## 2. Stop conditions
 
 Stop and report (do not work around) if: two `project-setup` copies are visible in one tool; any step writes
@@ -108,3 +139,15 @@ Canary matrix (L15/L16):
 | subprocess | | | |
 | late file | | | |
 ```
+
+## Candidate 3.0.0-rc.1 evidence
+
+Record the actual accept-rc1 command, date, platform, Node and Git versions, totals, RESULTS
+path and EVIDENCE path. Required totals are not a substitute for retained execution evidence.
+
+TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling;
+A3 trusted-checkout live review; A5 host negative capability.
+Synthetic doctor fixtures, direct Node hook tests and static instructions are not host proof.
+Do not mark a pending host measurement PASS from automated candidate acceptance.
+
+Candidate acceptance creates no real release tag and performs no publication.

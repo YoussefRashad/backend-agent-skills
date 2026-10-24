@@ -1,0 +1,375 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "A01",
+      "rule": "*",
+      "classification": "broad"
+    },
+    {
+      "id": "A02",
+      "rule": "Bash",
+      "classification": "broad"
+    },
+    {
+      "id": "A03",
+      "rule": "PowerShell",
+      "classification": "broad"
+    },
+    {
+      "id": "A04",
+      "rule": "Bash(*)",
+      "classification": "broad"
+    },
+    {
+      "id": "A05",
+      "rule": "PowerShell(*)",
+      "classification": "broad"
+    },
+    {
+      "id": "A06",
+      "rule": "Bash( ** )",
+      "classification": "broad"
+    },
+    {
+      "id": "A07",
+      "rule": "Bash(:*)",
+      "classification": "broad"
+    },
+    {
+      "id": "A08",
+      "rule": "Bash(* git)",
+      "classification": "broad"
+    },
+    {
+      "id": "A09",
+      "rule": "Bash(npm run *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A10",
+      "rule": "Bash(npm test*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A11",
+      "rule": "Bash(npm start*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A12",
+      "rule": "Bash(npm:*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A13",
+      "rule": "Bash(npm*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A14",
+      "rule": "Bash(npm install)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A15",
+      "rule": "Bash(npm i)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A16",
+      "rule": "Bash(npm t)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A17",
+      "rule": "Bash(npm x)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A18",
+      "rule": "Bash(npm run-script check)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A19",
+      "rule": "Bash(npm restart)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A20",
+      "rule": "Bash(npm stop)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A21",
+      "rule": "Bash(npm rebuild)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A22",
+      "rule": "Bash(npm pack)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A23",
+      "rule": "Bash(npm publish)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A24",
+      "rule": "Bash(npm --prefix . run test)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A25",
+      "rule": "Bash(yarn *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A26",
+      "rule": "Bash(pnpm *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A27",
+      "rule": "Bash(npx eslint *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A28",
+      "rule": "Bash(node .ai/tools/*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A29",
+      "rule": "Bash(node .ai/tools/git-safe.mjs *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A30",
+      "rule": "Bash(node:*)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A31",
+      "rule": "Bash(node --test)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A32",
+      "rule": "Bash(node -e \"require('./task')\")",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A33",
+      "rule": "Bash(\"./scripts/check.sh\" *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A34",
+      "rule": "PowerShell(.\\scripts\\check.ps1 *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A35",
+      "rule": "Bash(../scripts/check *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A36",
+      "rule": "Bash(scripts/check.sh)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A37",
+      "rule": "Bash(node_modules/.bin/jest *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A38",
+      "rule": "PowerShell(scripts\\check.cmd)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A39",
+      "rule": "Bash(make *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A40",
+      "rule": "Bash(make)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A41",
+      "rule": "Bash(bash scripts/check.sh)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A42",
+      "rule": "Bash(sh scripts/check.sh)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A43",
+      "rule": "Bash(bash -c *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A44",
+      "rule": "Bash(pwsh -File *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A45",
+      "rule": "Bash(pwsh x.ps1)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A46",
+      "rule": "PowerShell(powershell x.ps1)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A47",
+      "rule": "PowerShell(pwsh -Command *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A48",
+      "rule": "Bash(NPM.CMD run test)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A49",
+      "rule": "Bash(\"/usr/bin/node\" \"scripts/check.mjs\")",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A50",
+      "rule": "Bash(git status)",
+      "classification": "other"
+    },
+    {
+      "id": "A51",
+      "rule": "Bash(git status:*)",
+      "classification": "other"
+    },
+    {
+      "id": "A52",
+      "rule": "Bash(gh pr view *)",
+      "classification": "other"
+    },
+    {
+      "id": "A53",
+      "rule": "Bash(node --version)",
+      "classification": "other"
+    },
+    {
+      "id": "A54",
+      "rule": "Bash(npm --version)",
+      "classification": "other"
+    },
+    {
+      "id": "A55",
+      "rule": "Bash(pwsh -Version)",
+      "classification": "other"
+    },
+    {
+      "id": "A56",
+      "rule": "Read(**)",
+      "classification": "other"
+    },
+    {
+      "id": "A57",
+      "rule": "Write",
+      "classification": "other"
+    },
+    {
+      "id": "A58",
+      "rule": "Bash()",
+      "classification": "other"
+    },
+    {
+      "id": "A59",
+      "rule": "bash(*)",
+      "classification": "other"
+    },
+    {
+      "id": "A60",
+      "rule": "Bash(\"unterminated)",
+      "classification": "other"
+    },
+    {
+      "id": "A61",
+      "rule": "Bash(\"./scripts/it's-ok.sh\" *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A62",
+      "rule": "Bash('scripts/\"quoted\".cmd' *)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A63",
+      "rule": "PowerShell(C:\\tools\\check.cmd)",
+      "classification": "other"
+    },
+    {
+      "id": "A64",
+      "rule": "Bash(pwsh --help)",
+      "classification": "other"
+    },
+    {
+      "id": "A65",
+      "rule": "Bash(*:*)",
+      "classification": "broad"
+    },
+    {
+      "id": "A66",
+      "rule": "Bash(node)",
+      "classification": "other"
+    },
+    {
+      "id": "A67",
+      "rule": "Bash(npm)",
+      "classification": "other"
+    },
+    {
+      "id": "A68",
+      "rule": "Bash(bash)",
+      "classification": "other"
+    },
+    {
+      "id": "A69",
+      "rule": "Bash(eslint *)",
+      "classification": "other"
+    },
+    {
+      "id": "A70",
+      "rule": "Bash(git commit *)",
+      "classification": "other"
+    },
+    {
+      "id": "A71",
+      "rule": "Bash(ts-node *)",
+      "classification": "other"
+    },
+    {
+      "id": "A72",
+      "rule": "Bash(~/bin/check)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A73",
+      "rule": "Bash($TOOLS/check)",
+      "classification": "repo-code"
+    },
+    {
+      "id": "A74",
+      "rule": "PowerShell(c:\\tools\\check.cmd)",
+      "classification": "other"
+    }
+  ]
+}

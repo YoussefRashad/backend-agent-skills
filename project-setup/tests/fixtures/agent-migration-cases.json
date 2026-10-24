@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "projectName": "fixture-wallet-api",
+  "reviewerChanges": [
+    {
+      "id": "A001",
+      "kind": "render-name",
+      "before": [
+        "Evidence-based reviewer for {{PROJECT_NAME}}: security, correctness, performance, data integrity, architecture."
+      ],
+      "after": [
+        "Evidence-based reviewer for fixture-wallet-api: security, correctness, performance, data integrity, architecture."
+      ],
+      "destination": ".ai/agents/reviewer.md",
+      "approvedDecision": "rendering-confirmed",
+      "evidence": "projectName=fixture-wallet-api"
+    },
+    {
+      "id": "A002",
+      "kind": "replace",
+      "before": [
+        "You review. You never change code, docs, configuration, or git state while reviewing."
+      ],
+      "after": [
+        "You review. Require tenant checks. You never change code, docs, configuration, or git state while reviewing."
+      ],
+      "destination": ".ai/agents/reviewer.project.md",
+      "approvedDecision": "move-approved",
+      "evidence": null
+    },
+    {
+      "id": "A003",
+      "kind": "replace",
+      "before": [
+        "5. Follow each changed path far enough to see its callers and the data it touches. Do not load the whole repository."
+      ],
+      "after": [
+        "5. Trace every changed path to its caller and require a tenant predicate."
+      ],
+      "destination": ".ai/agents/reviewer.project.md",
+      "approvedDecision": "move-approved",
+      "evidence": null
+    },
+    {
+      "id": "A004",
+      "kind": "render-absent-doc",
+      "before": [
+        "7. **API contract**: matches `.ai/context/error-contract.md` and `docs/api-conventions.md`; backward compatibility"
+      ],
+      "after": [
+        "7. **API contract**: matches `.ai/context/error-contract.md`; backward compatibility"
+      ],
+      "destination": ".ai/agents/reviewer.md",
+      "approvedDecision": "rendering-confirmed",
+      "evidence": "absent:docs/api-conventions.md"
+    },
+    {
+      "id": "A005",
+      "kind": "append",
+      "before": [],
+      "after": [
+        "",
+        "## 6. Project rules",
+        "",
+        "Require ledger balance checks."
+      ],
+      "destination": ".ai/agents/reviewer.project.md",
+      "approvedDecision": "move-approved",
+      "evidence": null
+    }
+  ],
+  "projectFiles": {
+    "existing": "# Reviewer project rules\n\nKeep rule Z.\n",
+    "collision": "# Reviewer project rules\n\nRequire tenant checks only for HTTP routes.\n",
+    "newPrefix": "# Reviewer project rules\n",
+    "append": "\nYou review. Require tenant checks. You never change code, docs, configuration, or git state while reviewing.\n\n5. Trace every changed path to its caller and require a tenant predicate.\n\n## 6. Project rules\n\nRequire ledger balance checks.\n"
+  },
+  "docsSyncAddition": "\nProject note: preserve terminology.\n",
+  "wrapperAdditions": {
+    "topLevel": "default_permissions = \"project-setup-readonly\"\nmodel = \"fixture-model\"\n",
+    "trailingTable": "\n[fixture_extension]\nkeep = true\n"
+  }
+}

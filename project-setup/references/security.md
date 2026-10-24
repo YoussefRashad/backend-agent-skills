@@ -2,34 +2,215 @@
 
 ## 1. Secret paths
 
-`data/secret-paths.json` is the only list. Claude denies, the Codex profile snippet, git pathspec excludes, and
-`detect`/`validate` exclusions are all rendered from it. To change coverage, edit that file (in the skill
-source), re-render, and re-run setup. Never hand-edit rendered output in a project.
+`data/secret-paths.json` holds the shipped defaults. A project's effective policy is its installed
+`.ai/security-paths.json`: the managed `patterns` plus the project's own `projectPatterns`, validated by the shared
+helper `.ai/tools/security-policy.mjs`. Rendered controls and the git-safe reader use that installed effective
+policy. Setup's own refusal set is wider: setup scripts refuse a path matched by the shipped defaults or by the
+installed policy (the union of both). With no installed policy the shipped defaults alone apply; an invalid or
+unreadable installed policy fails closed. To protect more in one project, add `projectPatterns` there. Never
+hand-edit rendered output in a project.
+
+Setup never replaces an installed policy by copying the shipped defaults over it. Only a fresh install, with no
+installed policy, copies `data/secret-paths.json` (with `full` ownership). An installed policy gets a policy draft
+only when detect reports mode `update` with a schema-2 manifest, when the security-state inspection reports managed
+patterns behind this skill, an unknown installed baseline or managed patterns edited since install, or when the user
+requests a policy change. Then run the migration report, record the user's explicit decisions and run the stage
+(`references/migration-v2.md` section 4): new default coverage arrives as a reviewed change, the project's
+`projectPatterns` are kept, and the staged policy is recorded with `keys` ownership. `apply.mjs` refuses a policy
+draft that is invalid, lowers the schema, or drops an installed entry outside that workflow
+(`APPLY_POLICY_REGRESSION`, exit 3); a content approval does not bypass it. To change the shipped defaults, edit the
+skill's file; installed projects receive the change through that workflow.
+
+Removing an installed `projectPatterns` entry is a manual edit outside setup. The apply gate refuses that removal
+even in a reviewed migration with decisions, by design: setup never shrinks a project's own protections, so the
+refusal is expected and is not a bug. To drop such an entry, edit `.ai/security-paths.json` directly and review that
+change like any other project edit.
 
 `.env.example` is in the list on purpose: real values end up in templates often enough that no agent reads any
-`.env*` file. `env-keys.mjs` gives you what you need: key names, and per key one of `empty`, `placeholder`,
-`non-placeholder`, `possible-real-secret`. Report `possible-real-secret` names under Security Concerns.
+`.env*` file.
 
-Agent-facing exclusion is not the same as a local tool inspecting content. Two scripts do read protected
-content in-process, by design, and never emit it: `env-keys.mjs` (templates only, never `.env`) and
-`secret-scan.mjs` (gitleaks, redacted, report kept in the vault).
+The only environment-template exception is the reviewed project-setup `env-keys.mjs` and
+`apply.mjs` flow for the root `.env.example`. Agents MUST NOT open that file directly.
+Other `.env*` files remain denied. This exception does not authorize arbitrary scripts or
+changes to user-level denies. Reports contain key names and value classifications, never values.
 
-## 2. Diffs and history
+`env-keys.mjs keys --template auto` gives you what you need: key names, and per key one of `empty`,
+`placeholder`, `non-placeholder`, `possible-real-secret`. It addresses only the root template, never an alternate
+or nested name. A missing template, or a template that contains values, produces an exact manual step for the final
+report (`references/report.md`); values are preserved and never printed, and nothing is reduced automatically.
+Report `possible-real-secret` names under Security Concerns.
 
-Run diffs and history only through `node .ai/tools/git-safe.mjs diff|log|show …` (before installation:
-`node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`; during Phase 0 use
-`git diff --name-status` only, which prints paths, not content). It spawns git without a shell, so `**` globs are
-never expanded by Bash or mangled by PowerShell, adds `--no-ext-diff --no-textconv`, and enforces:
+The separate `secret-scan.mjs` exception permits in-process inspection of protected content
+through gitleaks. Findings remain in the vault; reports expose file:line:rule and protected-path
+classifications, never values. The effective policy labels findings; it does not exclude
+protected files from the scan.
 
-- every revision argument must resolve to a **commit** (`<rev>^{commit}`). Object forms print file content
-  directly and ignore pathspec excludes, so `HEAD:.env`, `:.env`, blob/tree ids are rejected;
-- blocked options: `--no-index`, `-c`, `--output`, `--ext-diff`, `--textconv`, `--pathspec-from-file`, `--stdin`,
-  `--git-dir`, `--work-tree`, `-O`;
-- environment that changes pathspec semantics or injects config (`GIT_LITERAL_PATHSPECS`, `GIT_CONFIG_*`,
-  `GIT_EXTERNAL_DIFF`, …) is removed; excludes are case-insensitive;
-- options that take a value must be attached (`-n5`, `--max-count=5`), otherwise the value is read as a revision
-  and rejected. `.gitignore` does not protect files that are already
-tracked; tracked secret files are a stop condition (detect warns), not something to work around.
+## 2. Diffs, history and committed files
+
+Read diffs, history and committed files only through `node .ai/tools/git-safe.mjs <command>` (before
+installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`). The installed
+reader belongs to one reviewed unit of seven files: `security-policy.mjs`, `git-safe-core.mjs`,
+`guard-raw-git-core.mjs`, `review-diff.mjs`, `git-safe.mjs`, `guard-raw-git.mjs` and `hooks-selftest.mjs`. The
+reader accepts exactly these six object forms and the review form:
+
+```text
+diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]
+log [-p] [--oneline] [-n<k>|--max-count=<k>] <rev>|<A>..<B>|<A>...<B> [-- <paths>]
+show <commit> [--stat|--name-status] [-- <paths>]
+cat <commit> -- <path>
+ls <commit> [-- <paths>]
+grep <commit> <pattern> [-- <paths>]
+review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
+```
+
+- Every other option or form is refused: worktree and index diffs (`diff <rev>`, `--cached`; the local working
+  state is reviewed only through `review-diff` below), formatting and
+  traversal options (`--format`, `--reverse`, `--all`, `--follow`), detached values (`-n 5`), object and reflog
+  forms (`HEAD:.env`, `:.env`, `^REV`, `@{1}`). Counts are attached: `-n5` or `--max-count=5`.
+- Every revision resolves to a **commit** ID before any content command, so blob and tree IDs are refused and a
+  ref that moves mid-command changes nothing.
+- Protected paths are omitted from diff, log, show, ls and grep, including names that existed only in history;
+  `cat` of a protected path is refused. A grep pattern is a basic regular expression; no match is an empty success.
+- Git runs without a shell, so `**` globs are never expanded by Bash or mangled by PowerShell. Errors name the
+  failure only, never a path, revision, pattern or Git output.
+
+Every git-safe command limits its complete stdout result to 1,048,576 bytes. Exactly that
+many bytes is allowed. Larger results are refused without partial output. Narrow paths with
+-- <paths>; for log, use attached -n<k> or a smaller commit range. For an oversized cat result,
+use grep with a more selective pattern or select a smaller file. A refused result is not a
+completed review. After narrowing, record the reviewed subset and the scope still unreviewed.
+
+Log counts limit content output, not the names-only policy inventory. That inventory runs
+once over the full resolved expression. A single-revision log may walk the full reachable
+history; use a smaller commit range to reduce that work.
+
+Paths are literal and repository-root-relative. Secret checks are case-insensitive through
+the shared policy; Git object lookup preserves exact case. The installed policy is required.
+The reader supports policy schemas 1 and 2 and refuses unknown schemas.
+
+Git 2.31 or later is required. The reader preserves the user's global and system configuration
+sources, including safe.directory, while removing environment-injected keys and overriding
+the execution and output settings used by these commands.
+
+### Review diffs (`review-diff`)
+
+The sanctioned review interface is:
+
+```text
+node .ai/tools/git-safe.mjs review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
+```
+
+With --head, review-diff compares the resolved merge-base to the resolved head commit.
+The trusted checkout's staged, unstaged and untracked changes are excluded. Without --head,
+it compares the merge-base of base and current HEAD with the local working state, including
+staged, unstaged and non-ignored untracked changes.
+
+Tracked local changes use Git's diff-index plumbing, preserving Git's normalization and
+skip-worktree behavior without refreshing the index. Configured clean/process filters may
+run for selected safe tracked files. Such filters are trusted configuration and may have
+their own side effects, including Git LFS object-cache writes.
+
+Untracked files are checked before reading and rendered in-process as new files. Their bytes
+are raw: CRLF is preserved, unlike tracked content normalized by Git. An untracked file whose
+first 8,000 bytes contain a NUL byte is shown as one binary line, whatever its size, and the
+rest of it is not read. An untracked text file larger than 1,048,576 bytes is refused after
+at most its first 8,000 bytes are read. Only that NUL check decides binary for untracked files;
+their .gitattributes (binary, -diff, diff=) are not consulted. A selected embedded repository is
+refused as a nonregular input. A path removed from the index but still present as untracked
+content appears twice: a tracked deletion followed by an untracked new-file patch.
+
+The result header records the mode, resolved base, resolved head and merge-base IDs.
+Selectors are literal repository-relative paths. A protected selector is refused; protected
+descendants of a selected directory are omitted.
+
+Stdout is the default. Reviewers use stdout or an artifact supplied by the orchestrator.
+They do not use --out. The orchestrator may create a new artifact directly under
+.ai/.run/review/ and pass its path to the reviewer. Output paths are repository-root-relative,
+even when invoked from a subdirectory. Artifact creation is exclusive. The default name is
+a Windows-safe UTC timestamp, for example 20261019T123456789Z.diff.
+
+The setup run ID review and its case or trailing-dot/space aliases are reserved. Older setup
+runs with those names require manual resolution. A reserved setup-lock owner can be removed
+with lock.mjs break --confirm-unknown-owner after the existing human recovery decision.
+That operation removes the lock, not the review directory.
+
+Review output, including its header, is limited to 1,048,576 bytes. An oversized result is
+refused whole. Narrow with -- <paths>, then record both the reviewed subset and the scope
+still unreviewed. A narrowed result does not establish that the full change was reviewed.
+
+Path rules cannot detect secret content copied to an unrelated allowed path. They are not
+a content scanner and cannot guarantee that a review diff is secret-free.
+
+`.gitignore` does not protect files that are already tracked; tracked secret files are a stop condition (detect
+warns), not something to work around.
+
+### C8 review guidance
+
+This subsection is the orchestrator's side of the trusted-review contract; the canonical reviewer and docs-sync
+definitions carry the agent's side. The supported review grammar is exactly:
+
+```text
+review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
+```
+
+Start every review from a trusted checkout. Review another person's branch through its resolved commit
+objects (`--head`) from the trusted base checkout; never check it out, create a worktree for it or start an
+agent session there. The reviewer copies the helper's identity header
+`# review-diff mode=<mode> base=<B> head=<H> merge-base=<M>` and adds the self-review warning only when the
+resolved head equals the checkout's resolved HEAD, whatever the mode or dirty state.
+
+Reviewers consume review-diff stdout or an artifact the orchestrator supplies; they never use `--out`,
+redirect stdout to a file or create review artifacts.
+
+The orchestrator may create an artifact with review-diff's `--out` option. The destination
+must be a direct child of `.ai/.run/review/`. Use the helper's artifact publication checks;
+do not replace them with shell redirection.
+
+`defaultReviewArtifactPath(now)` in `review-diff.mjs` is a naming helper, not a writer or a retry loop. For
+`new Date('2026-10-19T12:34:56.789Z')` it returns exactly `.ai/.run/review/20261019T123456789Z.diff`. The
+CLI still defaults to stdout. Calling the naming helper does not create directories, reserve a filename or
+overwrite a collision; artifact creation stays exclusive, and a collision is an error, not a retry.
+
+`review` is reserved for review artifacts, including case variants and aliases with
+trailing dots or spaces. Never use it as a setup run ID or clean it as a setup run.
+Review artifacts and their self-ignore entry must survive setup cleanup.
+
+A refused result, an empty or partial artifact, or a narrowed subset is not a completed full review. After
+narrowing, the report records the reviewed subset and the scope still unreviewed.
+
+Hard links fall under the same copied-content limit as copies: protected content can appear
+under an allowed name. The path policy does not detect that relationship.
+
+Before any tool sends a diff or files to an external service, including a hosted reviewer or a
+review CLI, establish the exclusion set from the trusted checkout. It is the union of the skill's
+shipped default patterns and the effective installed policy: patterns plus projectPatterns.
+Installed managed patterns behind the shipped defaults do not reduce this exclusion set.
+
+The tool MUST exclude every matching path from all content it sends, including generated context.
+Match both sides of a rename and paths present only in the reviewed history. Scan the remaining
+content for secret-shaped strings before transmission. A scan must not print or transmit a matched
+value. A match must be resolved without exposing it before the content can be sent.
+
+If the installed policy is absent, invalid or unreadable, or the exclusions or scan cannot be
+established for the actual outgoing content, the tool MUST NOT run on that range. An invalid or
+unreadable policy is not an absent policy. Do not silently fall back to shipped defaults.
+
+A policy edited in the reviewed range is untrusted review input, not authority to remove trusted
+exclusions. Establish the coverage from the trusted checkout and account for unresolved policy
+changes before transmission; if coverage cannot be established, do not run the tool.
+
+git-safe excludes protected paths for local reading. A CLI that builds its own diff from Git does
+not inherit those exclusions. If it cannot exclude a protected path in the range, do not run it
+on that range. A names-only precheck is not proof that its later payload is safe.
+
+If the trusted policy changes after the check, that check is invalid. Before transmission,
+you MUST re-establish the exclusions and rescan the actual outgoing payload against the new
+trusted policy. A previous scan is not evidence for changed policy or changed outgoing content.
+
+These are prerequisites, not permission to send repository content. Canonical reviewer and
+docs-sync instructions still prohibit external transmission. C14 also installs these prerequisites
+in the root AGENTS.md critical-rules block, so project sessions receive them without reading this
+reference. No wrapper or automated preflight is added; instruction checks do not prove enforcement.
 
 ## 3. Secret scan (optional, bounded)
 
@@ -89,3 +270,32 @@ One table per tool, filled from observations only:
 
 Any cell that is not *pass* or *verified* also goes to `TODO.md` → Unverified Controls, with the exact steps to
 verify it.
+
+Keep static validation, direct installed-hook results, doctor diagnostics and live host evidence
+separate. Neither a passing self-test nor a ready doctor verifies Claude hook loading, connector-tool
+absence or sandbox enforcement.
+
+## 6. Doctor diagnostics
+
+The doctor runs only codex mcp list --json with validated lane options, reads the newest permitted
+sandbox log and inventories Windows processes. It never starts a model session or sandbox probe,
+reads authentication or sandbox-secret files, kills processes or changes sandbox mode.
+
+```text
+node <SKILL_DIR>/scripts/doctor.mjs --disable apps --disable plugins -c mcp_servers.node_repl.enabled=false -p review -C <project-root>
+```
+
+Supply only configuration-defined server names. The external launcher owns enumeration and must use
+the same directory, profile, configuration and disable options for the worker. An enabled server,
+failed command, invalid output or unresolved prerequisite means not ready.
+
+Exit 0 means the supplied configuration and available diagnostics passed these checks. It does not
+establish host negative capability. An absent or unreadable log and an unavailable Windows process
+inventory remain unknown and produce exit 1.
+
+A clean log means no recognized setup-refresh error was found in the newest readable log. It is
+historical diagnostic evidence, not a successful sandbox measurement.
+
+The report includes the selected log's modification time. An error in that log remains a failure
+until newer evidence is available. Resolve the underlying problem before retrying; the doctor does
+not delete logs or run a probe to create new evidence.

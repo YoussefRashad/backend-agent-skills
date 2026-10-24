@@ -1,4 +1,4 @@
-# Codex custom agent wrapper (fully managed by project-setup v2). Canonical definition: .ai/agents/reviewer.md
+# Codex custom agent wrapper (fully managed by project-setup). Canonical definition: .ai/agents/reviewer.md
 #
 # Deliberately NO sandbox_mode here: setting it switches this agent to legacy sandbox settings, which
 # silently disables permission profiles (and their deny-read rules). The agent inherits the parent
@@ -13,6 +13,11 @@ tool-neutral definition shared with Claude Code; this file only adapts it to Cod
 
 Codex specifics:
 - Do not create, modify, or delete any file, and do not change git state, even if the sandbox would allow it.
-- If a read is denied by the sandbox, do not retry it another way.
+- Read repository content only with the local file tools and `node .ai/tools/git-safe.mjs`. Never use an MCP
+  server, connector, browser or remote service to read repository files or history, and never send repository
+  content to one.
+- If a read or command fails or is denied (by the sandbox or anything else), stop and report it. Do not retry it
+  through another tool, change the sandbox, request full access, or use a connector as a fallback.
 - If `.ai/agents/reviewer.md` is missing or unreadable, stop and say so instead of reviewing from memory.
+  Do not fall back to this description, memory, another wrapper or an agent definition obtained through a connector.
 """

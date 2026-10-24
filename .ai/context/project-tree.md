@@ -16,18 +16,26 @@ claude-backend-skills/
 ├── toolchain-config/           skill 2 — the canonical ESLint/Prettier/tsconfig baseline
 │   ├── SKILL.md                diff-and-ask workflow
 │   └── templates/              eslint · prettier · tsconfig · husky · security-scan
-├── project-setup/SKILL.md      skill 3 — docs + agent scaffolding (general-purpose)
+├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0-rc.2)
 ├── pr-review/SKILL.md          skill 4 — per-PR multi-lane review (general-purpose)
 ├── audit/SKILL.md              skill 5 — full-codebase safety net (general-purpose)
 ├── scripts/check-versions.mjs  version-stamp guard (run by `npm run check` and CI)
 └── .github/workflows/ci.yml    format check + stamp guard for THIS repo
 ```
 
-`project-setup` / `pr-review` / `audit` are **framework-agnostic** skills — single
-`SKILL.md` files with no `templates/` or `references/`, so the CI version-stamp guard
-(which covers only `backend-standards` and `toolchain-config`) does not apply to them and
-they carry no `version.json`. They overlap with `backend-standards`' own reviewer/docs-sync
-agents — see § "Relationship to the other review skills" in `backend-standards/SKILL.md`.
+`project-setup` / `pr-review` / `audit` are **framework-agnostic** skills. The CI version-stamp
+guard covers only `backend-standards` and `toolchain-config` (see `scripts/check-versions.mjs`), so
+it does not apply to any of them, and none carries a `templates/version.json`. They overlap with
+`backend-standards`' own reviewer/docs-sync agents — see § "Relationship to the other review
+skills" in `backend-standards/SKILL.md`.
+
+`pr-review` and `audit` are single `SKILL.md` files. `project-setup` is a versioned release
+candidate (`project-setup/VERSION` is `3.0.0-rc.2`) with its own layout: `SKILL.md`,
+`references/`, `assets/`, `data/`, `scripts/`, `install/` (installer and local release builder),
+`tests/`, `evals/`, `README.md`, `CHANGELOG.md` and release notes. Its test suite and its
+`scripts/check-agent-baselines.mjs` pin SHA-256 digests of several of its files, so it is excluded
+from Prettier (`.prettierignore`) — do not edit it as a side effect of other work. Final 3.0.0 is
+blocked on host measurements that are still pending (`project-setup/RELEASE-NOTES-3.0.0-rc.2.md`).
 
 ## `backend-standards/`
 

@@ -17,7 +17,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, repoRoot, hostId, ok, fail, skillVersion, validateRunId, secureDir, writeInRepo, readInRepo } from './lib.mjs';
 
-const args = parseArgs(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+// C5 plan 3.12: a reserved run id (review and its aliases) is refused before root discovery or any project access.
+// Every --run-id / --confirm-run-id value is scanned, duplicates included, so parseArgs keeping only the last cannot
+// hide one; a following token that starts with -- is not a value and keeps the existing handling.
+const RESERVED = { ok: false, code: 'RUN_ID_RESERVED', error: 'run id is reserved for review artifacts' };
+function failReserved() {
+  process.stdout.write(JSON.stringify(RESERVED, null, 2) + '\n');
+  process.exit(1);
+}
+const isReserved = (v) => { try { validateRunId(v); return false; } catch (e) { return e.code === 'RUN_ID_RESERVED'; } };
+rawArgs.forEach((a, i) => {
+  const v = rawArgs[i + 1];
+  if ((a === '--run-id' || a === '--confirm-run-id') && v !== undefined && !v.startsWith('--') && isReserved(v)) failReserved();
+});
+
+const args = parseArgs(rawArgs);
 const cmd = args._[0];
 const root = repoRoot();
 if (!root) fail('not inside a git repository');
@@ -88,7 +103,11 @@ switch (cmd) {
   case 'break': {
     const owner = readOwner();
     if (!fs.existsSync(lockDir)) { ok({ broken: false, reason: 'not held' }); break; }
-    if (owner) {
+    if (owner && isReserved(owner.runId)) {
+      // A pre-C5 run named review (or an alias) cannot be matched with --confirm-run-id any more: only the explicit
+      // human recovery flag removes its lock. That removes the lock only, never .ai/.run/review.
+      if (!args['confirm-unknown-owner']) failReserved();
+    } else if (owner) {
       const confirm = args['confirm-run-id'];
       if (!confirm || confirm === true || owner.runId !== String(confirm)) {
         fail('break requires --confirm-run-id matching the current owner (prevents breaking a lock that changed hands)', 2, { owner });

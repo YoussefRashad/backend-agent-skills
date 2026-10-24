@@ -4,10 +4,27 @@
 
 | Ownership | Applies to | The skill may | On drift |
 |---|---|---|---|
-| `full` | Files the skill created entirely: `.ai/agents/*`, wrappers | Regenerate when unchanged | Ask before replacing user edits |
+| `full` | Canonical `.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`, and wrappers | Regenerate when unchanged | Ask before replacing user edits |
 | `blocks` | Markdown and `#`-comment files with managed blocks: `AGENTS.md`, `CLAUDE.md`, `.gitignore` | Rewrite inside its blocks only | Per-block: unchanged / edited-by-user / removed-by-user |
-| `keys` | `.claude/settings.json` | Append missing managed entries to `permissions.deny/allow` | Never removes or reorders; reports conflicts |
+| `keys` | `.claude/settings.json`, `.ai/security-paths.json` | Append missing managed entries; record the approved managed list | Never removes or reorders without approval; reports conflicts |
 | `merged` | Living docs, `.env.example`, pre-existing files without markers | Targeted, reviewed edits | Not tracked |
+
+The optional project extensions ".ai/agents/reviewer.project.md" and
+".ai/agents/docs-sync.project.md" use merged ownership. Their records contain no full-file
+regeneration hash. Routine setup MUST omit their drafts unless a project-rule change was
+requested, so project guidance cannot be regenerated as a canonical agent. Existing unowned
+content still needs its applicable approval. A changed file with prior ownership needs
+approval for an ownership transition; a matching hash is not proof of template-only content.
+Setup MUST review and commit ownership metadata with the existing transaction, so content
+and ownership cannot receive separate, unbound approvals.
+
+`.ai/security-paths.json` is `full` only when a fresh install (no installed policy) creates it from the shipped
+`data/secret-paths.json`. That record never permits replacing an installed policy with the shipped defaults. A rerun
+without a policy draft keeps the installed ownership record; a reviewed migration (`references/migration-v2.md`)
+records `keys` ownership whose managed metadata holds the managed `patterns`, never `projectPatterns`. When a
+policy is installed, `apply.mjs` refuses a policy draft that is invalid, lowers the schema, or drops an installed
+entry outside that workflow (`APPLY_POLICY_REGRESSION`, exit 3) in prepare, both reviews and commit;
+`--approve-user-content` does not bypass it.
 
 A matching hash means "the skill's region is as the skill left it". It is **not** permission to rewrite the whole
 file: user content outside managed regions is never regenerated.
@@ -17,6 +34,18 @@ Broken markers stop the run for that file.
 
 JSON has no comments, so `.claude/settings.json` uses key-level ownership; the managed entry list is stored in the
 manifest. TOML wrappers are `full` files; the skill never merges into user TOML.
+
+Managed metadata is file-specific (`scripts/ownership.mjs`): the settings record holds exact permission strings per
+array (`permissions.allow`, `permissions.deny`), hook identities (event, matcher, command; options such as `timeout`
+are not identity) and `heldBack`; the policy record holds the complete `{ schema, patterns }` entries, every field kept.
+Approved omissions are stored in the record's `omissions` field, separately from `managed`, and match only the exact
+anchor and case-insensitive glob they name. New manifests are schema 3; a valid schema-2 manifest is migration input
+that detect and validate report as "needs update".
+
+Allow omissions identify exact permission strings. They are separate from managed ownership.
+Retiring an allow removes only its selected managed identity and records its omission in the
+same reviewed transaction. An already-absent allow uses an explicit metadata operation and
+still requires approval for `.claude/settings.json`. Unselected and user-owned rules remain.
 
 ## Hashing
 
@@ -30,7 +59,7 @@ lock acquire → apply init → drafts (agent + blocks.mjs + merge/env scripts)
 → apply prepare: plan with, per file, the target's raw pre-hash and the draft's SHA-256;
                  rejects outside-block / user-edited changes unless --approve-user-content names that file;
                  prints planSha256
-→ user reviews the diffs and approves planSha256
+→ user reviews `apply.mjs diff` (content and metadata operations) and approves planSha256
 → apply commit --approved-plan <planSha256>:
      1. plan hash, every draft hash, every target hash, manifest hash re-verified → exit 4, nothing written, on any change
      2. per file: backup to vault → journal entry {preRawSha, expectedWriteSha, state "backed-up"}
@@ -46,12 +75,66 @@ every existing segment must be a real directory (symlinks and Windows junctions 
 must be inside the repository, a linked leaf file is refused, and writes go through an exclusive temp file + rename
 (never through an existing link). `commit` also checks the whole run chain before its first write (exit 2).
 
-`ownership.json` and `managed-keys.json` (run dir) are validated at prepare and embedded in the plan with their
-hashes, so the approval covers manifest ownership too; commit uses only the embedded copy and aborts (exit 4) if
-either file appeared, disappeared, or changed after prepare. Run ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
+`ownership.json`, `managed-keys.json`, `omissions.json`, `manifest-metadata.json` and `transaction-inputs.json` (run
+dir) are validated at prepare and embedded in the plan with their hashes, so the approval covers manifest metadata too;
+commit uses only the embedded copy and aborts (exit 4) if any of them appeared, disappeared, or changed after prepare.
+The plan holds content operations and metadata operations separately; an explicit ownership, managed-list removal or
+reordering, or omission change needs `--approve-user-content <target>` even when the file's bytes are unchanged. One
+commit and one journal apply both, the manifest last, exactly as approved. Every bound input (targets, drafts, declared
+`transaction-inputs.json` consumers, the installed policy, the manifest) is rechecked before anything is written. Run
+ids are `[A-Za-z0-9][A-Za-z0-9._-]{3,63}` with no `..`.
 
-The vault accepts only env templates (`.env.example`, `.env.sample`, `.env.template`) produced by `env-keys.mjs`.
-Agent drafts can never target a secret-pattern path.
+The gates select protected targets by exact spelling (`.ai/security-paths.json`, `.claude/settings.json`,
+`.ai/manifest.json` and every `.ai/tools/` runtime-unit target listed in the shipped catalog,
+`data/runtime-units.json`), so a draft target or declared input that is any other spelling of one of them is refused
+on every platform as `APPLY_PATH` (`unsafe path: <target>`, exit 3). Each path component is compared through its ASCII
+case fold, its prefix before the first `:` (an NTFS stream such as `::$DATA`) and both with trailing dots and spaces
+removed, so `.ai/SECURITY-PATHS.JSON`, `.ai/security-paths.json.` and `.ai/security-paths.json::$DATA` are all
+refused, while `.ai/security-paths.json.bak` is not; 8.3 short names are not modelled. If the catalog itself cannot be
+read, every spelling under `.ai/tools/` that is not already lowercase ASCII without a trailing dot, space or `:` is
+refused the same way. The refusal comes before any approval, in prepare, the unprepared review and, as a plan
+operation, the prepared review and commit; a prepared plan that declares such an input is invalid
+(`APPLY_PLAN_INVALID`, exit 1). The canonical spellings stay legal inputs, and a drafted canonical manifest keeps
+`APPLY_MANIFEST_DRAFT`. Before the policy gate judges an installed policy in the prepared review or at commit, it
+re-reads it and compares it with the bound hash; a change is `APPLY_DRIFT` (exit 4).
+
+Stage policy and deny changes first, hooks second, and allow retirement last. Use
+`merge-claude-settings.mjs --run-id <id> --retire-allow-file <path>` with a selection file inside
+the project and outside setup draft and vault directories. Normal merge refuses a pending
+allow-omission request. Start a new run to amend a pending retirement selection.
+
+The selection file is a JSON array of exact strings, each a recorded managed allow or an existing allow omission of
+the INSTALLED manifest (a staged request never makes a rule eligible); `.ai/.run/<id>/retire-allows.json` is the
+recommended place. Staging patches only `ownership.json`, the `permissions.allow` field of `managed-keys.json` and of
+`omissions.json`, and the settings draft. A pending result can be repeated in the same run; a different result is
+`ALLOW_STAGE_CONFLICT`.
+
+Staging is not approval. Review both content and metadata with apply diff, prepare with the
+required path approvals, and approve the resulting plan hash. Metadata-only retirement leaves
+settings bytes unchanged. Rollback restores ownership and omissions through the same journal,
+subject to protection for later edits. An already-omitted identity is not restored on rerun.
+
+Review drafts with the apply command. It renders target-versus-draft differences in-process
+without invoking Git, including during root discovery. The explicit project root is checked
+through the filesystem. Review does not acquire or refresh a lock, create directories, write
+a plan, or initialize a journal.
+
+```
+node <SKILL_DIR>/scripts/apply.mjs diff --project . --run-id <id>
+```
+
+Before prepare, this is an unapproved preview. After prepare, the report identifies
+planSha256 and refuses changed inputs. Vault files appear only as key names and value
+classifications. Review metadata operations even when the affected file bytes are unchanged.
+Any changed input requires a new prepare and approval.
+
+If detect reports mode "invalid", repair or restore .ai/manifest.json before running prepare.
+
+The vault accepts only the root `.env.example` produced through the reviewed env-keys/apply
+flow. Agent drafts can never target a secret-pattern path.
+
+Review template changes only through apply's key names and value classifications. Never open
+vault files to inspect or repair them. Preserve the env-keys manual steps in the final report.
 
 Failure handling:
 
@@ -122,5 +205,9 @@ removes the lock.
 
 ## Zero diff
 
-With unchanged inputs and skill version, a re-run produces no file changes and no manifest change.
-`sourceCommit` changes only when outputs change. Nothing time-based is written into managed content.
+A genuine no-op has neither content writes nor metadata operations. Commit still requires
+this run's lock and rechecks the prepared inputs. It leaves project files, manifest bytes
+and lock bytes unchanged and creates no journal. An ownership, omission, snippet or schema
+change can be a metadata operation even when every content operation is unchanged.
+sourceCommit changes only when actual content or metadata work is committed. Nothing time-based is written into
+managed content.

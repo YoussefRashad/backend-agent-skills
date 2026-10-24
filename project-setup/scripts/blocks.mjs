@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  parseArgs, repoRoot, safeResolve, normalizeText, normalizedHash, detectEol,
+  parseArgs, repoRoot, safeResolve, normalizeText, normalizedHash, detectEol, toPosix, loadEffectivePolicy,
   loadSecretSpec, isSecretPath, readJsonFile, ok, fail, validateRunId, secureDir, writeInRepo, readInRepo, assertNotSecretInput,
 } from './lib.mjs';
 
@@ -112,17 +112,44 @@ export function upsertBlock(text, id, inner, style) {
 }
 
 // ---------------------------------------------------------------- CLI ----
-const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
-const isMain = Boolean(process.argv[1]) && norm(process.argv[1]) === norm(fileURLToPath(import.meta.url));
-if (isMain) {
+// The entry check compares resolved paths and, failing that, native real paths, so a launch through a junction
+// (tested) or, through realpath, an 8.3 short name (untested) still runs the CLI (an alternate launch path that
+// missed it would print nothing).
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(import.meta.url);
+  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  if (fold(path.resolve(process.argv[1])) === fold(path.resolve(self))) return true;
+  try { return fold(fs.realpathSync.native(process.argv[1])) === fold(fs.realpathSync.native(self)); } catch { return false; }
+}
+
+if (isEntryPoint()) {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0];
   const root = repoRoot();
   if (!root) fail('not inside a git repository');
   if (!args.file || args.file === true) fail('--file is required');
   const spec = loadSecretSpec();
+  // The refusal set: the shipped defaults plus the effective project policy (plan C3 section 3.11, as apply's refusal
+  // set). A malformed installed policy fails closed with C1's error.
+  let project;
+  try { project = loadEffectivePolicy(root).policy; } catch (e) { if (!e.code) throw e; fail(e.message, e.code === 'POLICY_IO' ? 2 : 3); }
+  const isSecret = (p) => isSecretPath(p, spec) || isSecretPath(p, project);
   const { abs, rel } = safeResolve(root, String(args.file));
-  if (isSecretPath(rel, spec)) fail(`refusing to read a secret-pattern path: ${rel}`);
+  if (isSecret(rel)) fail(`refusing to read a secret-pattern path: ${rel}`);
+  // PQ2 / C1 follow-up: an existing regular file is also checked under its native real path, BEFORE its content is
+  // opened, so a permitted spelling that resolves to a protected name (a hard link, an 8.3 or case alias) is refused.
+  // A missing permitted target stays usable by upsert; link and junction refusal stays safeResolve's.
+  let st = null;
+  try { st = fs.lstatSync(abs); } catch { st = null; }
+  if (st && st.isFile()) {
+    let realRel = '';
+    try { realRel = toPosix(path.relative(fs.realpathSync.native(root), fs.realpathSync.native(abs))); } catch { realRel = ''; }
+    if (realRel === '' || realRel.startsWith('../') || realRel === '..' || path.isAbsolute(realRel) || isSecret(realRel)) {
+      process.stdout.write(JSON.stringify({ ok: false, code: 'POLICY_INPUT_ALIAS', error: 'refusing to read a secret-pattern path through an alias' }, null, 2) + '\n');
+      process.exit(2);
+    }
+  }
   const current = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : null;
 
   if (cmd === 'check') {

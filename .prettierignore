@@ -1,5 +1,11 @@
 node_modules
-# project-setup is a verified release artifact (SHA256-pinned); formatting would change its bytes.
+# project-setup is excluded because its tests pin SHA-256 digests of several of its files;
+# formatting would change their bytes.
 project-setup/
 # Husky hook bodies are shell, not formattable by Prettier.
 toolchain-config/templates/husky/
+# Frozen delegate plans are history; formatting would rewrite them.
+docs/plans/
+# Local data of the Remember memory plugin. Git ignores it through the folder's own nested
+# .gitignore, which Prettier does not read, so `npm run check` failed on machines that have it.
+.remember/

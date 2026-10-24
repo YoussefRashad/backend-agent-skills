@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { matchesPolicyPath, parseSecurityPolicy, readSecurityPolicy } from '../assets/tools/security-policy.mjs';
 
 export const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const IS_WINDOWS = process.platform === 'win32';
@@ -71,6 +72,33 @@ export function repoRoot(start = process.cwd()) {
   return null;
 }
 
+/**
+ * Establishes an explicit project root through the filesystem alone (plan C2 section 6.1), for `apply.mjs diff`: no Git
+ * invocation and no `.git` requirement. The supplied path must be an existing directory and must not itself be a
+ * link or junction; ancestor aliases are resolved by the native realpath. Once set, secureDir anchors at this root and
+ * never falls back to repoRoot(), so a review cannot start `git rev-parse` through a helper. It establishes a
+ * containment root, not a claim that Git recognizes a repository there.
+ */
+export function setFilesystemRoot(value) {
+  const refuse = () => Object.assign(new Error('APPLY_ROOT: explicit project root is not a safe existing directory'), { code: 'APPLY_ROOT' });
+  if (typeof value !== 'string' || value === '') throw refuse();
+  const abs = path.resolve(value);
+  let real;
+  try {
+    const st = fs.lstatSync(abs);
+    if (st.isSymbolicLink() || !st.isDirectory()) throw refuse();
+    real = realRootOf(abs);
+  } catch { throw refuse(); }
+  REPO_ROOT = real;
+  return real;
+}
+
+// Path-safety refusals (a link, a junction, a non-directory segment, an escape) carry the offending path in
+// `unsafePath`, so a caller can report "unsafe path: <path>" without parsing the message.
+function unsafe(message, unsafePath) {
+  return Object.assign(new Error(message), { unsafePath });
+}
+
 export function toPosix(p) {
   return p.split(path.sep).join('/');
 }
@@ -107,12 +135,43 @@ export function loadSecretSpec() {
   return JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'data', 'secret-paths.json'), 'utf8'));
 }
 
-export function secretGlobs(spec = loadSecretSpec()) {
-  return spec.patterns.map((p) => p.glob);
+/**
+ * The effective secret-path policy (plan C3 section 2.4): the shipped defaults for root null, otherwise the installed
+ * <root>/.ai/security-paths.json of an explicit filesystem root (no Git lookup). Only an ABSENT installed policy falls back
+ * to the skill; a present malformed one throws C1's own error and an unreadable one POLICY_IO, never the defaults.
+ * Returns C1's validated snapshot (source references included) as fresh data.
+ */
+export function loadEffectivePolicy(root = null) {
+  const io = (source) => Object.assign(new Error(`POLICY_IO: cannot read security policy: ${source}`), { code: 'POLICY_IO' });
+  const read = (abs, source) => { try { return fs.readFileSync(abs, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return null; throw io(source); } };
+  let text = root === null ? null : read(path.join(path.resolve(String(root)), '.ai', 'security-paths.json'), '.ai/security-paths.json');
+  const source = text === null ? 'skill' : 'project';
+  if (text === null) text = read(path.join(SKILL_DIR, 'data', 'secret-paths.json'), 'data/secret-paths.json');
+  if (text === null) throw io('data/secret-paths.json');
+  const { sourceSchema, policy, effectivePatterns } = parseSecurityPolicy(text);
+  return { source, sourceSchema, policy, effectivePatterns };
 }
 
-export function isSecretPath(relPosix, spec) {
-  return matchesAny(relPosix, secretGlobs(spec));
+/**
+ * The effective secret globs (lowercase, deduplicated, managed then project entries) of a validated policy. A projection
+ * only, not an anchored matching API: it drops the anchors, so match with isSecretPath / matchesPolicyPath instead.
+ */
+export function secretGlobs(spec = loadSecretSpec()) {
+  return readSecurityPolicy(spec).effectivePatterns.map((e) => e.glob);
+}
+
+// A candidate that fails the structural path checks is treated as secret: callers then refuse or skip it, and invalid
+// input is never normalized into acceptance. A malformed policy is not a path problem: its error propagates.
+const INVALID_PATH_CODES = new Set(['POLICY_PATH_TYPE', 'POLICY_PATH_NUL', 'POLICY_PATH_ABSOLUTE', 'POLICY_PATH_CANONICAL']);
+
+/** Shared policy semantics (assets/tools/security-policy.mjs): anchors, host-independent case, Windows aliases. */
+export function isSecretPath(relPosix, spec = loadSecretSpec()) {
+  try {
+    return matchesPolicyPath(relPosix, spec);
+  } catch (e) {
+    if (e instanceof Error && Object.prototype.hasOwnProperty.call(e, 'code') && INVALID_PATH_CODES.has(e.code)) return true;
+    throw e;
+  }
 }
 
 /**
@@ -172,11 +231,47 @@ export function detectEol(text) {
   return /\r\n/.test(text) ? '\r\n' : '\n';
 }
 
-export const ENV_TEMPLATE_RE = /(^|\/)\.env\.(example|sample|template)$/;
+export const ENV_TEMPLATE_RE = /^\.env\.example$/;
 
-/** Run ids become directory names. Strict charset, no separators, no dot-only segments. */
+const ENV_SECRETISH = /(SECRET|TOKEN|PASSWORD|PASSWD|PASS$|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|_KEY$|DSN|SALT|SIGNING|CERT)/i;
+const ENV_PLACEHOLDER = /^(|<[^>]*>|changeme|change_me|xxx+|your[_-].*|example.*|placeholder|todo|redacted|\*+|""|'')$/i;
+
+/**
+ * Key names and value classifications of an env template, never values. Moved unchanged from env-keys.mjs so the
+ * draft review classifies vault files in-process with the same rules: one entry per assignment line, in file order,
+ * duplicates kept, 1-based line numbers. Pure: no filesystem, process or environment access.
+ */
+export function classifyEnvTemplate(text) {
+  if (typeof text !== 'string') throw Object.assign(new Error('ENV_TEMPLATE_TEXT: text must be a string'), { code: 'ENV_TEMPLATE_TEXT' });
+  const entries = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/);
+    if (!m) return;
+    const [, name, rawValue] = m;
+    const value = rawValue.replace(/\s+#.*$/, '').trim().replace(/^(['"])(.*)\1$/, '$2');
+    let state;
+    if (ENV_PLACEHOLDER.test(value)) state = value === '' ? 'empty' : 'placeholder';
+    else if (ENV_SECRETISH.test(name) || /:\/\/[^/\s]*:[^@\s]+@/.test(value)) state = 'possible-real-secret';
+    else state = 'non-placeholder';
+    entries.push({ name, line: i + 1, valueState: state });
+  });
+  return entries;
+}
+
+/**
+ * Run ids become directory names. Strict charset, no separators, no dot-only segments.
+ * C5 plan 3.12: `review` names the review-artifact directory .ai/.run/review, so it and every alias that reaches the same
+ * directory on a case-insensitive or Windows filesystem (any case, trailing dots and spaces) are reserved before the
+ * ordinary check. Otherwise a setup run could adopt, clean up or journal the review artifacts. The comparison never
+ * turns an invalid id into an accepted one.
+ */
 export function validateRunId(id) {
   const s = id === undefined || id === null || id === true ? '' : String(id);
+  if (s.replace(/[. ]+$/g, '').toLowerCase() === 'review') {
+    const e = new Error('RUN_ID_RESERVED: run id is reserved for review artifacts');
+    e.code = 'RUN_ID_RESERVED';
+    throw e;
+  }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/.test(s) || s.includes('..')) {
     throw new Error(`invalid run id "${s}": use 4-64 chars [A-Za-z0-9._-], starting alphanumeric, no ".."`);
   }
@@ -212,19 +307,21 @@ function isInside(parentReal, childReal) {
  */
 export function secureDir(root, segments, { create = false } = {}) {
   // Anchor is always the repository root. A subdirectory is never trusted as a root, because the
-  // subdirectory itself may be a link (rc.2 bug: vault/backup replaced by a junction).
+  // subdirectory itself may be a link (rc.2 bug: vault/backup replaced by a junction). A root established by
+  // setFilesystemRoot is used as it is: the Git lookup below runs only when no root has been established at all.
   if (!REPO_ROOT) repoRoot(root);
   if (!REPO_ROOT || path.resolve(root) !== REPO_ROOT) throw new Error(`secureDir must be anchored at the repository root (got ${root})`);
   const realRoot = realRootOf(root);
   let cur = root;
   for (const seg of segments) {
-    if (!seg || seg === '.' || seg === '..' || /[\\/]/.test(seg)) throw new Error(`invalid path segment "${seg}"`);
+    if (!seg || seg === '.' || seg === '..' || /[\\/]/.test(seg)) throw unsafe(`invalid path segment "${seg}"`, toPosix(path.relative(root, cur)));
     cur = path.join(cur, seg);
+    const rel = toPosix(path.relative(root, cur));
     let st = null;
     try { st = fs.lstatSync(cur); } catch (e) { if (e.code !== 'ENOENT') throw e; }
     if (st) {
-      if (st.isSymbolicLink()) throw new Error(`link or junction rejected: ${toPosix(path.relative(root, cur))}`);
-      if (!st.isDirectory()) throw new Error(`not a directory: ${toPosix(path.relative(root, cur))}`);
+      if (st.isSymbolicLink()) throw unsafe(`link or junction rejected: ${rel}`, rel);
+      if (!st.isDirectory()) throw unsafe(`not a directory: ${rel}`, rel);
     } else if (create) {
       fs.mkdirSync(cur); // non-recursive on purpose: each segment is checked
     } else {
@@ -232,7 +329,7 @@ export function secureDir(root, segments, { create = false } = {}) {
     }
   }
   const real = realRootOf(cur);
-  if (!isInside(realRoot, real)) throw new Error(`directory resolves outside the repository: ${toPosix(path.relative(root, cur))}`);
+  if (!isInside(realRoot, real)) throw unsafe(`directory resolves outside the repository: ${toPosix(path.relative(root, cur))}`, toPosix(path.relative(root, cur)));
   return cur;
 }
 
@@ -243,18 +340,18 @@ export function secureDirRel(root, relPosix, opts) {
 
 /** Resolve a repo-relative path safely. Rejects absolute paths, traversal, and symlinked components. */
 export function safeResolve(root, rel) {
-  if (!rel || path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) throw new Error(`absolute or empty path rejected: ${rel}`);
+  if (!rel || path.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) throw unsafe(`absolute or empty path rejected: ${rel}`, String(rel));
   const posix = rel.replace(/\\/g, '/');
-  if (posix.split('/').some((seg) => seg === '..')) throw new Error(`path traversal rejected: ${rel}`);
+  if (posix.split('/').some((seg) => seg === '..')) throw unsafe(`path traversal rejected: ${rel}`, posix);
   const abs = path.resolve(root, posix);
   const relBack = path.relative(root, abs);
-  if (relBack.startsWith('..') || path.isAbsolute(relBack)) throw new Error(`path escapes repository: ${rel}`);
+  if (relBack.startsWith('..') || path.isAbsolute(relBack)) throw unsafe(`path escapes repository: ${rel}`, posix);
   // Refuse to traverse or replace symlinks / junctions.
   let cur = root;
   for (const seg of posix.split('/')) {
     cur = path.join(cur, seg);
     try {
-      if (fs.lstatSync(cur).isSymbolicLink()) throw new Error(`symlink in path rejected: ${toPosix(path.relative(root, cur))}`);
+      if (fs.lstatSync(cur).isSymbolicLink()) throw unsafe(`symlink in path rejected: ${toPosix(path.relative(root, cur))}`, toPosix(path.relative(root, cur)));
     } catch (e) {
       if (e.code === 'ENOENT') break;
       throw e;
@@ -263,7 +360,7 @@ export function safeResolve(root, rel) {
   // Containment by real path for the deepest existing ancestor (defence in depth for junctions).
   let probe = abs;
   while (!fs.existsSync(probe) && probe !== root) probe = path.dirname(probe);
-  if (!isInside(realRootOf(root), realRootOf(probe))) throw new Error(`path resolves outside the repository: ${rel}`);
+  if (!isInside(realRootOf(root), realRootOf(probe))) throw unsafe(`path resolves outside the repository: ${rel}`, posix);
   return { abs, rel: posix };
 }
 
@@ -309,8 +406,8 @@ export function skillVersion() {
 export function assertNotLink(abs) {
   let st = null;
   try { st = fs.lstatSync(abs); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  if (st && st.isSymbolicLink()) throw new Error(`link or junction rejected: ${abs}`);
-  if (st && !st.isFile()) throw new Error(`not a regular file: ${abs}`);
+  if (st && st.isSymbolicLink()) throw unsafe(`link or junction rejected: ${abs}`, abs);
+  if (st && !st.isFile()) throw unsafe(`not a regular file: ${abs}`, abs);
 }
 
 /**

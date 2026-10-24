@@ -34,11 +34,45 @@ Never move the critical rules into nested files only; the root keeps the short v
 
 | File | Source |
 |---|---|
-| `.ai/security-paths.json` | Copy of the skill's `data/secret-paths.json` (byte-identical; drift = user edit) |
-| `.ai/tools/git-safe.mjs` | Copy of `assets/tools/git-safe.mjs`: read-only diff/log/show with secret excludes, no shell |
+| `.ai/security-paths.json` | Not a plain copy. Only a fresh install (no installed policy) creates it from the skill's `data/secret-paths.json`, with `full` ownership. Afterwards it is the project's effective policy: the managed `patterns` plus, from schema 2, the project's own `projectPatterns`. It legitimately differs from the shipped file and is never replaced by it; ownership comes from the installed record (`keys` after a reviewed migration), never from comparing bytes. Its managed patterns change only through the report, decisions and stage of `references/migration-v2.md` |
+| `.ai/tools/security-policy.mjs` | Copy of `assets/tools/security-policy.mjs`: the shared policy helper |
+| `.ai/tools/git-safe-core.mjs` | Copy of `assets/tools/git-safe-core.mjs`: the bounded reader core |
+| `.ai/tools/guard-raw-git-core.mjs` | Copy of `assets/tools/guard-raw-git-core.mjs`: the raw-Git hook core |
+| `.ai/tools/review-diff.mjs` | Copy of `assets/tools/review-diff.mjs`: the review helper |
+| `.ai/tools/git-safe.mjs` | Copy of `assets/tools/git-safe.mjs`: read-only diff/log/show/cat/ls/grep and review-diff with secret excludes, no shell |
+| `.ai/tools/guard-raw-git.mjs` | Copy of `assets/tools/guard-raw-git.mjs`: the Claude raw-Git hook entrypoint |
+| `.ai/tools/hooks-selftest.mjs` | Copy of `assets/tools/hooks-selftest.mjs`: the installed hook self-test |
 
-The shared agents and AGENTS.md depend on both. They are what lets an agent in the project follow the secret
-rules without knowing where the skill is installed.
+Each `.ai/tools/` member comes from the corresponding `assets/tools/` file of the same skill copy. A complete
+update stages all seven:
+
+```text
+security-policy.mjs
+git-safe-core.mjs
+guard-raw-git-core.mjs
+review-diff.mjs
+git-safe.mjs
+guard-raw-git.mjs
+hooks-selftest.mjs
+```
+
+Stage all seven runtime members as one reviewed compatible unit. Declining replacement of an
+edited member prevents the coupled policy update. Do not install the new policy with old or
+unreviewed readers.
+
+The shared agents and AGENTS.md depend on the policy and the reader. They are what lets an agent in the project
+follow the secret rules without knowing where the skill is installed.
+
+The canonical agents (`.ai/agents/reviewer.md`, `.ai/agents/docs-sync.md`) are fully managed.
+Render them from `assets/agents/`: replace `{{PROJECT_NAME}}` and remove references to docs
+you did not generate. Project-specific rules MUST use the optional, project-owned extensions
+".ai/agents/reviewer.project.md" and ".ai/agents/docs-sync.project.md" with merged ownership,
+so canonical updates do not erase project requirements (see "Ownership hints").
+
+Project maintainers and explicitly authorized setup or standards workflows MAY write these
+extensions. Docs-sync MUST NOT write either extension. Project rules MAY add or tighten
+requirements; they MUST NOT relax canonical restrictions. Setup MUST NOT copy an extension
+from a default template or synthesize one without approved content.
 
 ## `.ai/context/`
 
@@ -48,9 +82,34 @@ rules without knowing where the skill is installed.
 | `critical-modules.md` | Money/balance/payment/points/auth/PII modules: invariants, locking, idempotency, review notes | Entities, services, guards; user's sensitive-area answers |
 | `code-patterns.md` | How controllers/services/repositories/DTOs/guards are written here | 2–3 real examples of each |
 | `error-contract.md` | Error shapes, exception filters, status mapping | Filters, pipes, handlers. If inconsistent: describe, propose one in `TODO.md` |
-| `configuration.md` | Variable · required · secret/non-secret · used by · description · source | Config/validation code + `env-keys.mjs keys`; never values |
+| `configuration.md` | Variable / required / secret/non-secret / used by / description / source | Config/validation code via local file tools + `env-keys.mjs keys --template auto`; never values |
 | `glossary.md` | Domain terms, enum values, abbreviations | Entity/enum/service names |
-| `development-rules.md` | Scope discipline, backward compatibility, reuse of patterns | Code style + linter config |
+| `development-rules.md` | Scope discipline, backward compatibility, reuse of patterns, contract coverage and test-run hygiene | Code style + linter config + project-setup testing and hygiene requirements below |
+
+The testing and hygiene requirements below are skill-template inputs to development-rules.md,
+including during update mode when application code and configuration have not changed.
+
+For each rule "X is invalid, unknown or rejected when Y", tests MUST cover Y absent, Y present
+but inconsistent, and the boundary. Every documented promise MUST have a test that proves it.
+
+Agents MUST run only the specs they touch; only one full-suite or acceptance run MUST run at a time.
+Timing-sensitive specs can fail under concurrent test load.
+
+A red run is loaded only when another test or acceptance run was observably running at the same
+time; focused specs count. Record the red run and the overlap evidence, then rerun it alone.
+The isolated rerun is the counting result. A red isolated rerun is a failure. Without observed
+overlap, do not dismiss a failure as load. Use the same rule in the acceptance record.
+
+Treat development-rules.md as merged living documentation. On update, draft a reviewed merged
+edit adding only missing testing and hygiene requirements, even if code and configuration are
+unchanged. Keep equivalent existing wording and stricter project requirements. Show conflicts
+for an explicit decision; do not silently weaken project text.
+
+Do not re-add a file removed by the user; ask. If code exists and the file was never generated,
+propose its creation through the normal reviewed workflow. If absence cannot be distinguished
+from user removal, ask before proposing restoration. An empty repository gets no context document
+until code exists. If the requirements are already satisfied and nothing else changed, produce
+zero diff.
 
 ## `.ai/decisions/` (ADRs, template `assets/templates/adr.md`)
 
@@ -83,3 +142,61 @@ Cleanup. Every item: file:line where possible, what to confirm, never a secret v
 
 Living docs (`docs/**`, `.ai/context/**`, `.ai/decisions/**`, `TODO.md`) default to `merged`: people and
 docs-sync edit them, and they are not drift-tracked. Write an `ownership.json` in the run dir only to override.
+
+Move approved reviewer-specific text to ".ai/agents/reviewer.project.md". Preserve existing
+project-file bytes and append only the exact approved text. Do not deduplicate, rewrite or
+resolve conflicting rules silently. Present a collision for an explicit decision.
+
+Request its ownership by merging this entry into `.ai/.run/<id>/ownership.json`, preserving the entries the
+migration or merge scripts already wrote, and serialize the merged request as two-space JSON with a final LF:
+
+```json
+{
+  ".ai/agents/reviewer.project.md": "merged"
+}
+```
+
+Without this request a newly created project file would be inferred as `full`. `merged` does not grant
+permission to replace pre-existing text: existing unowned project-file content still needs its applicable
+approval. If no reviewer customization is approved for movement, do not create the file, and routine later
+updates omit its draft unless the user asked for a project-rule change.
+
+Approved docs-sync-specific text MUST move to ".ai/agents/docs-sync.project.md", so replacing
+the canonical agent does not discard project requirements. Setup MUST preserve existing
+project-file bytes and append only the exact approved text. It MUST NOT deduplicate, rewrite
+or resolve conflicting rules silently; a collision requires an explicit decision.
+A customization that relaxes a canonical docs-sync rule MUST NOT move;
+its disposition stays pending.
+
+If an existing file lacks a final newline, setup MUST add one EOL before the approved append,
+so the last existing line and the first appended line cannot join. The appended text MUST use
+the file's EOL; apply's withEol preserves CRLF. No other separator or blank line is added.
+
+Setup MUST request merged ownership for a created or changed docs-sync project file, so later
+updates do not treat project guidance as a fully managed agent. Merge the following entry into
+the existing ownership.json request, preserving all other entries. Serialize the request as
+two-space JSON with a final LF.
+
+```json
+{
+  ".ai/agents/docs-sync.project.md": "merged"
+}
+```
+
+Without this request, a newly created project file would be inferred as full. Merged ownership
+does not authorize replacing existing text or bypassing the applicable user-content approval.
+
+If no docs-sync customization is approved, setup MUST NOT create the file. Routine updates
+MUST omit its draft unless the user requested a project-rule change, so setup cannot regenerate
+or erase project-owned rules.
+
+### Environment template
+
+Derive configuration names from config and validation code using local file tools. Do not
+emit shell searches containing environment-access expressions. Inspect the permitted template
+with `env-keys.mjs keys --template auto`; stage missing names with
+`env-keys.mjs merge --template auto --keys <file> --run-id <id>`.
+
+If the template is missing, copy the script's manual step into the final report and continue
+without template staging. If it contains values, preserve them and copy the script's manual
+cleanup step into the final report. Never perform an automatic names-only conversion.

@@ -1,0 +1,1049 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "P01",
+      "toolName": "Bash",
+      "command": "git diff",
+      "expected": "block"
+    },
+    {
+      "id": "P02",
+      "toolName": "Bash",
+      "command": "git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P03",
+      "toolName": "Bash",
+      "command": "git log -n1",
+      "expected": "block"
+    },
+    {
+      "id": "P04",
+      "toolName": "Bash",
+      "command": "git blame src/a.ts",
+      "expected": "block"
+    },
+    {
+      "id": "P05",
+      "toolName": "Bash",
+      "command": "git cat-file blob HEAD:a",
+      "expected": "block"
+    },
+    {
+      "id": "P06",
+      "toolName": "Bash",
+      "command": "git grep needle HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P07",
+      "toolName": "Bash",
+      "command": "git archive HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P08",
+      "toolName": "Bash",
+      "command": "git format-patch HEAD~1",
+      "expected": "block"
+    },
+    {
+      "id": "P09",
+      "toolName": "Bash",
+      "command": "git whatchanged",
+      "expected": "block"
+    },
+    {
+      "id": "P10",
+      "toolName": "Bash",
+      "command": "git stash",
+      "expected": "block"
+    },
+    {
+      "id": "P11",
+      "toolName": "Bash",
+      "command": "git reflog",
+      "expected": "block"
+    },
+    {
+      "id": "P12",
+      "toolName": "Bash",
+      "command": "git diff-tree HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P13",
+      "toolName": "Bash",
+      "command": "git range-diff A..B C..D",
+      "expected": "block"
+    },
+    {
+      "id": "P14",
+      "toolName": "Bash",
+      "command": "git -C . diff",
+      "expected": "block"
+    },
+    {
+      "id": "P15",
+      "toolName": "Bash",
+      "command": "git -C. show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P16",
+      "toolName": "Bash",
+      "command": "git --no-pager log",
+      "expected": "block"
+    },
+    {
+      "id": "P17",
+      "toolName": "Bash",
+      "command": "git -P log",
+      "expected": "block"
+    },
+    {
+      "id": "P18",
+      "toolName": "Bash",
+      "command": "git --paginate log",
+      "expected": "block"
+    },
+    {
+      "id": "P19",
+      "toolName": "Bash",
+      "command": "git --git-dir=.git --work-tree=. diff",
+      "expected": "block"
+    },
+    {
+      "id": "P20",
+      "toolName": "Bash",
+      "command": "git --git-dir .git --work-tree . diff",
+      "expected": "block"
+    },
+    {
+      "id": "P21",
+      "toolName": "Bash",
+      "command": "git -c color.ui=false log",
+      "expected": "block"
+    },
+    {
+      "id": "P22",
+      "toolName": "Bash",
+      "command": "git.exe show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P23",
+      "toolName": "Bash",
+      "command": "/usr/bin/git log",
+      "expected": "block"
+    },
+    {
+      "id": "P24",
+      "toolName": "Bash",
+      "command": "\"C:\\Program Files\\Git\\cmd\\git.exe\" diff",
+      "expected": "block"
+    },
+    {
+      "id": "P25",
+      "toolName": "Bash",
+      "command": "command -- git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P26",
+      "toolName": "Bash",
+      "command": "X=1 git log",
+      "expected": "block"
+    },
+    {
+      "id": "P27",
+      "toolName": "Bash",
+      "command": "cd src && git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P28",
+      "toolName": "Bash",
+      "command": "git status; git log",
+      "expected": "block"
+    },
+    {
+      "id": "P29",
+      "toolName": "Bash",
+      "command": "git status || git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P30",
+      "toolName": "Bash",
+      "command": "git status | git log",
+      "expected": "block"
+    },
+    {
+      "id": "P31",
+      "toolName": "Bash",
+      "command": "git status\ngit diff",
+      "expected": "block"
+    },
+    {
+      "id": "P32",
+      "toolName": "Bash",
+      "command": "echo \"$(git log)\"",
+      "expected": "block"
+    },
+    {
+      "id": "P33",
+      "toolName": "Bash",
+      "command": "echo `git show HEAD`",
+      "expected": "block"
+    },
+    {
+      "id": "P34",
+      "toolName": "Bash",
+      "command": "echo '$(git log)'",
+      "expected": "allow"
+    },
+    {
+      "id": "P35",
+      "toolName": "PowerShell",
+      "command": "g`it l`og",
+      "expected": "block"
+    },
+    {
+      "id": "P36",
+      "toolName": "PowerShell",
+      "command": "& \"C:\\Program Files\\Git\\cmd\\git.exe\" show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P37",
+      "toolName": "PowerShell",
+      "command": "git `\nlog",
+      "expected": "block"
+    },
+    {
+      "id": "P38",
+      "toolName": "PowerShell",
+      "command": "git commit \"`-p\"",
+      "expected": "block"
+    },
+    {
+      "id": "P39",
+      "toolName": "Bash",
+      "command": "git commit -p",
+      "expected": "block"
+    },
+    {
+      "id": "P40",
+      "toolName": "Bash",
+      "command": "git commit --patch",
+      "expected": "block"
+    },
+    {
+      "id": "P41",
+      "toolName": "Bash",
+      "command": "git commit \"-p\"",
+      "expected": "block"
+    },
+    {
+      "id": "P42",
+      "toolName": "Bash",
+      "command": "git commit '--patch'",
+      "expected": "block"
+    },
+    {
+      "id": "P43",
+      "toolName": "Bash",
+      "command": "git commit -m \"-p\"",
+      "expected": "allow"
+    },
+    {
+      "id": "P44",
+      "toolName": "Bash",
+      "command": "git commit -m \"--patch\"",
+      "expected": "allow"
+    },
+    {
+      "id": "P45",
+      "toolName": "Bash",
+      "command": "git commit --message=-p",
+      "expected": "allow"
+    },
+    {
+      "id": "P46",
+      "toolName": "Bash",
+      "command": "git commit -m \"git log; git diff\"",
+      "expected": "allow"
+    },
+    {
+      "id": "P47",
+      "toolName": "Bash",
+      "command": "git commit -- -p",
+      "expected": "block"
+    },
+    {
+      "id": "P48",
+      "toolName": "Bash",
+      "command": "git -p status",
+      "expected": "block"
+    },
+    {
+      "id": "P49",
+      "toolName": "Bash",
+      "command": "git -c alias.x=log x",
+      "expected": "block"
+    },
+    {
+      "id": "P50",
+      "toolName": "Bash",
+      "command": "git -calias.x=log x",
+      "expected": "block"
+    },
+    {
+      "id": "P51",
+      "toolName": "Bash",
+      "command": "git -c \"alias.x=!git log\" status",
+      "expected": "block"
+    },
+    {
+      "id": "P52",
+      "toolName": "Bash",
+      "command": "git -c ALIAS.x=log status",
+      "expected": "block"
+    },
+    {
+      "id": "P53",
+      "toolName": "Bash",
+      "command": "git status",
+      "expected": "allow"
+    },
+    {
+      "id": "P54",
+      "toolName": "Bash",
+      "command": "git branch --show-current",
+      "expected": "allow"
+    },
+    {
+      "id": "P55",
+      "toolName": "Bash",
+      "command": "git fetch origin",
+      "expected": "allow"
+    },
+    {
+      "id": "P56",
+      "toolName": "Bash",
+      "command": "git rev-parse HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "P57",
+      "toolName": "Bash",
+      "command": "git commit -m \"normal message\"",
+      "expected": "allow"
+    },
+    {
+      "id": "P58",
+      "toolName": "Bash",
+      "command": "git push origin HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "P59",
+      "toolName": "Bash",
+      "command": "git checkout main",
+      "expected": "allow"
+    },
+    {
+      "id": "P60",
+      "toolName": "Bash",
+      "command": "git add -- src/a.ts",
+      "expected": "allow"
+    },
+    {
+      "id": "P61",
+      "toolName": "Bash",
+      "command": "git switch main",
+      "expected": "allow"
+    },
+    {
+      "id": "P62",
+      "toolName": "Bash",
+      "command": "git merge --no-ff topic",
+      "expected": "allow"
+    },
+    {
+      "id": "P63",
+      "toolName": "Bash",
+      "command": "git reset --soft HEAD~1",
+      "expected": "allow"
+    },
+    {
+      "id": "P64",
+      "toolName": "Bash",
+      "command": "git -C . --no-pager status",
+      "expected": "allow"
+    },
+    {
+      "id": "P65",
+      "toolName": "Bash",
+      "command": "git -c color.ui=false status",
+      "expected": "allow"
+    },
+    {
+      "id": "P66",
+      "toolName": "Bash",
+      "command": "git diff --no-index a b",
+      "expected": "block"
+    },
+    {
+      "id": "P67",
+      "toolName": "Bash",
+      "command": "mygit log",
+      "expected": "allow"
+    },
+    {
+      "id": "P68",
+      "toolName": "Bash",
+      "command": "git.exe.bak log",
+      "expected": "allow"
+    },
+    {
+      "id": "P69",
+      "toolName": "Bash",
+      "command": "echo \"git log\"",
+      "expected": "allow"
+    },
+    {
+      "id": "P70",
+      "toolName": "Bash",
+      "command": "git commit \"unterminated",
+      "expected": "malformed"
+    },
+    {
+      "id": "P71",
+      "toolName": "Bash",
+      "command": "echo \"$(git log\"",
+      "expected": "malformed"
+    },
+    {
+      "id": "P72",
+      "toolName": "Bash",
+      "command": "git -C",
+      "expected": "malformed"
+    },
+    {
+      "id": "P73",
+      "toolName": "Bash",
+      "command": "git commit -m",
+      "expected": "allow"
+    },
+    {
+      "id": "P74",
+      "toolName": "Bash",
+      "command": "",
+      "expected": "allow"
+    },
+    {
+      "id": "P75",
+      "toolName": "Bash",
+      "command": "   ",
+      "expected": "allow"
+    },
+    {
+      "id": "P76",
+      "toolName": "Bash",
+      "command": "git commit -m \"$(git show HEAD)\"",
+      "expected": "block"
+    },
+    {
+      "id": "P77",
+      "toolName": "Bash",
+      "command": "git commit -m \"-p\" --patch",
+      "expected": "block"
+    },
+    {
+      "id": "P78",
+      "toolName": "Bash",
+      "command": "\"git\" \"log\"",
+      "expected": "block"
+    },
+    {
+      "id": "P79",
+      "toolName": "Bash",
+      "command": "g\"i\"t l\"o\"g",
+      "expected": "block"
+    },
+    {
+      "id": "P80",
+      "toolName": "PowerShell",
+      "command": "git status `",
+      "expected": "malformed"
+    },
+    {
+      "id": "P81",
+      "toolName": "Bash",
+      "command": "git diff -b",
+      "expected": "block"
+    },
+    {
+      "id": "P82",
+      "toolName": "Bash",
+      "command": "git log -m",
+      "expected": "block"
+    },
+    {
+      "id": "P83",
+      "toolName": "Bash",
+      "command": "git show -c",
+      "expected": "block"
+    },
+    {
+      "id": "P84",
+      "toolName": "Bash",
+      "command": "git stash push -m",
+      "expected": "block"
+    },
+    {
+      "id": "P85",
+      "toolName": "Bash",
+      "command": "git status -b",
+      "expected": "allow"
+    },
+    {
+      "id": "P86",
+      "toolName": "Bash",
+      "command": "git log -C",
+      "expected": "block"
+    },
+    {
+      "id": "P87",
+      "toolName": "Bash",
+      "command": "git status & git log",
+      "expected": "block"
+    },
+    {
+      "id": "P88",
+      "toolName": "Bash",
+      "command": "(git log)",
+      "expected": "block"
+    },
+    {
+      "id": "P89",
+      "toolName": "Bash",
+      "command": "{ git log; }",
+      "expected": "block"
+    },
+    {
+      "id": "P90",
+      "toolName": "Bash",
+      "command": "for c in a b; do git show $c; done",
+      "expected": "block"
+    },
+    {
+      "id": "P91",
+      "toolName": "Bash",
+      "command": "if true; then git log; fi",
+      "expected": "block"
+    },
+    {
+      "id": "P92",
+      "toolName": "Bash",
+      "command": "if false; then echo ok; else git log; fi",
+      "expected": "block"
+    },
+    {
+      "id": "P93",
+      "toolName": "Bash",
+      "command": "! git log",
+      "expected": "block"
+    },
+    {
+      "id": "P94",
+      "toolName": "Bash",
+      "command": "env X=1 git log",
+      "expected": "block"
+    },
+    {
+      "id": "P95",
+      "toolName": "Bash",
+      "command": "exec git log",
+      "expected": "block"
+    },
+    {
+      "id": "P96",
+      "toolName": "Bash",
+      "command": "time git log",
+      "expected": "block"
+    },
+    {
+      "id": "P97",
+      "toolName": "Bash",
+      "command": "git status # don't parse \"git log",
+      "expected": "allow"
+    },
+    {
+      "id": "P98",
+      "toolName": "Bash",
+      "command": "cat <(git log)",
+      "expected": "block"
+    },
+    {
+      "id": "P99",
+      "toolName": "PowerShell",
+      "command": "git commit -m 'a`'",
+      "expected": "allow"
+    },
+    {
+      "id": "P100",
+      "toolName": "PowerShell",
+      "command": "Write-Output (git log)",
+      "expected": "block"
+    },
+    {
+      "id": "P101",
+      "toolName": "PowerShell",
+      "command": "Write-Output \"$(git log)\"",
+      "expected": "block"
+    },
+    {
+      "id": "P102",
+      "toolName": "PowerShell",
+      "command": "node .ai\\tools\\git-safe.mjs log",
+      "expected": "allow"
+    },
+    {
+      "id": "P103",
+      "toolName": "PowerShell",
+      "command": "node .ai\\tools\\git-safe.mjs log; git log",
+      "expected": "block"
+    },
+    {
+      "id": "P104",
+      "toolName": "Bash",
+      "command": "git \\\nlog",
+      "expected": "block"
+    },
+    {
+      "id": "P105",
+      "toolName": "Bash",
+      "command": "C:\\Git\\cmd\\git.exe diff",
+      "expected": "allow"
+    },
+    {
+      "id": "P106",
+      "toolName": "Bash",
+      "command": "git LOG",
+      "expected": "block"
+    },
+    {
+      "id": "P107",
+      "toolName": "Bash",
+      "command": "$($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($($(git status))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))",
+      "expected": "malformed"
+    },
+    {
+      "id": "P108",
+      "toolName": "Bash",
+      "command": "git diff \"unterminated",
+      "expected": "malformed"
+    },
+    {
+      "id": "P109",
+      "toolName": "Bash",
+      "command": "git -c alias.x=log -C",
+      "expected": "block"
+    },
+    {
+      "id": "P110",
+      "toolName": "Bash",
+      "command": "git status # git log\ngit show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "P111",
+      "toolName": "Bash",
+      "command": "while true; do git log; done",
+      "expected": "block"
+    },
+    {
+      "id": "P112",
+      "toolName": "Bash",
+      "command": "until false; do git log; done",
+      "expected": "block"
+    },
+    {
+      "id": "P113",
+      "toolName": "Bash",
+      "command": "cat >(git log)",
+      "expected": "block"
+    },
+    {
+      "id": "H01",
+      "toolName": "Bash",
+      "command": "git commit -m \"$(cat <<'EOF'\ndon't change parser's handling\n1) git diff is faster\nEOF\n)\"",
+      "expected": "allow"
+    },
+    {
+      "id": "H02",
+      "toolName": "Bash",
+      "command": "git commit -m \"$(cat <<'EOF'\ndon't change parser's handling\n1) git diff is faster\nEOF\n)\"\ngit log",
+      "expected": "block"
+    },
+    {
+      "id": "H03",
+      "toolName": "PowerShell",
+      "command": "git commit -m @'\ndon't change parser's handling\n'@",
+      "expected": "allow"
+    },
+    {
+      "id": "H04",
+      "toolName": "Bash",
+      "command": "git commit -F - <<'EOF'\ngit diff is faster\nEOF",
+      "expected": "allow"
+    },
+    {
+      "id": "H05",
+      "toolName": "Bash",
+      "command": "git commit -F - <<'EOF'\ngit diff is faster",
+      "expected": "malformed"
+    },
+    {
+      "id": "H06",
+      "toolName": "PowerShell",
+      "command": "git commit -m @\"\nkeep \"quoted\" words\n\"@",
+      "expected": "allow"
+    },
+    {
+      "id": "H07",
+      "toolName": "PowerShell",
+      "command": "git commit -m @'\ndon't change parser's handling",
+      "expected": "malformed"
+    },
+    {
+      "id": "H08",
+      "toolName": "Bash",
+      "command": "git commit -F - <<-'EOF'\n\tgit diff is faster\n\tEOF",
+      "expected": "allow"
+    },
+    {
+      "id": "H09",
+      "toolName": "Bash",
+      "command": "git commit -F - <<EOF\n$(git log)\nEOF",
+      "expected": "allow"
+    },
+    {
+      "id": "S01",
+      "toolName": "Bash",
+      "command": "git stash list",
+      "expected": "block"
+    },
+    {
+      "id": "S02",
+      "toolName": "Bash",
+      "command": "git stash show",
+      "expected": "block"
+    },
+    {
+      "id": "S03",
+      "toolName": "Bash",
+      "command": "git stash push",
+      "expected": "block"
+    },
+    {
+      "id": "S04",
+      "toolName": "Bash",
+      "command": "git stash save",
+      "expected": "block"
+    },
+    {
+      "id": "S05",
+      "toolName": "Bash",
+      "command": "git stash pop",
+      "expected": "block"
+    },
+    {
+      "id": "S06",
+      "toolName": "Bash",
+      "command": "git stash apply",
+      "expected": "block"
+    },
+    {
+      "id": "S07",
+      "toolName": "Bash",
+      "command": "git stash drop",
+      "expected": "block"
+    },
+    {
+      "id": "S08",
+      "toolName": "Bash",
+      "command": "git stash clear",
+      "expected": "block"
+    },
+    {
+      "id": "S09",
+      "toolName": "Bash",
+      "command": "git stash branch work",
+      "expected": "block"
+    },
+    {
+      "id": "S10",
+      "toolName": "Bash",
+      "command": "git stash create",
+      "expected": "block"
+    },
+    {
+      "id": "S11",
+      "toolName": "Bash",
+      "command": "git stash store abc",
+      "expected": "block"
+    },
+    {
+      "id": "S12",
+      "toolName": "Bash",
+      "command": "git stash export",
+      "expected": "block"
+    },
+    {
+      "id": "S13",
+      "toolName": "Bash",
+      "command": "git stash import abc",
+      "expected": "block"
+    },
+    {
+      "id": "S14",
+      "toolName": "Bash",
+      "command": "git stash -p",
+      "expected": "block"
+    },
+    {
+      "id": "S15",
+      "toolName": "Bash",
+      "command": "git stash --help",
+      "expected": "block"
+    },
+    {
+      "id": "S16",
+      "toolName": "Bash",
+      "command": "git stash future-subcommand",
+      "expected": "block"
+    },
+    {
+      "id": "G01",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs diff A..B",
+      "expected": "allow"
+    },
+    {
+      "id": "G02",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs log -p -n1 HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "G03",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs show HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "G04",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs cat HEAD -- src/a.ts",
+      "expected": "allow"
+    },
+    {
+      "id": "G05",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs ls HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "G06",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs grep HEAD needle",
+      "expected": "allow"
+    },
+    {
+      "id": "G07",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs review-diff --base main --head HEAD",
+      "expected": "allow"
+    },
+    {
+      "id": "G08",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs review-diff --base main --out .ai/.run/review/r.patch -- src",
+      "expected": "allow"
+    },
+    {
+      "id": "G01-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs diff A..B && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G02-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs log -p -n1 HEAD && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G03-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs show HEAD && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G04-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs cat HEAD -- src/a.ts && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G05-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs ls HEAD && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G06-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs grep HEAD needle && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G07-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs review-diff --base main --head HEAD && git log",
+      "expected": "block"
+    },
+    {
+      "id": "G08-raw",
+      "toolName": "Bash",
+      "command": "node .ai/tools/git-safe.mjs review-diff --base main --out .ai/.run/review/r.patch -- src; git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "L01",
+      "toolName": "Bash",
+      "command": "sh -c \"git log\"",
+      "expected": "allow"
+    },
+    {
+      "id": "L02",
+      "toolName": "Bash",
+      "command": "node -e \"require('child_process').execSync('git log')\"",
+      "expected": "allow"
+    },
+    {
+      "id": "L03",
+      "toolName": "Bash",
+      "command": "git lg",
+      "expected": "allow"
+    },
+    {
+      "id": "L04",
+      "toolName": "PowerShell",
+      "command": "& (\"g\" + \"it\") log",
+      "expected": "allow"
+    },
+    {
+      "id": "X01",
+      "toolName": "Bash",
+      "command": "git commit -F - <<< \"msg\"",
+      "expected": "allow"
+    },
+    {
+      "id": "X02",
+      "toolName": "PowerShell",
+      "command": "git commit -m @'\r\ndon't change parser's handling\r\n'@",
+      "expected": "allow"
+    },
+    {
+      "id": "X03",
+      "toolName": "Bash",
+      "command": "find . -exec rm {} \\;",
+      "expected": "allow"
+    },
+    {
+      "id": "X04",
+      "toolName": "Bash",
+      "command": "echo }",
+      "expected": "allow"
+    },
+    {
+      "id": "X05",
+      "toolName": "Bash",
+      "command": "if false; then :; elif git log; then :; fi",
+      "expected": "block"
+    },
+    {
+      "id": "X06",
+      "toolName": "Bash",
+      "command": "git commit -F - <<'EOF'\r\ngit diff is faster\r\nEOF",
+      "expected": "allow"
+    },
+    {
+      "id": "X07",
+      "toolName": "Bash",
+      "command": "echo $((1 << 2))",
+      "expected": "allow"
+    },
+    {
+      "id": "X08",
+      "toolName": "Bash",
+      "command": "echo ${x:-$(git log)}",
+      "expected": "block"
+    },
+    {
+      "id": "X09",
+      "toolName": "PowerShell",
+      "command": "Write-Output {",
+      "expected": "allow"
+    },
+    {
+      "id": "X10",
+      "toolName": "Bash",
+      "command": "echo {a,b}",
+      "expected": "allow"
+    },
+    {
+      "id": "X11",
+      "toolName": "PowerShell",
+      "command": "$x = git log -p",
+      "expected": "block"
+    },
+    {
+      "id": "X12",
+      "toolName": "PowerShell",
+      "command": "$x=git log",
+      "expected": "block"
+    },
+    {
+      "id": "X13",
+      "toolName": "PowerShell",
+      "command": "$env:X = git show HEAD",
+      "expected": "block"
+    },
+    {
+      "id": "X14",
+      "toolName": "PowerShell",
+      "command": "$x = git status",
+      "expected": "allow"
+    },
+    {
+      "id": "X15",
+      "toolName": "PowerShell",
+      "command": "$x = \"git log\"",
+      "expected": "allow"
+    },
+    {
+      "id": "X16",
+      "toolName": "PowerShell",
+      "command": "$x += git log",
+      "expected": "allow"
+    }
+  ]
+}

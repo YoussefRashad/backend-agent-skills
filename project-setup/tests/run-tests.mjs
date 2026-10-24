@@ -1,18 +1,42 @@
 #!/usr/bin/env node
 // Regression + success-path suite for project-setup. Self-contained, zero dependencies.
-//   node tests/run-tests.mjs [--keep] [--only <substring>]
+//   node tests/run-tests.mjs [--keep] [--only <substring> | --only-id <id>]
+// --only keeps the diagnostic substring match against "<id> <name>"; --only-id selects exactly one case ID (the
+// acceptance gate uses only --only-id). The two are mutually exclusive. Unknown options, missing or empty values,
+// duplicate options, duplicate case IDs and an empty selection all exit 1 before any case runs.
 // Every fixture lives under a fresh temp directory. HOME/USERPROFILE are redirected there, and git
 // global/system config is isolated, so the suite never reads or writes the real user environment.
-// Exit code: 0 all passed · 1 at least one failure. Skipped tests are listed and never count as passed.
+// Output: one record per case ("PASS|FAIL  <id>  <name>", "SKIP  <id>  <name>  (<reason>)"), then
+// "<P> PASS / <F> FAIL / <S> SKIP", then the one-line JSON envelope { env, summary, resultsFile } last.
+// Exit code: 0 all passed; 1 at least one failure or a usage, selection or evidence-write error.
+// Skipped tests are listed and never count as passed; a failing case is never reported as skipped.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { selectSuiteCases, runComponentAssertions as runComponentAssertionsUncached, registerRc1Cases } from './rc1-cases.mjs';
+import { createComponentMemo } from './helpers/rc1-integration.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
-const only = argv.includes('--only') ? argv[argv.indexOf('--only') + 1] : null;
+// Validated before the temp directory exists, so a usage error leaves nothing behind.
+const cli = (() => {
+  const o = { keep: false, only: null, onlyId: null };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--keep' && !o.keep) { o.keep = true; continue; }
+    const key = a === '--only' ? 'only' : a === '--only-id' ? 'onlyId' : null;
+    const v = argv[i + 1];
+    if (!key || o[key] !== null || v === undefined || v === '' || v.startsWith('--')) return null;
+    o[key] = v; i++;
+  }
+  return o.only !== null && o.onlyId !== null ? null : o;
+})();
+if (!cli) {
+  process.stderr.write('usage: node tests/run-tests.mjs [--keep] [--only <substring> | --only-id <id>]\n');
+  process.exit(1);
+}
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-tests-'));
 const HOME = path.join(TMP, 'home');
 fs.mkdirSync(HOME);
@@ -67,10 +91,27 @@ function linkDir(target, link) {
 }
 
 const tests = [];
-const test = (id, name, fn) => tests.push({ id, name, fn });
+const test = (id, name, fn) => {
+  if (tests.some((t) => t.id === id)) throw Object.assign(new Error(`SUITE_DUPLICATE_ID: ${id}`), { code: 'SUITE_DUPLICATE_ID' });
+  tests.push({ id, name, fn });
+};
+
+// C11b: one execution per component for the whole suite. The baseline cases keep their call sites and context
+// literals through this destructured name; the complete rc.1 cases request the same cached promises through
+// getComponent (plan 4.1). Each component report is also persisted as <component tmp>/integration-results.json.
+const { runComponentAssertions, getComponent } = createComponentMemo({
+  run: runComponentAssertionsUncached,
+  fs,
+  tmpRoot: TMP,
+  baseContext: {
+    repository: path.resolve(SKILL, '..'),
+    skillRoot: SKILL,
+    env: { ...ENV },
+  },
+});
 
 // ============================================================ regressions ====
-test('R01', 'git-safe blocks object forms that bypass pathspec excludes', () => {
+test('R01', 'git-safe blocks object forms that bypass pathspec excludes', async () => {
   const d = repo({ '.env': 'DUMMY_SECRET=NOT_REAL_1\n', 'safe.txt': 'safe-1\n' });
   put(path.join(d, '.ai', 'security-paths.json'), read(path.join(SKILL, 'data', 'secret-paths.json')));
   const gs = (...a) => node('assets/tools/git-safe.mjs', a, d);
@@ -87,6 +128,18 @@ test('R01', 'git-safe blocks object forms that bypass pathspec excludes', () => 
   const up = gs('show', 'HEAD'); check(up.code === 0 && !up.stdout.includes('DUMMY_SECRET') && up.stdout.includes('safe-2'), 'show HEAD works with secret diff excluded', up);
   const rng = gs('log', '-p', 'HEAD~1..HEAD'); check(rng.code === 0 && !rng.stdout.includes('DUMMY_SECRET'), 'ranges allowed, secret excluded', rng);
   const c = gs('diff', '-c'); check(c.code === 2, '-c stays blocked', c);
+  // C4 component assertions (git object commands and bounded argument builders) run inside R01. Their sub-assertion records are not printed here and do
+  // not inflate the case counts; R01 fails unless the whole C4 report is ok.
+  const c4context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c4'), env: { ...ENV } };
+  fs.mkdirSync(c4context.tmp, { recursive: true });
+  const rep4 = await runComponentAssertions('C4', c4context);
+  check(rep4.ok === true, 'C4 component assertions pass', { errors: rep4.errors, failed: rep4.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C5 component assertions (review-diff and the artifact lifecycle) run once inside R01, after C4, under the same rule: no nested record is printed and
+  // R01 fails unless the whole C5 report is ok.
+  const c5context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c5'), env: { ...ENV } };
+  fs.mkdirSync(c5context.tmp, { recursive: true });
+  const rep5 = await runComponentAssertions('C5', c5context);
+  check(rep5.ok === true, 'C5 component assertions pass', { errors: rep5.errors, failed: rep5.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R02', 'commit rejects drafts changed after prepare and unapproved plans', () => {
@@ -107,7 +160,7 @@ test('R03a', 'run ids cannot escape the repository', () => {
   const d = repo({ 'a.txt': 'a\n' });
   put(path.join(d, 'keys.json'), JSON.stringify([{ name: 'DUMMY', secret: true }]));
   for (const bad of ['../../../escaped-env', '..', 'a/b', 'a\\b', '.hidden', 'x']) {
-    for (const [script, args] of [['env-keys', ['merge', '--keys', path.join(d, 'keys.json')]], ['apply', ['init']], ['lock', ['acquire']], ['canary', ['setup']], ['merge-claude-settings', []]]) {
+    for (const [script, args] of [['env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'keys.json')]], ['apply', ['init']], ['lock', ['acquire']], ['canary', ['setup']], ['merge-claude-settings', []]]) {
       const r = S(script, [...args, '--run-id', bad], d);
       check(r.code !== 0, `${script} rejects run id "${bad}"`, r);
     }
@@ -246,12 +299,12 @@ test('R09', 'merge holds back deny rules that would cancel user exceptions', () 
   const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
   const rep = m.json?.report;
   check(m.code === 0 && m.json.needsDecision === true, 'needsDecision', m);
-  check(rep?.conflicts.some((c) => c.rule === 'Read(**/.env.*)'), 'conflict reported for Read(**/.env.*)', rep);
-  check(rep?.heldBack.includes('Read(**/.env.*)') && !rep.added.deny.includes('Read(**/.env.*)'), 'rule held back', rep);
+  check(rep?.conflicts.some((c) => c.rule === 'Read(**/.env*)'), 'conflict reported for Read(**/.env*)', rep);
+  check(rep?.heldBack.includes('Read(**/.env*)') && !rep.added.deny.includes('Read(**/.env*)'), 'rule held back', rep);
   const draft = JSON.parse(read(path.join(d, '.ai', '.run', 'run-0001', 'drafts', '.claude', 'settings.json')));
-  check(!draft.permissions.deny.includes('Read(**/.env.*)') && draft.permissions.deny.indexOf('Read(!.env.example)') === 1, 'draft keeps the exception effective', draft.permissions.deny);
+  check(!draft.permissions.deny.includes('Read(**/.env*)') && draft.permissions.deny.indexOf('Read(!.env.example)') === 1, 'draft keeps the exception effective', draft.permissions.deny);
   const m2 = S('merge-claude-settings', ['--run-id', 'run-0001', '--override-user-exceptions'], d);
-  check(m2.json?.report.added.deny.includes('Read(**/.env.*)'), 'appended only with explicit override', m2);
+  check(m2.json?.report.added.deny.includes('Read(**/.env*)'), 'appended only with explicit override', m2);
 });
 
 test('R10', 'validator rejects invalid TOML and wrongly typed JSON', () => {
@@ -371,7 +424,7 @@ test('R14b', 'installer restores every target when any phase fails (incl. backup
   }
 });
 
-test('R15', 'ownership metadata is bound to the approved plan', () => {
+test('R15', 'ownership metadata is bound to the approved plan', async () => {
   const d = repo({ 'TODO.md': 'old\n' }); const r = begin(d);
   put(path.join(r, 'drafts', 'TODO.md'), 'new\n');
   const p = prepare(d);
@@ -389,6 +442,18 @@ test('R15', 'ownership metadata is bound to the approved plan', () => {
   put(path.join(r2, 'ownership.json'), JSON.stringify({ 'TODO.md': 'owned-by-me' })); check(prepare(d2).code === 3, 'invalid ownership value rejected at prepare');
   put(path.join(r2, 'ownership.json'), JSON.stringify({ 'src/app.ts': 'full' })); check(prepare(d2).code === 3, 'ownership for a non-target rejected');
   put(path.join(r2, 'ownership.json'), JSON.stringify({ 'TODO.md': 'keys' })); check(prepare(d2).code === 3, '"keys" only valid for .claude/settings.json');
+  // C2 component assertions (ownership, metadata transactions and draft review) run inside R15. Their sub-assertion records are
+  // not printed here; R15 fails unless the whole component report is ok.
+  const context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c2'), env: { ...ENV } };
+  fs.mkdirSync(context.tmp, { recursive: true });
+  const rep = await runComponentAssertions('C2', context);
+  check(rep.ok === true, 'C2 component assertions pass', { errors: rep.errors, failed: rep.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C3 component assertions (policy migration and synchronized controls) run after the existing component coverage. Their sub-assertion
+  // records are not printed here and do not inflate the case counts; R15 fails unless the whole C3 report is ok.
+  const c3context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c3'), env: { ...ENV } };
+  fs.mkdirSync(c3context.tmp, { recursive: true });
+  const rep3 = await runComponentAssertions('C3', c3context);
+  check(rep3.ok === true, 'C3 component assertions pass', { errors: rep3.errors, failed: rep3.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R16', 'TOML validation matches tomllib on the conformance corpus; invalid escapes fail validate', () => {
@@ -413,12 +478,12 @@ process.stdout.write(JSON.stringify(cases.map((c) => { const r = parseToml(c.tom
   const u = S('validate', [], d); check(u.code === 1 && u.json.results.some((x) => x.check === 'toml-unsupported'), 'unsupported syntax is a failure, not a pass', u.json?.results);
 });
 
-test('R17', 'wildcard user exceptions are held back unless provably disjoint', () => {
+test('R17', 'wildcard user exceptions are held back unless provably disjoint', async () => {
   for (const exc of ['Read(!*.example)', 'Read(!**/*.example)', 'Read(!.env.?xample)', 'Read(!*)', 'Read(![.]env.example)']) {
     const d = repo({ '.claude/settings.json': JSON.stringify({ permissions: { deny: [exc] } }) }); begin(d);
     const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
-    check(m.code === 0 && m.json?.needsDecision === true && m.json.report.heldBack.includes('Read(**/.env.*)'), `${exc}: Read(**/.env.*) held back`, m.json?.report?.heldBack);
-    check(!m.json?.report?.added?.deny?.includes('Read(**/.env.*)'), `${exc}: not appended`);
+    check(m.code === 0 && m.json?.needsDecision === true && m.json.report.heldBack.includes('Read(**/.env*)'), `${exc}: Read(**/.env*) held back`, m.json?.report?.heldBack);
+    check(!m.json?.report?.added?.deny?.includes('Read(**/.env*)'), `${exc}: not appended`);
   }
   // Disjoint from every managed rule (no path can match both), so nothing is held back.
   for (const exc of ['Read(!docs/README.md)', 'Read(!/README.md)']) {
@@ -429,7 +494,7 @@ test('R17', 'wildcard user exceptions are held back unless provably disjoint', (
   // A bare name overlaps directory rules (secrets/README.md matches both), so those are deferred.
   { const d = repo({ '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Read(!README.md)'] } }) }); begin(d);
     const m = S('merge-claude-settings', ['--run-id', 'run-0001'], d);
-    check(m.json?.report.heldBack.includes('Read(**/secrets/**)') && !m.json.report.heldBack.includes('Read(**/.env)'), 'bare-name exception: only overlapping rules deferred', m.json?.report?.heldBack); }
+    check(m.json?.report.heldBack.includes('Read(**/secrets/**)') && !m.json.report.heldBack.includes('Read(**/.env*)'), 'bare-name exception: only overlapping rules deferred', m.json?.report?.heldBack); }
   const probe = path.join(TMP, `glob-probe-${++n}.mjs`);
   fs.writeFileSync(probe, `import { globsMayOverlap } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts', 'globs.mjs')).href)};
 import { globToRegExp, loadSecretSpec } from ${JSON.stringify(pathToFileURL(path.join(SKILL, 'scripts', 'lib.mjs')).href)};
@@ -448,6 +513,12 @@ for (const r of rules) for (const e of exc) {
 process.stdout.write(JSON.stringify({ unsound, checked: rules.length * exc.length, paths: paths.length }));`);
   const pr = proc(process.execPath, [probe], TMP);
   check(pr.json && pr.json.unsound.length === 0, 'no pair matched by a common path is reported disjoint', pr.json || pr.stderr);
+  // C1 component assertions (shared policy grammar, matcher and version contract) run inside R17. Their sub-assertion records are
+  // not printed here; R17 fails unless the whole component report is ok.
+  const c1context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c1'), env: { ...ENV } };
+  fs.mkdirSync(c1context.tmp);
+  const c1report = await runComponentAssertions('C1', c1context);
+  check(c1report.ok === true, 'C1 component assertions pass', { errors: c1report.errors, failed: c1report.results.filter((r) => r.status !== 'PASS').map((r) => ({ id: r.id, failures: r.failures.slice(0, 5) })) });
 });
 
 // ===================================================== rc.3 review (R18+) ====
@@ -849,7 +920,7 @@ test('R28', 'installer verifies every backup before rollback; corrupted/missing/
 });
 
 // ================================================= live acceptance findings (R29+) ====
-test('R29', 'prepare: files the skill does not own may only gain new blocks; everything else needs explicit approval', () => {
+test('R29', 'prepare: files the skill does not own may only gain new blocks; everything else needs explicit approval', async () => {
   const P = (d, extra = []) => prepare(d, 'run-0001', extra, { strict: true });
   // a) v1-style CLAUDE.md without markers (the live L13 gap)
   { const d = repo({ 'CLAUDE.md': '# app\n<!-- Generated by project-setup -->\n\n## Overview\nSee @.ai/context/project-tree.md\n\n## Team note\nKeep.\n' }); const r = begin(d);
@@ -878,7 +949,7 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   // e) env template: env-keys block append passes; changing an existing value needs approval and never prints it
   { const d = repo({ '.env.example': 'DB_PASSWORD=Sup3rSecretValue\nPORT=3000\n' }); const r = begin(d);
     put(path.join(d, 'k.json'), JSON.stringify([{ name: 'JWT_SECRET', secret: true }]));
-    check(S('env-keys', ['merge', '--keys', path.join(d, 'k.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
+    check(S('env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'k.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
     check(P(d).code === 0, 'env-keys block append needs no approval');
     put(path.join(r, 'vault', 'files', '.env.example'), 'DB_PASSWORD=ChangedValue123\nPORT=3000\n');
     const p = P(d); check(p.code === 3 && !p.stdout.includes('Sup3rSecretValue') && !p.stdout.includes('ChangedValue123'), 'value change needs approval; values never printed', p.stdout); }
@@ -892,6 +963,65 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
     S('lock', ['release', '--run-id', 'run-0001'], d); const r2 = begin(d, 'run-0002');
     put(path.join(r2, 'drafts', 'docs', 'database.md'), '# db\n\nupdated\n');
     const p = prepare(d, 'run-0002', [], { strict: true }); check(p.code === 0 && p.json.ops[0].userContentChange === false, 'skill-created living doc needs no extra approval', p.json); }
+  // C6 component assertions (the raw-Git hook, hook merge, hooks-only staging and self-test) run inside R29, the case that guards settings.json approvals.
+  // Their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C6 report is ok.
+  const c6context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c6'), env: { ...ENV } };
+  fs.mkdirSync(c6context.tmp, { recursive: true });
+  const rep6 = await runComponentAssertions('C6', c6context);
+  check(rep6.ok === true, 'C6 component assertions pass', { errors: rep6.errors, failed: rep6.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C7 component assertions (allow classification, discovery, refusal and retirement) run once, after the C6 aggregation, inside the same case: R29 is the case that
+  // guards settings.json approvals. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the
+  // whole C7 report is ok.
+  const c7context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c7'), env: { ...ENV } };
+  fs.mkdirSync(c7context.tmp, { recursive: true });
+  const rep7 = await runComponentAssertions('C7', c7context);
+  check(rep7.ok === true, 'C7 component assertions pass', { errors: rep7.errors, failed: rep7.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C8 component assertions (trusted-review instructions, the baseline checker and the customization migration) run once, after the C7 aggregation, inside the same case: R29 is the case
+  // that guards approvals, and C8's transaction cases exercise exact user-content approval. Under the same rule their sub-assertion records are not printed here and do not inflate the
+  // case counts; R29 fails unless the whole C8 report is ok. The run is not also invoked from any other baseline case.
+  const c8context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c8'), env: { ...ENV } };
+  fs.mkdirSync(c8context.tmp, { recursive: true });
+  const rep8 = await runComponentAssertions('C8', c8context);
+  check(rep8.ok === true, 'C8 component assertions pass', { errors: rep8.errors, failed: rep8.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C9 component assertions (template resolution, the env-keys report and merge contracts, command hygiene and the root-only vault exception) run once, after the C8 aggregation, inside the same
+  // case: R29 is the case that guards additive-block approval and changed-value refusal for the template. Under the same rule their sub-assertion records are not printed here and do not
+  // inflate the case counts; R29 fails unless the whole C9 report is ok. The run is not also invoked from any other baseline case.
+  const c9context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c9'), env: { ...ENV } };
+  fs.mkdirSync(c9context.tmp, { recursive: true });
+  const rep9 = await runComponentAssertions('C9', c9context);
+  check(rep9.ok === true, 'C9 component assertions pass', { errors: rep9.errors, failed: rep9.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C10 component assertions (the doctor, the validation integration, the root-only template discovery and the reserved review-directory exclusion) run once, after the C9 aggregation, inside the same case. Under the same
+  // rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C10 report is ok. The run is not also invoked from any other baseline case. (C10 plan 6.4 item 5.)
+  const c10context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c10'), env: { ...ENV } };
+  fs.mkdirSync(c10context.tmp, { recursive: true });
+  const rep10 = await runComponentAssertions('C10', c10context);
+  check(rep10.ok === true, 'C10 component assertions pass', { errors: rep10.errors, failed: rep10.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C12 component assertions (the review fixes: the apply policy gate, the CLI entry guards, the hook --config-env rule, the runtime-unit identities, the documentation boundaries, the pins and the registration contracts) run once, after the C10
+  // aggregation, inside the same case. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C12 report is ok. The run is not also invoked from any other baseline case.
+  // (C12 plan C12-13 and decision K12.)
+  const c12context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c12'), env: { ...ENV } };
+  fs.mkdirSync(c12context.tmp, { recursive: true });
+  const rep12 = await runComponentAssertions('C12', c12context);
+  check(rep12.ok === true, 'C12 component assertions pass', { errors: rep12.errors, failed: rep12.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C13 component assertions (the review rules: the canonical reviewer and docs-sync, the external-review, Claude and development-rules references, the managed update workflow, the rc.2 release bookkeeping and the registration contracts) run once, after the C12
+  // aggregation, inside the same case. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the whole C13 report is ok. The run is not also invoked from any other baseline case.
+  // (C13 plan C13-18.)
+  const c13context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c13'), env: { ...ENV } };
+  fs.mkdirSync(c13context.tmp, { recursive: true });
+  const rep13 = await runComponentAssertions('C13', c13context);
+  check(rep13.ok === true, 'C13 component assertions pass', { errors: rep13.errors, failed: rep13.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C14 component assertions (the project rules: the docs-sync hook, the merged extension ownership, backend-standards adoption, the installed external-review prerequisites, the managed update and the path and marker boundaries, the
+  // release bookkeeping and the registration contracts) run once, after the C13 aggregation, inside the same case. Under the same rule their sub-assertion records are not printed here and do not inflate the case counts; R29 fails unless the
+  // whole C14 report is ok. The run is not also invoked from any other baseline case. (C14 plan C14-20.)
+  const c14context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c14'), env: { ...ENV } };
+  fs.mkdirSync(c14context.tmp, { recursive: true });
+  const rep14 = await runComponentAssertions('C14', c14context);
+  check(rep14.ok === true, 'C14 component assertions pass', { errors: rep14.errors, failed: rep14.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C15 contributes once through R29 without adding complete case records.
+  const c15context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c15'), env: { ...ENV } };
+  fs.mkdirSync(c15context.tmp, { recursive: true });
+  const rep15 = await runComponentAssertions('C15', c15context);
+  check(rep15.ok === true, 'C15 component assertions pass', { errors: rep15.errors, failed: rep15.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {
@@ -900,6 +1030,8 @@ test('R30', 'validate: a user-owned legacy hook is a warning; broken managed per
   const d = repo({ ...base, '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Read(**/.env)'] }, hooks: { PostToolUse: [{ matcher: 'Write', command: 'x' }] } }) });
   const v = S('validate', [], d);
   check(v.code === 0 && v.json?.ok === true && v.json.results.some((x) => x.level === 'warn' && /legacy shape/.test(x.detail)), 'legacy hook -> warn, validate ok', v.json?.results);
+  // C10 plan 4.9 (R30 legacy-hook case) and 6.4 item 9: an unrelated legacy hook never activates the installed raw-Git self-test; the no-installation info row is present and the self-test is not run.
+  check(v.json?.results?.some((x) => x.level === 'info' && x.check === 'hooks-selftest' && x.detail === 'No installed raw-Git hook was identified; installed hook self-test was not run') && v.json?.runtimeEvidence?.hookSelfTest === 'not-run', 'legacy hook is not an activation signal: the no-installation info row and not-run evidence', v.json?.results?.filter((x) => x.check === 'hooks-selftest'));
   const d2 = repo({ ...base, '.claude/settings.json': JSON.stringify({ permissions: { deny: 'Read(**/.env)' } }) });
   const v2 = S('validate', [], d2); check(v2.code === 1 && v2.json.results.some((x) => x.level === 'fail' && /permissions\.deny/.test(x.detail)), 'broken managed key -> fail', v2.json?.results);
 });
@@ -948,12 +1080,13 @@ test('R33', 'git-safe blocks -L/--contents, which print file content regardless 
 
 test('R34', 'scripts refuse secret-pattern files as input before opening them', () => {
   const d = repo({ '.env': 'DUMMY_SECRET=NOT_REAL_INPUT\n', 'a.txt': 'a\n' }, false); begin(d);
+  put(path.join(d, '.env.example'), ''); // C9: an empty permitted template, so the refusal below tests key-list protection and not the missing-template result
   const outside = path.join(TMP, `outside-secret-${++n}`, '.env.local'); put(outside, 'DUMMY_SECRET=NOT_REAL_OUTSIDE\n');
   for (const [script, args] of [
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', '.env', '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', outside, '--run-id', 'run-0001']],
     ['merge-claude-settings', ['--run-id', 'run-0001', '--allow-file', '.env']],
-    ['env-keys', ['merge', '--keys', outside, '--run-id', 'run-0001']],
+    ['env-keys', ['merge', '--template', 'auto', '--keys', outside, '--run-id', 'run-0001']],
   ]) {
     const r = S(script, args, d);
     check(r.code !== 0 && !/NOT_REAL_(INPUT|OUTSIDE)/.test(r.stdout + r.stderr), `${script} ${args.join(' ')} refused without leaking`, r);
@@ -964,6 +1097,7 @@ test('R34', 'scripts refuse secret-pattern files as input before opening them', 
 // ======================================================= rc.10 review (R35+) ====
 test('R35', 'secret-input guard checks the resolved destination (junction/symlink aliases inside and outside the repo)', () => {
   const d = repo({ 'secrets/input.txt': 'SYNTHETIC_SECRET_R35\n', 'a.txt': 'a\n' }, false); begin(d);
+  put(path.join(d, '.env.example'), ''); // C9: an empty permitted template, so the refusal below tests key-list protection and not the missing-template result
   const outDir = path.join(TMP, `outside-sec-${++n}`); put(path.join(outDir, 'secrets', 'k.json'), '["SYNTHETIC_SECRET_R35_OUT"]');
   const aliasIn = path.join(d, 'innocent'); const aliasOut = path.join(TMP, `alias-out-${n}`);
   if (!linkDir(path.join(d, 'secrets'), aliasIn) || !linkDir(path.join(outDir, 'secrets'), aliasOut)) return skip('cannot create directory links');
@@ -971,7 +1105,7 @@ test('R35', 'secret-input guard checks the resolved destination (junction/symlin
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'innocent/input.txt', '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
     ['merge-claude-settings', ['--run-id', 'run-0001', '--allow-file', path.join(aliasOut, 'k.json')]],
-    ['env-keys', ['merge', '--keys', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
+    ['env-keys', ['merge', '--template', 'auto', '--keys', path.join(aliasOut, 'k.json'), '--run-id', 'run-0001']],
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'secrets/input.txt', '--run-id', 'run-0001']], // direct control
     ['blocks', ['upsert', '--file', 'AGENTS.md', '--id', 'x', '--content', 'does-not-exist.txt', '--run-id', 'run-0001']], // unresolvable
   ];
@@ -1108,7 +1242,15 @@ function freshSetup(d, id = 'run-0001') {
   put(path.join(D, '.codex', 'agents', 'reviewer.toml'), read(path.join(A, 'wrappers', 'codex-reviewer.toml')));
   put(path.join(D, '.codex', 'agents', 'docs_sync.toml'), read(path.join(A, 'wrappers', 'codex-docs_sync.toml')));
   put(path.join(D, '.ai', 'security-paths.json'), read(path.join(SKILL, 'data', 'secret-paths.json')));
+  // The complete reviewed runtime unit (C4 plan 4.15, extended by C5 plan 2.4 with the review helper and by C6 plan 2.7 with the raw-Git hook, its core and the
+  // self-test): seven members, in the order the trusted catalog lists them.
+  put(path.join(D, '.ai', 'tools', 'security-policy.mjs'), read(path.join(A, 'tools', 'security-policy.mjs')));
+  put(path.join(D, '.ai', 'tools', 'git-safe-core.mjs'), read(path.join(A, 'tools', 'git-safe-core.mjs')));
+  put(path.join(D, '.ai', 'tools', 'guard-raw-git-core.mjs'), read(path.join(A, 'tools', 'guard-raw-git-core.mjs')));
+  put(path.join(D, '.ai', 'tools', 'review-diff.mjs'), read(path.join(A, 'tools', 'review-diff.mjs')));
   put(path.join(D, '.ai', 'tools', 'git-safe.mjs'), read(path.join(A, 'tools', 'git-safe.mjs')));
+  put(path.join(D, '.ai', 'tools', 'guard-raw-git.mjs'), read(path.join(A, 'tools', 'guard-raw-git.mjs')));
+  put(path.join(D, '.ai', 'tools', 'hooks-selftest.mjs'), read(path.join(A, 'tools', 'hooks-selftest.mjs')));
   for (const f of ['project-tree', 'critical-modules', 'code-patterns', 'error-contract', 'configuration', 'glossary']) put(path.join(D, '.ai', 'context', `${f}.md`), `# ${f}\n`);
   put(path.join(D, '.ai', 'decisions', 'README.md'), '# Decisions\n');
   for (const f of ['api-conventions', 'database', 'observability']) put(path.join(D, 'docs', `${f}.md`), `# ${f}\n`);
@@ -1123,18 +1265,33 @@ test('S01', 'fresh setup end to end, validate clean', () => {
   const det = S('detect', [], d); check(det.json?.mode === 'fresh', 'mode fresh', det.json?.mode);
   const { g, m } = freshSetup(d); check(g.code === 0 && m.code === 0 && m.json.needsDecision === false, 'drafts ok', [g.stdout, m.stdout]);
   put(path.join(d, 'keys.json'), JSON.stringify([{ name: 'DATABASE_URL', required: true, secret: true, description: 'DSN', group: 'Database' }]));
-  check(S('env-keys', ['merge', '--keys', path.join(d, 'keys.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
+  check(S('env-keys', ['merge', '--template', 'auto', '--keys', path.join(d, 'keys.json'), '--run-id', 'run-0001'], d).code === 0, 'env merge');
   const p = prepare(d); check(p.code === 0 && p.json.changed > 20, 'prepare', p.json);
+  check(p.json?.metadataChanged === 0, 'a fresh setup has no metadata operation (automatic recording is not one)', p.json?.metadataChanged);
   const c = commit(d, p); check(c.code === 0 && c.json.committed, 'commit', c);
+  const mf = JSON.parse(read(path.join(d, '.ai', 'manifest.json')));
+  check(mf.schema === 3, 'a newly written manifest is schema 3', mf.schema);
   const v = S('validate', [], d); check(v.code === 0 && v.json.ok, 'validate clean', v.json?.results?.filter((x) => x.level !== 'pass'));
-  check(read(path.join(d, '.env.example')).includes('DATABASE_URL=<REDACTED>') && read(path.join(d, '.env.example')).startsWith('PORT=3000'), 'env template merged, existing lines kept');
-  check(S('detect', [], d).json?.mode === 'update', 'mode becomes update');
+  // C10 plan 6.4 item 9: S01 now launches the real installed self-test (the three trusted hook files copied by the fresh setup) and requires its pass row; the seven runtime members are all present runtime-unit passes. New info or
+  // warning rows do not change the success criteria above.
+  const passRows = (v.json?.results || []).filter((x) => x.level === 'pass');
+  check(passRows.some((x) => x.check === 'hooks-selftest' && x.detail === 'Installed hook self-test passed; Claude hook loading is not verified'), 'validate runs the real installed hook self-test and reports its pass row', v.json?.results?.filter((x) => x.check === 'hooks-selftest'));
+  check(v.json?.runtimeEvidence?.hookSelfTest === 'passed' && v.json?.runtimeEvidence?.claudeHookLoading === 'not-verified', 'the evidence block records the passed self-test and the unverified Claude hook loading', v.json?.runtimeEvidence);
+  check(passRows.filter((x) => x.check === 'runtime-unit').length === 7 && (v.json?.results || []).every((x) => x.check !== 'runtime-unit' || x.level === 'pass'), 'a fresh schema-1 setup has seven runtime-unit passes and no other runtime-unit row', v.json?.results?.filter((x) => x.check === 'runtime-unit'));
+  // C9: a new secret name is staged as an empty assignment. Not includes('DATABASE_URL='), which would also accept the old placeholder output.
+  const envText = read(path.join(d, '.env.example'));
+  check(/^DATABASE_URL=$/m.test(envText) && !envText.includes('<REDACTED>') && envText.startsWith('PORT=3000'), 'env template merged: the new name is an empty assignment, no placeholder, existing lines kept');
+  const dt = S('detect', [], d).json;
+  check(dt?.mode === 'update', 'mode becomes update');
+  const dm = dt?.ai?.manifest;
+  check(dm?.schema === 3 && dm.status === 'current' && dm.needsUpdate === false && Array.isArray(dm.errors) && dm.errors.length === 0, 'detect reports the schema 3 manifest as current', dm);
 });
 
 test('S02', 'rerun with identical inputs is a zero diff (files and manifest)', () => {
   const d = repo({ 'package.json': '{}\n', 'src/a.ts': 'x\n' });
   freshSetup(d); const p = prepare(d); commit(d, p);
   const before = read(path.join(d, '.ai', 'manifest.json'));
+  check(JSON.parse(before).schema === 3, 'the manifest the first run wrote is schema 3', JSON.parse(before).schema);
   S('lock', ['release', '--run-id', 'run-0001'], d);
   freshSetup(d, 'run-0002');
   const p2 = prepare(d, 'run-0002'); check(p2.code === 0 && p2.json.changed === 0, 'no changes', p2.json);
@@ -1175,11 +1332,11 @@ test('S05', 'lock contention and explicit break', () => {
 test('S06', 'env-keys never opens .env and never prints values', () => {
   const d = repo({ '.env': 'X=1\n', '.env.example': 'DB_PASSWORD=Sup3rSecretValue\nPORT=3000\nJWT_SECRET=\n' }, false);
   check(S('env-keys', ['keys', '--file', '.env'], d).code !== 0, '.env refused');
-  const k = S('env-keys', ['keys', '--file', '.env.example'], d);
+  const k = S('env-keys', ['keys', '--template', 'auto'], d);
   check(k.code === 0 && !k.stdout.includes('Sup3rSecretValue') && k.json.possibleRealSecrets.includes('DB_PASSWORD'), 'names + classification only', k);
 });
 
-test('S07', 'installer happy path: install, unchanged rerun, upgrade, verify, rollback', () => {
+test('S07', 'installer happy path: install, unchanged rerun, upgrade, verify, rollback', async () => {
   const src = sourceCopy('8.0.0-a'); const c = path.join(TMP, `c-${n}`), x = path.join(TMP, `x-${n}`); const a = ['--claude-dir', c, '--codex-dir', x];
   check(inst(src, ['--dry-run', ...a]).code === 0 && !fs.existsSync(path.join(c, 'project-setup')), 'dry run changes nothing');
   check(inst(src, a).code === 0, 'install');
@@ -1191,6 +1348,20 @@ test('S07', 'installer happy path: install, unchanged rerun, upgrade, verify, ro
   put(path.join(HOME, '.claude', 'plugins', 'm', 'skills', 'project-setup', 'SKILL.md'), 'x\n');
   check(inst(src, a).code === 2, 'plugin copy stops install');
   fs.rmSync(path.join(HOME, '.claude'), { recursive: true, force: true });
+  // C11a component assertions (v2 baselines and test infrastructure) run inside S07. Their sub-assertion records are
+  // not printed here; S07 fails unless the whole component report is ok.
+  const context = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c11a'), env: { ...ENV } };
+  fs.mkdirSync(context.tmp);
+  const rep = await runComponentAssertions('C11a', context);
+  check(rep.ok === true, 'C11a component assertions pass', { errors: rep.errors, failed: rep.results.filter((r) => r.status !== 'PASS').map((r) => ({ id: r.id, failures: r.failures.slice(0, 5) })) });
+  const c11bcontext = { repository: path.resolve(SKILL, '..'), skillRoot: SKILL, tmp: path.join(TMP, 'c11b'), env: { ...ENV } };
+  fs.mkdirSync(c11bcontext.tmp);
+  const rep11b = await runComponentAssertions('C11b', c11bcontext);
+  check(rep11b.ok === true, 'C11b component assertions pass', {
+    errors: rep11b.errors,
+    failed: rep11b.results.filter((r) => r.status !== 'PASS')
+      .map((r) => ({ id: r.id, failures: r.failures.slice(0, 5) })),
+  });
 });
 
 test('S08', 'canary setup/probe/verify measure readability', () => {
@@ -1211,13 +1382,36 @@ test('S09', 'rejects writes outside documentation scope and through secret draft
   put(path.join(r, 'drafts', '.env.example'), 'X=\n'); check(prepare(d).code === 3, 'draft to env template rejected (vault only)');
 });
 
+registerRc1Cases(test, { getComponent });
+
 // ================================================================ runner ====
-for (const t of tests) {
-  if (only && !`${t.id} ${t.name}`.includes(only)) continue;
+// Selection happens before any case runs: duplicates, malformed cases and an empty selection exit 1 at once.
+let selected;
+try { selected = selectSuiteCases(tests, { only: cli.only, onlyId: cli.onlyId }); } catch (e) {
+  process.stderr.write(`run-tests: ${e.message}\n`);
+  fs.rmSync(TMP, { recursive: true, force: true });
+  process.exit(1);
+}
+for (const t of selected) {
   current = { id: t.id, name: t.name, failures: [], skipped: null };
-  try { t.fn(); } catch (e) { current.failures.push(`threw: ${e.stack || e}`); }
+  try {
+    // A callback may return { failures, skipped } (the complete rc.1 cases do); a void callback keeps its behavior.
+    const outcome = await t.fn();
+    if (outcome !== undefined) {
+      const valid = outcome !== null && typeof outcome === 'object' && !Array.isArray(outcome)
+        && Object.keys(outcome).sort().join() === 'failures,skipped'
+        && Array.isArray(outcome.failures) && outcome.failures.every((f) => typeof f === 'string')
+        && (outcome.skipped === null || (typeof outcome.skipped === 'string' && outcome.skipped !== ''));
+      if (!valid) current.failures.push(`RC1_COMPOSITION: invalid case outcome ${t.id}`);
+      else {
+        current.failures.push(...outcome.failures);
+        if (outcome.skipped !== null) current.skipped = outcome.skipped;
+      }
+    }
+  } catch (e) { current.failures.push(`threw: ${e.stack || e}`); }
+  if (current.failures.length) current.skipped = null; // failures take precedence over a skip
   results.push(current);
-  const tag = current.skipped ? 'SKIP' : current.failures.length ? 'FAIL' : 'PASS';
+  const tag = current.failures.length ? 'FAIL' : current.skipped ? 'SKIP' : 'PASS';
   process.stdout.write(`${tag}  ${t.id}  ${t.name}${current.skipped ? `  (${current.skipped})` : ''}\n`);
   for (const f of current.failures) process.stdout.write(`        - ${f}\n`);
 }
@@ -1226,8 +1420,13 @@ const summary = {
   failed: results.filter((r) => r.failures.length).length,
   skipped: results.filter((r) => r.skipped).length,
 };
+process.stdout.write(`${summary.passed} PASS / ${summary.failed} FAIL / ${summary.skipped} SKIP\n`);
 const env = { platform: process.platform, release: os.release(), node: process.version, git: git(['--version'], TMP).stdout.trim() };
-fs.writeFileSync(path.join(TMP, 'results.json'), JSON.stringify({ env, summary, results }, null, 2));
-process.stdout.write(`\n${JSON.stringify({ env, summary, resultsFile: path.join(TMP, 'results.json') })}\n`);
-if (!argv.includes('--keep') && !summary.failed) fs.rmSync(TMP, { recursive: true, force: true });
+const resultsFile = path.join(TMP, 'results.json');
+try { fs.writeFileSync(resultsFile, JSON.stringify({ env, summary, results }, null, 2), { flag: 'wx' }); } catch (e) {
+  process.stderr.write(`run-tests: evidence-write: ${e.message}\n`);
+  process.exit(1);
+}
+process.stdout.write(`\n${JSON.stringify({ env, summary, resultsFile })}\n`);
+if (!cli.keep && !summary.failed) fs.rmSync(TMP, { recursive: true, force: true });
 process.exit(summary.failed ? 1 : 0);

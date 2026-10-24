@@ -24,7 +24,7 @@ one at a glance.
 flowchart TD
     New["New service"] --> BS["/backend-standards"]
     BS --> TC["/toolchain-config"]
-    Existing["Existing repo,<br/>no Claude docs"] --> PS["/project-setup"]
+    Existing["Existing repo,<br/>no agent docs"] --> PS["/project-setup"]
     TC --> Dev["Day-to-day development"]
     PS --> Dev
     Dev -->|every PR| PR["/pr-review"]
@@ -63,9 +63,12 @@ flowchart TD
 
 - **When:** set up or migrate a backend repo for Claude Code and Codex (fresh, v1, hand-written, or
   update). Shared `AGENTS.md`, `CLAUDE.md` importing it, shared `reviewer`/`docs-sync` agents.
-- **How it runs:** Phase 0 discovery, then a hard stop; drafts only; you approve the diff by its plan
-  hash; `commit` applies exactly that plan, with backups and a verified rollback. Never reads secret
-  files. Details and known limitations: `project-setup/README.md`, `project-setup/RELEASE-NOTES-2.0.0.md`.
+- **How it runs:** Phase 0 discovery, then a hard stop; drafts only; you approve the diff by its
+  plan hash; `commit` applies exactly that plan, with backups and a verified rollback. Its rule is
+  to never read secrets, but the secret-path controls are tool-level, not an OS security boundary:
+  keep real secrets out of development working trees. Details and known limitations:
+  `project-setup/README.md`, `project-setup/RELEASE-NOTES-3.0.0-rc.1.md` (3.0.0-rc.1 is a release
+  candidate; host measurements are still pending).
 
 ## `pr-review` — per-PR gate
 
