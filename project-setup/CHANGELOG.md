@@ -16,6 +16,10 @@ toolchain-config integration remain separate work.
 External-review prerequisites also reach installed projects through the root AGENTS.md managed
 block. They remain instructions, not an automated preflight or permission to transmit content.
 
+C15 adds client-visible value and response-path checks to docs-sync, with same-claim repairs
+across permitted living docs. The reviewer adds Adversarial pass checks for hand-copied value
+sets without exhaustiveness guards, preserving normal severity for misread fallbacks.
+
 Manifest schema 3 remains unchanged. V2 validation rejects schema 3;
 this is not a retrofitted pre-write guard in every old command.
 Roll back project state with the tooling used for the update before reverting the installed skill.

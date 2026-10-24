@@ -137,6 +137,25 @@ malformed, reversed or out of order, out of range, or outside the expected patte
 MUST be rejected or marked unknown, never silently repaired, clamped or defaulted. A default
 that changes the meaning of missing data is a finding.
 
+**hand-copied value sets**: in the Adversarial pass, you MUST check sets of values copied by hand
+from another type or module in the repository for a compile-time or test-time exhaustiveness
+guard tied to that authoritative source. Matching today's values is not a drift guard: a later
+source addition can silently fall through to null or another fallback. You MUST suggest a guard
+when it is missing. Copies from sources outside the repository remain subject to ordinary review.
+
+You MUST report a missing guard as a suggestion with severity INFO; on its own it never makes
+the verdict block. A source extension is a drift scenario, not evidence of a current bug.
+If a current consumer misreads the fallback, you MUST instead report that reachable defect with
+its normal classification, severity and verdict effect; this rule MUST NOT downgrade it.
+Use the Consumer pass and Boundary pass to establish the fallback's meaning at its consumers.
+
+You MUST NOT flag a copy under this rule when an existing guard checks exhaustiveness against
+the authoritative source. Generated or directly derived sets are not hand copies. A test that
+only repeats the copied list does not establish exhaustiveness. The guard MAY be a complete
+mapping checked by the compiler or a test against the source's full value set. TypeScript
+examples include `satisfies Record<Union, true>` or an exhaustive switch; no stack is required.
+This prevents missing-guard findings on sets that cannot drift from their source.
+
 **zero is not unknown**: an unreadable count, flag or state MUST NOT be reported as 0, false or ok.
 Every computed share, sum, count, duration or date that is non-finite or outside its destination
 column type becomes unknown; it MUST NOT become 0, be printed as a valid result, or be written

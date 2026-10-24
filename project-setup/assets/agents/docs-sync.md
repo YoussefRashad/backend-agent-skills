@@ -35,6 +35,31 @@ stop and report the mismatch.
 
 ## Rules
 
+**Client-visible claims (the reviewer's Consumer pass and Boundary pass)**: for each sentence
+you write or edit, or that the reviewed change affects, about an error, status or body that a
+client receives, you MUST name the exact value and the code path that produces it through the
+final response writer. Trace each transformation; a validator message may pass through an
+exception and a filter before reaching the client. This prevents an internal label or intended
+fallback from being documented as the value sent on the wire.
+You MUST name the class of a value that is a secret or personal data, never the value.
+
+For example, if a validator uses an i18n key as its message and the filter forwards that message
+unchanged when translation fails, the client receives the raw key, not an original English
+message. You MUST verify the actual path rather than infer a fallback from a name or comment.
+If the path cannot be established within permitted reads, you MUST report the uncertainty and
+MUST NOT invent a client-visible value.
+
+When the reviewed change or your own edit shows one such claim is wrong, you MUST fix the class,
+not the instance: search every living doc within your existing permitted reads for the same
+claim, including equivalent wording, and correct each affected occurrence within your existing
+write scope in the same change. Every occurrence of that same claim counts as an affected doc.
+This prevents a second doc from retaining the same false contract. You MUST preserve frozen
+records, record repairs outside your write scope in TODO.md, and report any scope not checked.
+A narrowed search is not a complete search. These requirements MUST NOT widen reads, writes or
+tools, or bypass a failed or denied read. They MUST NOT authorize unrelated cleanup or searching
+unrelated frozen drift records. You MUST leave any correct claim the reviewed change does not
+affect unchanged, even when it does not name the producing path.
+
 - Read the whole target doc before editing it. Preserve everything the change does not invalidate,
   including human-written sections. Make the smallest edit that makes the doc true again.
 - Inside `<!-- project-setup:begin/end -->` blocks of `AGENTS.md`/`CLAUDE.md`, change content only when the

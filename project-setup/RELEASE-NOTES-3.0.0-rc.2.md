@@ -23,10 +23,12 @@ upload or deployment.
 - Backend-standards adoption preserving project rules, Claude imports and the version stamp.
 - C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.
 - External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.
+- C15 client-visible value and response-path checks, with repairs across permitted living docs.
+- C15 Adversarial pass checks for hand-copied value sets without exhaustiveness guards.
 
 ## Compatibility and rollback
 
-The project manifest schema is 3. C13 and C14 add no policy or apply migration.
+The project manifest schema is 3. C13, C14 and C15 add no policy or apply migration.
 Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.
 This is a compatibility signal, not a retrofitted pre-write guard in every old command.
 Do not use v2 commands to repair a schema-3 project.
@@ -49,7 +51,7 @@ The complete automated gate requires 100 case results: 99 PASS / 0 FAIL / 1 SKIP
 cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.
 No rc.1 case may skip. R91 requires real junction coverage on Windows.
 The rc.1 case names and accept-rc1.mjs are retained for rc.2.
-C13 and C14 contribute through R29 without adding numbered case records.
+C13, C14 and C15 contribute through R29 without adding numbered case records.
 Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;
 the required totals in this document are not a claim that an unrecorded run passed.
 The release builder alone does not establish automated acceptance.
