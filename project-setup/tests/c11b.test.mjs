@@ -192,6 +192,10 @@ const CHANGELOG_ENTRY_LINES = [
   "External-review prerequisites also reach installed projects through the root AGENTS.md managed",
   "block. They remain instructions, not an automated preflight or permission to transmit content.",
   "",
+  "C15 adds client-visible value and response-path checks to docs-sync, with same-claim repairs",
+  "across permitted living docs. The reviewer adds Adversarial pass checks for hand-copied value",
+  "sets without exhaustiveness guards, preserving normal severity for misread fallbacks.",
+  "",
   "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
   "this is not a retrofitted pre-write guard in every old command.",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
@@ -268,10 +272,12 @@ const RELEASE_NOTES_LINES = [
   "- Backend-standards adoption preserving project rules, Claude imports and the version stamp.",
   "- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.",
   "- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.",
+  "- C15 client-visible value and response-path checks, with repairs across permitted living docs.",
+  "- C15 Adversarial pass checks for hand-copied value sets without exhaustiveness guards.",
   "",
   "## Compatibility and rollback",
   "",
-  "The project manifest schema is 3. C13 and C14 add no policy or apply migration.",
+  "The project manifest schema is 3. C13, C14 and C15 add no policy or apply migration.",
   "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
   "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
   "Do not use v2 commands to repair a schema-3 project.",
@@ -294,7 +300,7 @@ const RELEASE_NOTES_LINES = [
   "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
   "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
   "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
-  "C13 and C14 contribute through R29 without adding numbered case records.",
+  "C13, C14 and C15 contribute through R29 without adding numbered case records.",
   "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
   "the required totals in this document are not a claim that an unrecorded run passed.",
   "The release builder alone does not establish automated acceptance.",
@@ -2607,13 +2613,13 @@ async function documentation(context) {
       check(sec !== null && squash(sec) === squash(lines(LIVE_SECTION_LINES)), 'its text is exactly the plan paragraphs after whitespace normalization', sec && squash(sec).slice(0, 200));
       check(live.includes('### C5 review-diff procedure (host evidence pending)') && ls.includes('## 2. Stop conditions'), 'the C5 and C8 procedures and the stop conditions are retained (their own checks keep their text)');
     });
-    await step('plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 31 without duplicates and evaluation 20 is exactly the plan object', async () => {
+    await step('plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 33 without duplicates (C15 appends 32-33) and evaluation 20 is exactly the plan object', async () => {
       let file = null;
       try { file = JSON.parse(readText(skillPath(context, 'evals/evals.json'))); } catch { file = null; }
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array');
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 31 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 31, 'IDs 1 through 31 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 33 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 33 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 33, 'IDs 1 through 33 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33)', file.evals.map((e) => e && e.id));
       check(eq(file.evals[19], EVAL_20), 'evaluation 20 equals the plan object exactly (an expectation, not proof that an agent followed it)', file.evals[19]);
     });
     await step('plan 3.6 and 3.7: the working-tree release builder exists with the pinned public surface; nothing in the documentation claims publication or a real tag', async () => {

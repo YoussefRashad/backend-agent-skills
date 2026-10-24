@@ -21,6 +21,7 @@ import { C11B_IMPLEMENTATIONS } from './c11b.test.mjs';
 import { C12_IMPLEMENTATIONS } from './c12.test.mjs';
 import { C13_IMPLEMENTATIONS } from './c13.test.mjs';
 import { C14_IMPLEMENTATIONS } from './c14.test.mjs';
+import { C15_IMPLEMENTATIONS } from './c15.test.mjs';
 import { RC1_CASE_DESCRIPTORS, CASE_REQUIREMENTS, composeCaseOutcome } from './helpers/rc1-integration.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
@@ -284,6 +285,15 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'RC1/C14/release', name: 'C14 bookkeeping preserves current and historical release contracts' },
     { id: 'V2/C14/contracts', name: 'C14 registration evaluations and prose controls are exact' },
   ],
+  // C15 plan (docs/plans/2026-10-23-project-setup-v3-rc2-c15.md) section C15-11, in its exact order. These are sub-assertions: no complete numbered case is composed from them and the 40-case table is unchanged.
+  C15: [
+    { id: 'A5-templates/C15/docs-sync', name: 'client-visible claims trace the wire and repair every living occurrence' },
+    { id: 'A5-templates/C15/reviewer', name: 'hand-copied value sets require authoritative exhaustiveness guards' },
+    { id: 'A5-templates/C15/preservation', name: 'exact C15 reversals preserve the landed C14 boundary' },
+    { id: 'V2/C15/update', name: 'same-version managed updates deliver both canonical rules safely' },
+    { id: 'RC1/C15/release', name: 'C15 release amendments preserve historical candidate text' },
+    { id: 'V2/C15/contracts', name: 'C15 registration evaluations and result contracts are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -302,6 +312,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C12: Object.freeze([...C12_IMPLEMENTATIONS]),
   C13: Object.freeze([...C13_IMPLEMENTATIONS]),
   C14: Object.freeze([...C14_IMPLEMENTATIONS]),
+  C15: Object.freeze([...C15_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----

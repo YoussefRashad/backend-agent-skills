@@ -27,6 +27,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
+import { reverseSteps as reverseC15 } from './helpers/c15-amendments.mjs';
 
 // C14 (docs/plans/2026-10-23-project-setup-v3-rc2-c14.md, C14-13 and C14-17): the prose checks and their controls moved to the shared test-only module tests/helpers/prose-check.mjs, where the C13-R2 and C13-R3
 // residuals are corrected; C14 amends the files this component reads, so the historical C13 checks first verify the exact C14 amendments (copied from the C14 plan below) and reverse them, and the current-candidate release
@@ -410,6 +411,10 @@ const F_CHANGELOG_ENTRY = [
   "External-review prerequisites also reach installed projects through the root AGENTS.md managed",
   "block. They remain instructions, not an automated preflight or permission to transmit content.",
   "",
+  "C15 adds client-visible value and response-path checks to docs-sync, with same-claim repairs",
+  "across permitted living docs. The reviewer adds Adversarial pass checks for hand-copied value",
+  "sets without exhaustiveness guards, preserving normal severity for misread fallbacks.",
+  "",
   "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
   "this is not a retrofitted pre-write guard in every old command.",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
@@ -445,10 +450,12 @@ const F_RELEASE_NOTES = [
   "- Backend-standards adoption preserving project rules, Claude imports and the version stamp.",
   "- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.",
   "- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.",
+  "- C15 client-visible value and response-path checks, with repairs across permitted living docs.",
+  "- C15 Adversarial pass checks for hand-copied value sets without exhaustiveness guards.",
   "",
   "## Compatibility and rollback",
   "",
-  "The project manifest schema is 3. C13 and C14 add no policy or apply migration.",
+  "The project manifest schema is 3. C13, C14 and C15 add no policy or apply migration.",
   "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
   "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
   "Do not use v2 commands to repair a schema-3 project.",
@@ -471,7 +478,7 @@ const F_RELEASE_NOTES = [
   "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
   "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
   "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
-  "C13 and C14 contribute through R29 without adding numbered case records.",
+  "C13, C14 and C15 contribute through R29 without adding numbered case records.",
   "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
   "the required totals in this document are not a claim that an unrecorded run passed.",
   "The release builder alone does not establish automated acceptance.",
@@ -896,6 +903,13 @@ const AM = {
 // Amendments are verified and reversed only where they stand exactly once at their stated anchor (C14-4 and C14-17): before + neu + after must occur exactly once and neu exactly once. A missing, duplicate, altered or
 // misplaced amendment fails here, before any historical comparison; there is no substring deletion.
 const amendmentOnce = (text, a) => COUNT(text, a.before + a.neu + a.after) === 1 && COUNT(text, a.neu) === 1;
+// C15 (plan C15-10): the exact C15 amendments (D15 in docs-sync, R15 in the reviewer) are verified once at their anchors and reversed, by the helper shared with C14 and C15, before a historical comparison; a missing, duplicated, altered, moved or
+// differently spaced amendment fails here. Records one failure and returns null when one does not verify.
+function revertC15(check, label, text, ids) {
+  const r = reverseC15(text, ids);
+  if (r.text === null) { check(false, `${label}: C15 amendment ${r.failed} does not stand exactly once at its stated anchor`); return null; }
+  return r.text;
+}
 // Verifies and reverses the given amendment IDs in order (the reverse of the order they were applied in); records one failure and returns null when one does not verify.
 function revertC14(check, label, text, ids) {
   let s = text;
@@ -1237,9 +1251,10 @@ async function reviewer(context) {
       check(s.includes('Verdict: **block** (any confirmed CRITICAL/HIGH bug or vulnerability), **approve with changes**, or **approve**.'), 'section 5 keeps the verdict rule: a confirmed HIGH defect blocks');
       check(!/in-range[^.]*(?:amendment|record)[^.]*(?:authorizes|exempts)/i.test(s) && !/a later task will fix/i.test(s), 'no sentence lets an amendment in the reviewed range exempt a finding');
     });
-    await step('the reviewer is the pre-C13 reviewer plus the frozen paragraphs (no other word changed), no heading is added, the dimensions keep their numbers and labels, dimensions 6 and 9 and every other untouched dimension are unchanged, and the section 5 output items stay four', async () => {
-      const diff = additionsOnly(source, before, REVIEWER_PARAGRAPHS);
-      check(diff === null, 'removing the frozen paragraphs leaves exactly the pre-C13 reviewer (whitespace aside)', diff);
+    await step('the reviewer is the pre-C13 reviewer plus the frozen paragraphs (no other word changed; C15 amendment R15 is verified once at its anchor and reversed for this comparison only), no heading is added, the dimensions keep their numbers and labels, dimensions 6 and 9 and every other untouched dimension are unchanged, and the section 5 output items stay four', async () => {
+      const noC15 = revertC15(check, 'reviewer', source, ['R15']);
+      const diff = noC15 === null ? 'C15 amendment R15 does not stand exactly once at its stated anchor' : additionsOnly(noC15, before, REVIEWER_PARAGRAPHS);
+      check(diff === null, 'removing the C15 block and the frozen paragraphs leaves exactly the pre-C13 reviewer (whitespace aside)', diff);
       const headings = (t) => LF(t).split('\n').filter((l) => /^#{1,6} /.test(l));
       check(eq(headings(source), headings(before)), 'no heading is added, removed or renamed', headings(source));
       const bp = reviewerParts(before); const sp = reviewerParts(source);
@@ -1349,10 +1364,11 @@ async function docsSync(context) {
       check(squash(source).includes('Docs-sync edits documentation only on the user\'s trusted checked-out branch.') && squash(source).includes('You may edit documentation files only.'), 'documentation-only writes and the trusted checked-out-branch scope are preserved');
       check(squash(source).includes('never add or remove markers') && /Never use an MCP server, connector, browser or remote service/.test(squash(source)), 'managed markers stay protected and no connector is permitted');
     });
-    await step('docs-sync is the pre-C13 docs-sync plus the mapping row and the frozen paragraphs (no other word changed; C14 amendment H is verified once at its anchor and reversed for this comparison only), and its new prose is ASCII within 100 columns', async () => {
-      const noC14 = revertC14(check, 'docs-sync', source, ['H']);
-      const diff = noC14 === null ? 'C14 amendment H does not stand exactly once at its anchor' : additionsOnly(noC14, before, [...P.docsRule, squash(F_DOCS_ROW)]);
-      check(diff === null, 'removing the C14 subsection, the frozen row and the paragraphs leaves exactly the pre-C13 docs-sync (whitespace aside)', diff);
+    await step('docs-sync is the pre-C13 docs-sync plus the mapping row and the frozen paragraphs (no other word changed; C15 amendment D15, then C14 amendment H, are verified once at their anchors and reversed for this comparison only), and its new prose is ASCII within 100 columns', async () => {
+      const noC15 = revertC15(check, 'docs-sync', source, ['D15']);
+      const noC14 = noC15 === null ? null : revertC14(check, 'docs-sync', noC15, ['H']);
+      const diff = noC14 === null ? 'C15 amendment D15 or C14 amendment H does not stand exactly once at its anchor' : additionsOnly(noC14, before, [...P.docsRule, squash(F_DOCS_ROW)]);
+      check(diff === null, 'removing the C15 block, the C14 subsection, the frozen row and the paragraphs leaves exactly the pre-C13 docs-sync (whitespace aside)', diff);
       check(eq(refsOf(source).sort(), refsOf(before).sort()), 'no new generated-file reference in docs-sync', refsOf(source));
       const issues = newProseIssues(source, before);
       check(issues.length === 0, 'every newly written line is ASCII and at most 100 columns (the table row and the preserved C12 paragraphs excepted; prose inside a text fence is checked too)', issues.slice(0, 6));
@@ -2002,13 +2018,13 @@ const AMENDED_LITERALS = [
   ['tests/c11b.test.mjs', [
     "const CANDIDATE_VERSION = '3.0.0-rc.2';", 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);', 'const CURRENT_ROLLBACK_TEXT =',
     '"# project-setup 3.0.0-rc.2",', '"RELEASE-NOTES-3.0.0-rc.2.md",', 'node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>', "'# project-setup 3.0.0-rc.2', '', 'Fixture notes without any object identifier.'",
-    'const ROLLBACK_TEXT = \'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', "const WORLD_TAG = 'c11b-fixture-rc1';", "['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']", 'file.evals.length === 31',
+    'const ROLLBACK_TEXT = \'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', "const WORLD_TAG = 'c11b-fixture-rc1';", "['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']", 'file.evals.length === 33',
   ], [
-    "const CANDIDATE_VERSION = '3.0.0-rc.1';", 'file.evals.length === 21', 'file.evals.length === 26',
+    "const CANDIDATE_VERSION = '3.0.0-rc.1';", 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31',
   ]],
-  ['tests/c8.test.mjs', ['file.evals.length === 31', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 21', 'file.evals.length === 26', "rollback1: 'Roll back project state with the rc.1 tooling"]],
-  ['tests/c9.test.mjs', ['file.evals.length === 31'], ['file.evals.length === 21', 'file.evals.length === 26']],
-  ['tests/c12.test.mjs', ["'3.0.0-rc.2\\n'", "REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14'", 'file.evals.length === 31'], ["v.toString('latin1') === '3.0.0-rc.1\\n'", 'file.evals.length === 21', 'file.evals.length === 26']],
+  ['tests/c8.test.mjs', ['file.evals.length === 33', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', "rollback1: 'Roll back project state with the rc.1 tooling"]],
+  ['tests/c9.test.mjs', ['file.evals.length === 33'], ['file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31']],
+  ['tests/c12.test.mjs', ["'3.0.0-rc.2\\n'", "REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15'", 'file.evals.length === 33'], ["v.toString('latin1') === '3.0.0-rc.1\\n'", 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31']],
 ];
 async function release(context) {
   startClock(context);
@@ -2135,7 +2151,7 @@ async function release(context) {
       for (const a of ['"README.md"', '"RELEASE-NOTES-2.0.0.md"', '"RELEASE-NOTES-3.0.0-rc.1.md"', '"RELEASE-NOTES-3.0.0-rc.2.md"', '"RELEASE-NOTES.md"', '"install/"', '"tests/"', '"evals/"', '".git/"']) check(absent.includes(a), `PAYLOAD_ABSENT lists ${a}`);
       check(c11b.includes('PAYLOAD_INVENTORY.length === 60'), 'the 60-file length assertion is kept');
     });
-    await step('plan C13-16: the amended tests carry the current literals (rc.2 candidate, 31 evaluations, the current rollback sentence) and keep the historical ones (rc.1 fixture tags, malformed parser bytes, the live acceptance section, the rc.1 constants)', async () => {
+    await step('plan C13-16: the amended tests carry the current literals (rc.2 candidate, 33 evaluations, the current rollback sentence) and keep the historical ones (rc.1 fixture tags, malformed parser bytes, the live acceptance section, the rc.1 constants)', async () => {
       for (const [rel, must, mustNot] of AMENDED_LITERALS) {
         const t = text(rel);
         check(t !== null, `${rel} is readable`);
@@ -2224,7 +2240,7 @@ async function contracts(context) {
       check(Object.isFrozen(C13_IMPLEMENTATIONS) && eq(C13_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C13_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C13_IMPLEMENTATIONS is a frozen array of the eight IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {});
       const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14']), 'both registries list the earlier components unchanged (C12 included), then C13 and then C14 (C14 appends to the registry tail)', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15']), 'both registries list the earlier components unchanged (C12 included), then C13, C14 and C15 (C15 is the appended tail)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
     });
     await step('plan C13-18: registerRc1Cases still registers exactly the 40 ordered complete cases, adds no C13 case, executes nothing, writes nothing and starts no process; the inventories keep 40 cases and 100 required results', async () => {
@@ -2265,12 +2281,12 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C13-15, I13-1 and C14-17: evals/evals.json holds 31 ordered unique evaluations (C14 appends 27-31 and asserts them), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order', async () => {
+    await step('plan C13-15, I13-1 and C14-17: evals/evals.json holds 33 ordered unique evaluations (C14 appends 27-31 and asserts them; C15 appends 32-33), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order', async () => {
       const file = readJson(skillPath(context, 'evals/evals.json'));
       check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
       if (!file || !Array.isArray(file.evals)) return;
       const ids = file.evals.map((e) => e && e.id);
-      check(file.evals.length === 31 && eq(ids, Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(ids).size === 31, 'ids 1 through 31 in order without duplicates (C14 appends 27-31)', ids);
+      check(file.evals.length === 33 && eq(ids, Array.from({ length: 33 }, (_, i) => i + 1)) && new Set(ids).size === 33, 'ids 1 through 33 in order without duplicates (C14 appends 27-31, C15 appends 32-33)', ids);
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 20)))) === EVALS_1_20_JSON_SHA, 'evaluations 1-20 are unchanged from the committed file (canonical JSON digest)');
       check(file.evals[20] && sha(Buffer.from(JSON.stringify(file.evals[20]))) === EVAL_21_JSON_SHA, 'evaluation 21 is unchanged (its C12 assertion is not redefined by the appended evaluations)');
       const e22 = amendedEval22();

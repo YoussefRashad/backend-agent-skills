@@ -25,6 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
+import { applySteps as applyC15, reverseSteps as reverseC15 } from './helpers/c15-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -709,6 +710,10 @@ const F_CHANGELOG_ENTRY = [
   "External-review prerequisites also reach installed projects through the root AGENTS.md managed",
   "block. They remain instructions, not an automated preflight or permission to transmit content.",
   "",
+  "C15 adds client-visible value and response-path checks to docs-sync, with same-claim repairs",
+  "across permitted living docs. The reviewer adds Adversarial pass checks for hand-copied value",
+  "sets without exhaustiveness guards, preserving normal severity for misread fallbacks.",
+  "",
   "Manifest schema 3 remains unchanged. V2 validation rejects schema 3;",
   "this is not a retrofitted pre-write guard in every old command.",
   "Roll back project state with the tooling used for the update before reverting the installed skill.",
@@ -744,10 +749,12 @@ const F_RELEASE_NOTES = [
   "- Backend-standards adoption preserving project rules, Claude imports and the version stamp.",
   "- C13 prose-check fixes for command-prefixed prose and mixed Markdown fence delimiters.",
   "- External-review exclusion and scanning prerequisites in installed root AGENTS.md instructions.",
+  "- C15 client-visible value and response-path checks, with repairs across permitted living docs.",
+  "- C15 Adversarial pass checks for hand-copied value sets without exhaustiveness guards.",
   "",
   "## Compatibility and rollback",
   "",
-  "The project manifest schema is 3. C13 and C14 add no policy or apply migration.",
+  "The project manifest schema is 3. C13, C14 and C15 add no policy or apply migration.",
   "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
   "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
   "Do not use v2 commands to repair a schema-3 project.",
@@ -770,7 +777,7 @@ const F_RELEASE_NOTES = [
   "cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can.",
   "No rc.1 case may skip. R91 requires real junction coverage on Windows.",
   "The rc.1 case names and accept-rc1.mjs are retained for rc.2.",
-  "C13 and C14 contribute through R29 without adding numbered case records.",
+  "C13, C14 and C15 contribute through R29 without adding numbered case records.",
   "Actual automated results, environment and evidence paths are recorded by accept-rc1.mjs;",
   "the required totals in this document are not a claim that an unrecorded run passed.",
   "The release builder alone does not establish automated acceptance.",
@@ -1115,15 +1122,23 @@ function checkAmendedFile(check, context, fx, rel) {
   check(byteConvention(bytes) === null, `${rel}: LF only, no BOM and exactly one final LF (C14-4)`, byteConvention(bytes));
   if (bytes === null) return null;
   const text = bytes.toString('utf8');
+  // C15 (plan C15-10): the docs-sync path first verifies and reverses the exact C15 amendment D15 into a separate historical working value; `text` stays the current bytes that the callers read.
+  let historical = text;
+  if (rel === 'assets/agents/docs-sync.md') {
+    const r15 = reverseC15(text, ['D15']);
+    check(r15.text !== null, `${rel}: C15 amendment D15 stands exactly once at its stated anchor and reverses (before H is checked)`, r15.failed);
+    if (r15.text === null) return { text, reversed: null };
+    historical = r15.text;
+  }
   // Each amendment is checked at its turn: an amendment adjacent to a later one (D2 and D3) is verified once the later one has been reversed, never against text that still carries its neighbor.
-  let running = text;
+  let running = historical;
   for (const id of ids) {
     const once = amendmentOnce(running, AM[id]);
     check(once, `${rel}: amendment ${id} stands exactly once at its stated anchor`);
     if (!once) break;
     running = running.replace(AM[id].before + AM[id].neu + AM[id].after, () => AM[id].before + AM[id].old + AM[id].after);
   }
-  const r = reverseIds(text, ids);
+  const r = reverseIds(historical, ids);
   check(r.text !== null, `${rel}: the amendments reverse in order ${ids.join(', ')}`, r.failed);
   const pre = fx.files[rel];
   check(pre !== undefined && sha(pre) === pin, `${rel}: the committed fixture holds the pre-change bytes (raw SHA-256 pinned by plan C14-16)`, pre && sha(pre));
@@ -1173,7 +1188,7 @@ async function docsSync(context) {
     const fx = loadFixture(context);
     const pre = fx.files[DOCS_REL] === undefined ? null : fx.files[DOCS_REL].toString('utf8');
     let amended = null;
-    await step('amendment H stands exactly once directly before "### Bounded reads" and reversing it gives the pre-change docs-sync byte for byte (raw SHA-256 pinned by plan C14-16); the file keeps the C14-4 byte convention', async () => {
+    await step('amendment H stands exactly once directly before "### Bounded reads" and, after exactly reversing C15 amendment D15, reversing it gives the pre-change docs-sync byte for byte (raw SHA-256 pinned by plan C14-16); the file keeps the C14-4 byte convention', async () => {
       amended = checkAmendedFile(check, context, fx, DOCS_REL);
     });
     if (amended === null || pre === null) { check(false, `${DOCS_REL} and the pre-change fixture are readable`); return; }
@@ -1222,7 +1237,8 @@ async function docsSync(context) {
       check(!/launcher/i.test(source) && !/review lane/i.test(source) && H_NO_SKILL_DIR(source), 'no launcher, no review lane, no <SKILL_DIR> and no data/secret-paths.json (C12 independence)');
       check(!NO_CONFINEMENT_CLAIM.test(source) && !NO_CONFINEMENT_CLAIM.test(HP.join(' ')), 'neither the hook nor docs-sync claims junction detection, atomic no-follow reads or filesystem confinement (residual C14-R1)');
       const reviewer = readBytes(skillPath(context, 'assets/agents/reviewer.md'));
-      check(reviewer !== null && NH(reviewer) === REVIEWER_NH && !NO_CONFINEMENT_CLAIM.test(reviewer.toString('utf8')), 'the canonical reviewer is unchanged (its project-rules hook included) and claims no confinement either');
+      const reviewerNoC15 = reviewer === null ? { text: null, failed: 'unreadable' } : reverseC15(reviewer.toString('utf8'), ['R15']); // C15 (plan C15-10): the exact R15 is verified and reversed before the historical comparison
+      check(reviewer !== null && reviewerNoC15.text !== null && NH(reviewerNoC15.text) === REVIEWER_NH && !NO_CONFINEMENT_CLAIM.test(reviewer.toString('utf8')), 'the canonical reviewer is unchanged after reversing exact C15 amendment R15 (its project-rules hook included) and claims no confinement either', reviewerNoC15.failed);
       for (const [rel, digest] of Object.entries(WRAPPER_NH)) { const b = readBytes(skillPath(context, rel)); check(b !== null && NH(b) === digest, `${rel} is unchanged (agent names and wrapper targets)`); }
     });
     await step('the new prose is ASCII within 100 columns (lines of the hook and every other new line), including prose in text and unlabeled fences, and the shared controls prove the checks can fail', async () => {
@@ -2523,12 +2539,13 @@ async function release(context) {
     await step('plan C14-14 amendment L: the rc.2 changelog entry gains exactly the two new paragraphs after the sentence ending "generated testing standards.", the rc.1 entry and the historical suffix stay byte for byte, and the new lines are ASCII within 100 columns', async () => {
       const cl = text('CHANGELOG.md');
       if (cl === null) { check(false, 'CHANGELOG.md is readable'); return; }
-      check(amendmentOnce(cl, AM.L), 'L stands exactly once at its anchor');
+      const noL15 = reverseC15(cl, ['L15']); // C15 (plan C15-10): the exact L15 is verified and reversed first; C14's L is then verified, and reversed, on that text
+      check(noL15.text !== null && amendmentOnce(noL15.text, AM.L), 'L stands exactly once at its anchor (after exactly reversing C15 amendment L15)', noL15.failed);
       const head = `# Changelog\n\n${NEW_CHANGELOG_ENTRY}`;
       check(cl.startsWith(head), 'the file starts with "# Changelog", a blank line, the exact current rc.2 entry and one blank line', cl.slice(0, 200));
-      const reversed = reverseOne(cl, AM.L);
-      check(reversed !== null && reversed.startsWith(`# Changelog\n\n${PRE_CHANGELOG_ENTRY}`), 'reversing L gives exactly the pre-C14 rc.2 entry followed by the rest', reversed && reversed.slice(0, 120));
-      check(applyOne(`# Changelog\n\n${PRE_CHANGELOG_ENTRY}`, AM.L) === head, 'the frozen blocks turn the pre-C14 entry into the current one (the constants agree)');
+      const reversed = noL15.text === null ? null : reverseOne(noL15.text, AM.L);
+      check(reversed !== null && reversed.startsWith(`# Changelog\n\n${PRE_CHANGELOG_ENTRY}`), 'reversing L15 and then L gives exactly the pre-C14 rc.2 entry followed by the rest', reversed && reversed.slice(0, 120));
+      check(applyC15(applyOne(`# Changelog\n\n${PRE_CHANGELOG_ENTRY}`, AM.L), ['L15']) === head, 'the frozen blocks turn the pre-C14 entry into the current one (the constants agree: C14 L, then C15 L15)');
       const afterRc2 = cl.startsWith(head) ? cl.slice(head.length) : '';
       const rc1End = afterRc2.indexOf('## 2.0.0\n');
       check(afterRc2.startsWith('## 3.0.0-rc.1\n') && rc1End > 0 && NH(afterRc2.slice(0, rc1End)) === RC1_CHANGELOG_ENTRY_NH, 'the complete rc.1 entry follows byte for byte (its pinned digest)');
@@ -2547,24 +2564,27 @@ async function release(context) {
       check(F_RELEASE_NOTES.every((l) => l.length <= 100), 'every line is at most 100 columns', F_RELEASE_NOTES.filter((l) => l.length > 100));
       check(!NOTES_HEX_RE.test(NEW_NOTES_TEXT), 'the notes carry no standalone 40- or 64-hex ID');
       const notes = raw === null ? '' : raw.toString('utf8');
-      let running = notes;
+      const noC15 = reverseC15(notes, ['N15c', 'N15b', 'N15a']); // C15 (plan C15-10): N15c, N15b and N15a are verified and reversed first; C14's amendments are then reversed in their existing order
+      check(noC15.text !== null, 'C15 amendments N15c, N15b and N15a stand exactly once at their anchors and reverse in that order', noC15.failed);
+      const historicalNotes = noC15.text === null ? notes : noC15.text;
+      let running = historicalNotes;
       for (const id of [...NOTES_IDS].reverse()) {
         const once = amendmentOnce(running, AM[id]);
         check(once, `amendment ${id} stands exactly once at its anchor (checked at its turn in the reversal)`);
         if (!once) break;
         running = reverseOne(running, AM[id]);
       }
-      const back = reverseIds(notes, [...NOTES_IDS].reverse());
-      check(back.text === PRE_NOTES_TEXT, 'reversing N6 to N1 gives exactly the pre-C14 notes', back.failed);
+      const back = reverseIds(historicalNotes, [...NOTES_IDS].reverse());
+      check(noC15.text !== null && back.text === PRE_NOTES_TEXT, 'reversing N15c, N15b and N15a and then N6 to N1 gives exactly the pre-C14 notes', back.failed);
       let fwd = PRE_NOTES_TEXT; for (const id of NOTES_IDS) fwd = fwd === null ? null : applyOne(fwd, AM[id]);
-      check(fwd === NEW_NOTES_TEXT, 'the frozen blocks turn the pre-C14 notes into the current text (the constants agree)');
+      check(fwd !== null && applyC15(fwd, ['N15a', 'N15b', 'N15c']) === NEW_NOTES_TEXT, 'the frozen blocks turn the pre-C14 notes into the current text (the constants agree: C14 N1 to N6, then C15 N15a to N15c)');
       const headings = NEW_NOTES_TEXT.split('\n').filter((l) => /^## /.test(l)).map((l) => l.slice(3));
       check(eq(headings, NOTES_SECTIONS), 'the six section names are unchanged and in order', headings);
       const sec = (h) => squash(sectionOf(notes, h) || '');
       const compat = sec('## Compatibility and rollback');
-      check(compat.startsWith('The project manifest schema is 3. C13 and C14 add no policy or apply migration.') && compat.includes(Q6_TEXT) && compat.includes(CURRENT_ROLLBACK_TEXT), 'the manifest schema statement now names C13 and C14, and the Q6 and rollback paragraphs are unchanged');
+      check(compat.startsWith('The project manifest schema is 3. C13, C14 and C15 add no policy or apply migration.') && compat.includes(Q6_TEXT) && compat.includes(CURRENT_ROLLBACK_TEXT), 'the manifest schema statement now names C13, C14 and C15, and the Q6 and rollback paragraphs are unchanged');
       check(compat.includes('Keeping an old canonical file leaves that instruction update incomplete. Project-owned reviewer and docs-sync rules remain intact. A missing docs-sync project file is created only when content is explicitly approved. Existing extension files are preserved; routine updates do not regenerate them.'), 'the compatibility paragraph says that project-owned reviewer and docs-sync rules stay, a missing project file is created only for approved content, and routine updates do not regenerate extensions');
-      check(sec('## Verification').includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.') && sec('## Verification').includes('C13 and C14 contribute through R29 without adding numbered case records.'), 'the verification totals are exact and C13 and C14 contribute through R29 without numbered case records');
+      check(sec('## Verification').includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.') && sec('## Verification').includes('C13, C14 and C15 contribute through R29 without adding numbered case records.'), 'the verification totals are exact and C13, C14 and C15 contribute through R29 without numbered case records');
       check(sec('## Pending host measurements').includes('TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling; A3 trusted-checkout live review; A5 host negative capability.') && sec('## Pending host measurements').includes('These measurements remain pending and block final 3.0.0, not rc.2 implementation acceptance.'), 'the pending host measurements are exact and stay pending');
       const lim = sec('## Limitations');
       check(lim.includes('External-review prerequisites are installed in the root AGENTS.md managed block. No wrapper or automated preflight enforces them, and canonical reviewer and docs-sync instructions still prohibit external transmission. Missing trusted defaults or policy evidence prevents external review under these instructions. If trusted shipped defaults cannot be located, for example because project-setup is not installed on the machine, the external-review tool is not run.'), 'the external-review limitation paragraph is exact (installed, no wrapper or automated preflight, no transmission permission, missing defaults prevent review)');
@@ -2635,11 +2655,11 @@ const EVAL_24_OLD_SENTENCE = F_EVAL24_OLD.join(' ');
 const EVAL_24_NEW_SENTENCE = F_EVAL24_NEW.join(' ');
 // What each amended earlier test file must say about the current candidate (C14-17): the literals that move and the stale ones that must be gone. Historical literals stay explicitly historical.
 const AMENDED_LITERALS = [
-  ['tests/c8.test.mjs', ['file.evals.length === 31', 'Array.from({ length: 31 }', 'C13 appends 22-26, C14 appends 27-31'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21']],
-  ['tests/c9.test.mjs', ['file.evals.length === 31', 'Array.from({ length: 31 }', 'C13 appends 22-26, C14 appends 27-31'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21']],
-  ['tests/c11b.test.mjs', ['file.evals.length === 31', 'Array.from({ length: 31 }', 'C13 appends 22-26, C14 appends 27-31', 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21']],
-  ['tests/c12.test.mjs', ['file.evals.length === 31', 'Array.from({ length: 31 }', "REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14'", 'C14 appends 27-31'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21']],
-  ['tests/c13.test.mjs', ['file.evals.length === 31', "[...REGISTRY_ORDER_BEFORE, 'C13', 'C14']", '31 evaluations', 'slice(21, 26)', "const C11B_PIN_VALUES = {", "from './helpers/prose-check.mjs'"], ['26 evaluations', 'Array.from({ length: 26 }', "[...REGISTRY_ORDER_BEFORE, 'C13']"]],
+  ['tests/c8.test.mjs', ['file.evals.length === 33', 'Array.from({ length: 33 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }']],
+  ['tests/c9.test.mjs', ['file.evals.length === 33', 'Array.from({ length: 33 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }']],
+  ['tests/c11b.test.mjs', ['file.evals.length === 33', 'Array.from({ length: 33 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33', 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }']],
+  ['tests/c12.test.mjs', ['file.evals.length === 33', 'Array.from({ length: 33 }', "REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15'", 'C14 appends 27-31, C15 appends 32-33'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }']],
+  ['tests/c13.test.mjs', ['file.evals.length === 33', "[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15']", '33 evaluations', 'slice(21, 26)', "const C11B_PIN_VALUES = {", "from './helpers/prose-check.mjs'"], ['26 evaluations', 'Array.from({ length: 26 }', "[...REGISTRY_ORDER_BEFORE, 'C13']", '31 evaluations', 'Array.from({ length: 31 }', "[...REGISTRY_ORDER_BEFORE, 'C13', 'C14']"]],
 ];
 // An independent table for the prose checks, written without the helper's own control list: [name, lines, expected [lineNo, kind]].
 const DASH = String.fromCharCode(0x2014);
@@ -2719,7 +2739,7 @@ async function contracts(context) {
       check(Array.isArray(impls) && Object.isFrozen(impls) && impls.length === C14_IMPLEMENTATIONS.length && impls.every((x, i) => x === C14_IMPLEMENTATIONS[i]), 'COMPONENT_IMPLEMENTATIONS.C14 holds exactly the C14_IMPLEMENTATIONS objects in order (identity preserved)', impls && impls.length);
       check(Object.isFrozen(C14_IMPLEMENTATIONS) && eq(C14_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C14_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C14_IMPLEMENTATIONS is a frozen array of the eight IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {}); const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C14']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C14']), 'both registries list the earlier components unchanged (C13 included) and then C14 as the appended tail', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C14', 'C15']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C14', 'C15']), 'both registries list the earlier components unchanged (C13 included) and then C14 and C15 (C15 is the appended tail)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
       check(eq(rc.COMPONENT_ASSERTIONS.C13.map((d) => d.id), ['A5-templates/C13/reviewer', 'A5-templates/C13/docs-sync', 'A5-templates/C13/external-review', 'A5-templates/C13/claude', 'A5-templates/C13/development-rules', 'V2/C13/update', 'RC1/C13/release', 'V2/C13/contracts']), 'the eight C13 descriptor IDs are unchanged');
     });
@@ -2761,12 +2781,12 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C14-17 and C14-19: evals/evals.json holds exactly 31 ordered unique evaluations; 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order', async () => {
+    await step('plan C14-17 and C14-19: evals/evals.json holds exactly 33 ordered unique evaluations (C15 appends 32-33); 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order', async () => {
       const file = readJson(skillPath(context, 'evals/evals.json'));
       check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
       if (!file || !Array.isArray(file.evals)) return;
       const ids = file.evals.map((e) => e && e.id);
-      check(file.evals.length === 31 && eq(ids, Array.from({ length: 31 }, (_, i) => i + 1)) && new Set(ids).size === 31, 'exactly ids 1 through 31 in order without duplicates (an earlier or a larger count is wrong)', ids);
+      check(file.evals.length === 33 && eq(ids, Array.from({ length: 33 }, (_, i) => i + 1)) && new Set(ids).size === 33, 'exactly ids 1 through 33 in order without duplicates (an earlier or a larger count is wrong)', ids);
       const dig = (o) => sha(Buffer.from(JSON.stringify(o)));
       check(dig(file.evals.slice(0, 20)) === EVALS_1_20_JSON_SHA, 'evaluations 1-20 are unchanged (canonical JSON digest)');
       check(file.evals[20] && dig(file.evals[20]) === EVAL_21_JSON_SHA, 'evaluation 21 is unchanged');
@@ -2782,7 +2802,7 @@ async function contracts(context) {
         const got = file.evals[26 + i];
         check(eq(got, w) && eq(Object.keys(got || {}), ['id', 'name', 'prompt', 'files', 'expected_output']), `evaluation ${27 + i} equals the plan object exactly, with its keys in plan order (an expectation, not observed agent behavior)`, got && got.name);
       });
-      check(eq(file.evals.slice(26).map((e) => e.name), ['docs-sync-project-rules', 'backend-standards-adoption', 'project-rules-managed-update', 'project-rules-input-boundaries', 'installed-external-review-prerequisites']), 'the names of 27-31 are the plan names in order');
+      check(eq(file.evals.slice(26, 31).map((e) => e.name), ['docs-sync-project-rules', 'backend-standards-adoption', 'project-rules-managed-update', 'project-rules-input-boundaries', 'installed-external-review-prerequisites']), 'the names of 27-31 are the plan names in order');
       check(/read-confinement residual|junctions or supplies atomic no-follow reads/.test(JSON.stringify(file.evals[29])) && /Does not claim that either project-rules hook detects junctions or supplies atomic no-follow reads/.test(file.evals[29].expected_output), 'evaluation 30 carries the C14-R1 residual: no junction detection and no atomic no-follow read is claimed');
     });
     await step('plan C14-13: the shared prose helper is test-only and pure (no import, file access, process launch, output or registration), exports exactly its documented names, is imported by both C13 and C14 from the same module, and neither component keeps its own copy of the parser', async () => {
