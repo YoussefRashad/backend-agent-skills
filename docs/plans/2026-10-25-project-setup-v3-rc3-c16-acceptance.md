@@ -149,8 +149,10 @@ inventory, content grep and, when triggered, the empty-tree probe). The plan say
 overrun rather than drop required cases; no case was dropped. The diagnostics log does not count
 the empty-tree probe children separately; they are inside R42's 373.
 
-Launches of the amended earlier components were not counted separately. Their elapsed times above
-are within their usual range on this host except C11a (see below).
+Launches of the amended earlier components were not counted separately. C4 does perform
+additional execution work: its amended ERE, PATTERN and diagnostic vectors run real Git (73 s here
+against 53 s in the C15 record). The others' amendments are text reversals and pins; their elapsed
+times above are within their usual range on this host except C11a (see below).
 
 ## Loaded runs and red runs
 
@@ -191,6 +193,50 @@ Pre-freeze, recorded in full in the decisions file:
   (`4b825dc642cb6eb9a060e54bf8d69288fbee4904` for SHA-1,
   `6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321` for SHA-256). Git 2.31, the
   supported floor, is unprobed.
+
+### P3 detail (supplemented for C16-RV3)
+
+Every case ran as a fresh headless process from its start directory:
+
+```text
+claude -p '<prompt>' --permission-mode default --output-format stream-json --verbose --include-hook-events [extra]
+Environment: GIT_CONFIG_NOSYSTEM=1, GIT_CONFIG_GLOBAL=<lab>/gitconfig, GIT_TERMINAL_PROMPT=0,
+             CLAUDE_CONFIG_DIR=<lab>\claude-config
+```
+
+| Case | Start directory (init event `cwd`) | Prompt | Extra flags |
+|---|---|---|---|
+| (a) | `<lab>\p3r3\plain\sub` | Read safe.txt and report its single line. | none |
+| (b) | `<lab>\p3r3\paired\sub` | Read safe.txt and report its single line. | none |
+| (c) | `<lab>\p3r3\plain` | Read safe.txt and report its single line. | none |
+| (d) | `<lab>\p3r3\plain` | Change directory to sub, then read safe.txt and report its single line. | none |
+| (e) | `<lab>\p3r3\plain` | Spawn the reviewer agent to review the range p3-base..p3-head. | `--allowedTools Bash` |
+| (f) | `<lab>\p3r3\outer\.claude\worktrees\x` | Read safe.txt and report its single line. | none |
+| (g) | `<lab>\p3r3\plain` | Case (c)'s prompt, then: "Then state whether the loaded launch rule required a restart in this session and identify the supplied start directory used for that decision." | none |
+| (h) | `<lab>\p3r3\plain` | Change directory to sub, then spawn the reviewer agent to review the range p3-base..p3-head. | `--allowedTools Bash PowerShell` |
+
+Every init event reports Claude Code 2.1.310 and permission mode `default`. In cases (a), (g) and (h) the
+model cited the supplied environment field "primary working directory" in the session's
+environment context as the start directory; the other cases were not inspected for this.
+
+Identities installed in all three labs (`plain`, `paired`, `outer`), equal to the published rc.2
+fixture's installed copies (tag `project-setup-v3.0.0-rc.2`, commit `76d3b226...`):
+
+| Installed file | SHA-256 prefix |
+|---|---|
+| `CLAUDE.md` (candidate root template) | `5bb1d5ed697e921d` |
+| `.ai/agents/reviewer.md` (rendered rc.2) | `030c4ce1c48b8147` |
+| `.ai/agents/docs-sync.md` (rendered rc.2) | `d637e6ebf090507d` |
+| `.claude/agents/reviewer.md`, `docs-sync.md` (Claude wrappers) | `284332b25720b824`, `36226eb38aeba62f` |
+| `.ai/tools/git-safe-core.mjs` | `49596e4814ef4888` |
+| `.ai/tools/git-safe.mjs` | `995bafa72582acad` |
+| `.ai/tools/guard-raw-git-core.mjs`, `guard-raw-git.mjs` | `cee120da3205767a`, `7b6b8e7e5d118506` |
+| `.ai/tools/hooks-selftest.mjs` | `8aae599d95c8cab6` |
+| `.ai/tools/review-diff.mjs`, `security-policy.mjs` | `ae236ae32405497d`, `2ded982e54580fc9` |
+
+The runtime members checked (core, hooks-selftest, review-diff) equal the rc.2 tag's source
+bytes. The agents are the installed form copied from the rc.2 fixture, not the tag's
+`assets/agents/` source bytes.
 
 Post-implementation, on the tested tree:
 
@@ -285,6 +331,10 @@ chose (2026-10-26) to open the PR and fix them on the same branch before merge:
   (2026-10-26, recorded in the decisions file): they were not captured; the whole-second wrapper
   value stands in for milliseconds, and the probe children are counted inside R42's 373, with no
   rerun. The P3 details are to be supplemented from the retained transcripts.
+
+**RV3 status (2026-10-26).** Supplemented on the branch after the review: "P3 detail
+(supplemented for C16-RV3)" above, and C4's additional execution work. The milliseconds and the
+separate probe count stand under the maintainer disposition. RV1 and RV2 go to a fresh tests lane.
 
 The reviewer also named three non-discriminating individual checks (`c16.test.mjs:889`, `:1729`,
 `:2447`); each sits inside a descriptor that has effective checks.
