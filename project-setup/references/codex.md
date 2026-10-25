@@ -127,6 +127,36 @@ The skill neither runs nor writes a launcher, and never changes user-level Codex
   Use `--no-daemon`. Do not copy `CODEX_HOME` to a short path: it duplicates credentials, and a copied folder outside
   the user profile inherits non-private permissions, which Codex rejects.
 
+## Host measurements dated 2026-10-24/25
+
+The rc.2 measurements used codex-cli 0.163.0 on Windows 11 Pro 10.0.26100 with the elevated
+Windows sandbox. The default CODEX_HOME was used with the approved isolated lane setup;
+an isolated home's elevated sandbox could not complete startup.
+
+| Item | Observation |
+|---|---|
+| Root critical rules | PASS: the requested first critical-rules bullet matched. |
+| A3 artifact and stdout | PASS: review bytes matched; status and stash were unchanged. |
+| A3 dirty trusted checkout | PASS: committed-head output excluded local changes. |
+| A3 local-worktree mode | PASS: intended local changes appeared, protected files were absent, and index bytes were unchanged. |
+| Equal-head warning | PASS: present for equal resolved head and absent for the other range. |
+| L10 review completeness | FAIL: both Codex reviews were incomplete; change-1's lost update was not a finding. |
+| Secret shell read, no profile | INCONCLUSIVE: failure cause was not captured. |
+| Secret subprocess, no profile | FAIL: all six canaries were readable, including late-file coverage. |
+| R44 profile row | BLOCKED: isolated elevated-sandbox startup hung after UAC approval; deny-read enforcement remains unverified. |
+| A5 positive control | PASS: the approved parent echo tool returned its control response. |
+| A5 negative capability | INCONCLUSIVE: no forced host-refusal result was obtained. |
+| MCP configuration override | PASS: list output reflected enabled=false with the override; this is configuration evidence only. |
+| macOS / Linux / WSL2 | TO VERIFY for these measurements. |
+
+The 2026-10-25 L10 re-probe corrected the original diagnosis: an absent selector is filtered
+silently. The failure came from BRE parsing of an unbalanced \(, and a|b could return an
+empty success because BRE treats the vertical bar literally. C16 changes grep to ERE.
+
+Both L10 ranges must be re-measured after rc.3. Configuration checks, static instruction
+tests and model statements do not establish review completeness or host negative capability.
+The older 0.160.1 observations above remain historical observations of that configuration.
+
 ## Load verification (Codex session)
 
 - Start Codex at the repo root; ask it to quote the first bullet of the `critical-rules` block. It must match.

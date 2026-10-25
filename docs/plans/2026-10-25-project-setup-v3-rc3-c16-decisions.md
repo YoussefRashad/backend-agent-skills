@@ -84,3 +84,14 @@ Transcripts are kept outside the repository (<lab>\evidence-rc2\hm\p3-*.jsonl, p
 | 1 | 1332 lines | 6 BLOCKING, 12 NON-BLOCKING |
 | 2 | 1837 lines | 8 BLOCKING, 12 NON-BLOCKING |
 | 3 | 2453 lines | No BLOCKING; 4 NON-BLOCKING pinned as freeze addendum C16-F1..F4 |
+
+## Maintainer decisions after the C16 review (2026-10-26)
+
+The Codex review found no BLOCKING gap and three NON-BLOCKING findings (C16-RV1..RV3, listed in
+the acceptance record).
+
+| Decision | Disposition |
+|---|---|
+| Timing of the fixes | Open the PR first; fix RV1-RV3 on the same branch before merge |
+| Elapsed milliseconds (C16-13, C16-18) | Not captured: `accept-rc1.mjs` prints no elapsed time. The orchestrator's whole-second wrapper value (1318 s) stands in, with at most one second of rounding. No rerun |
+| Empty-tree probe child count (C16-19) | Not captured separately; the probe children are inside `R42/C16/grep`'s 373 launches. No rerun |

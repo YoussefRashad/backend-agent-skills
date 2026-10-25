@@ -3,7 +3,7 @@ name: project-setup
 description: Set up, migrate, or update shared AI-agent scaffolding for a backend repository so Claude Code and Codex work from the same rules - AGENTS.md as the shared source of truth, CLAUDE.md importing it, shared reviewer and docs-sync agents with thin per-tool wrappers, secret-path protection for both tools, and project docs generated from the actual code. Use this whenever the user wants to set up, install, initialize, re-run, upgrade, or migrate project setup, AGENTS.md, CLAUDE.md, agent docs, or reviewer/docs-sync agents in a repo, including repos already configured by the older Claude-only project-setup (v1), repos with hand-written CLAUDE.md or AGENTS.md, and new or empty repos. Treats the codebase as sensitive (fintech-grade), never reads secrets, enforces plan-and-confirm gates, and changes documentation and agent configuration only.
 ---
 
-# project-setup 3.0.0-rc.2
+# project-setup 3.0.0-rc.3
 
 One skill, one source, two tools. Produces a repository layout that Claude Code and Codex both follow:
 
@@ -22,6 +22,16 @@ TODO.md                        everything uncertain, unverified, or out of scope
 ```
 
 Read this file fully, then read references only when the step says so.
+
+For Claude Code, you MUST start the session at the target repository root before setup.
+Compare the original working directory in the supplied environment context with the target
+root. If that context positively establishes a start below the root, you MUST ask for a
+root restart and stop before file reads, Git commands or project tools.
+As soon as a below-root start is positively established, including by discovery, you MUST
+stop before any further read or write and ask for a root restart.
+Changing directory inside the session does not load the missing root settings. This prevents
+setup from running without the repository's hook, deny rules or shared critical instructions.
+Missing launch context alone does not establish a subdirectory start or verify host controls.
 
 ## Non-negotiable rules
 
@@ -70,6 +80,12 @@ Read this file fully, then read references only when the step says so.
     branch from the trusted base checkout through resolved commit objects; never check it out, switch to it, fetch
     it or create a worktree for it (`references/security.md`, "C8 review guidance"). The user supplies or fetches
     the refs.
+
+    Canonical reviewer and docs-sync instructions permit only their bounded correction of
+    git-safe GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN rejections that emit no repository content.
+    This includes review-diff's parse-time GIT_SAFE_ARGUMENT errors. A correction MUST NOT add
+    --out or widen the intended paths. You MUST NOT extend that exception to a failed or
+    denied read or another error code; that would bypass the trusted-read boundary.
 
 ## Scripts
 
@@ -344,8 +360,10 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
    `--confirm-manual-resolution` from them.
 2. `validate.mjs`. Fix failures through a new draft/prepare/commit cycle, or record them in `TODO.md`.
 
-   Validation uses the installed policy baseline and shared ownership schemas. Schema 2 reports needs update. The
-   installed hook self-test proves direct script behavior only; Claude hook loading remains not verified.
+   Validation uses the installed policy baseline and shared ownership schemas. Schema 2 reports
+   needs update. The installed hook self-test proves direct script behavior only; it does not
+   establish hook loading in the current Claude session. See references/claude.md for dated
+   host measurements and the root-start requirement.
 
    Run validation in a trusted checkout because the installed hook self-test executes project code.
 

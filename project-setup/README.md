@@ -1,7 +1,7 @@
-# project-setup 3.0.0-rc.2 - skill source
+# project-setup 3.0.0-rc.3 - skill source
 
-**Release candidate 3.0.0-rc.2.** See `RELEASE-NOTES-3.0.0-rc.2.md` for acceptance requirements,
-compatibility and pending host measurements.
+**Release candidate 3.0.0-rc.3.** See RELEASE-NOTES-3.0.0-rc.3.md for compatibility,
+acceptance requirements and the remaining R83-e and A3/L10 host measurements.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -27,6 +27,15 @@ v2 is updated with `references/migration-v2.md`: `scripts/check-agent-baselines.
 v2.0.0 agent and wrapper snapshots under `data/v2.0.0/`, and every installed customization then gets an
 explicit, reviewed disposition.
 
+Claude Code sessions MUST start at the target repository root. Starting in a subdirectory
+can omit the root hook, deny rules and shared critical instructions. If started below the
+root, stop and restart there before reading files or running Git or project tools; cd inside
+the existing session does not repair its launch configuration.
+
+You MUST commit the installed setup before starting worktree sessions, so each new worktree
+can contain its own root instructions and settings. A worktree created before that commit
+may lack its own CLAUDE.md and be refused under the outer checkout's loaded root rule.
+
 ## Claude raw-Git hook
 
 The Claude raw-Git hook is a guardrail, not a sandbox. It blocks the documented raw-history
@@ -42,8 +51,15 @@ Bash case statements are not parsed: a command containing one is reported as unp
 allowed with the malformed-input warning.
 
 The installed candidate is node "$CLAUDE_PROJECT_DIR/.ai/tools/guard-raw-git.mjs".
-Host portability is TO VERIFY. Direct Node self-tests do not establish host launch,
-matcher, input-envelope or exit-handling behavior.
+Measured on 2026-10-24/25 on Windows 11 with Claude Code 2.1.310: root-started sessions
+applied the hook, its Bash|PowerShell matcher and deny rules, including after changing
+directory within the project. Project paths with spaces and non-ASCII characters worked.
+Exit 0 permitted, exit 2 blocked with its explanation, and exit 1 continued with a warning
+visible to the user, not the model.
+A session started in src/wallet did not load the root hook or deny rules. With Node missing,
+the hook failed open and the model saw no warning. macOS and Linux remain TO VERIFY.
+Direct Node self-tests do not establish host loading or enforcement. See references/claude.md
+for the itemized measurements and the separate 2026-10-25 instruction-loading probes.
 
 The hook executes project code and therefore depends on the trusted-checkout boundary.
 
@@ -152,7 +168,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.0.0-rc.2 in the distribution repository.
+requires or creates project-setup-v3.0.0-rc.3 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -161,5 +177,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.0.0-rc.3 --out <unused-directory>
 ```

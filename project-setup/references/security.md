@@ -69,8 +69,35 @@ review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
   forms (`HEAD:.env`, `:.env`, `^REV`, `@{1}`). Counts are attached: `-n5` or `--max-count=5`.
 - Every revision resolves to a **commit** ID before any content command, so blob and tree IDs are refused and a
   ref that moves mid-command changes nothing.
-- Protected paths are omitted from diff, log, show, ls and grep, including names that existed only in history;
-  `cat` of a protected path is refused. A grep pattern is a basic regular expression; no match is an empty success.
+- Protected paths are omitted from diff, log, show, ls and grep, including historical paths.
+  cat accepts one path per call and refuses a protected path. You MUST confirm an uncertain
+  path with ls before cat; a missing path returns GIT_SAFE_GIT and stops the task.
+- grep uses extended regular expressions (ERE): a|b alternates, \( matches a literal opening
+  parenthesis, and \| matches a literal vertical bar. No match is an empty success.
+  An empty pattern matches every line; a leading - is pattern text because Git receives -e.
+  A pattern containing NUL is rejected as GIT_SAFE_ARGUMENT before any Git operation.
+- \d is not a digit class; use [0-9]. \s, \w and \b are GNU extensions, not portable ERE.
+  Prefer [[:space:]] and [[:alnum:]_] for whitespace and word characters, and spell out
+  intended boundaries. Those GNU extensions worked on Git 2.53 on Windows; macOS/Linux
+  regex engines remain unverified. \( and \| are POSIX-defined ERE escapes.
+- For a literal search, backslash-escape . [ ] ( ) { } * + ? ^ $ | \ or use an appropriate
+  bracket expression such as [(]. Unmatched grouping or repetition syntax, such as
+  transfer( or a{2, and a leading * can make a pattern invalid.
+- This changes the BRE behavior in rc.1 and rc.2. Existing expressions MUST be checked for
+  their intended ERE meaning before reuse, because a valid expression can match different text.
+  For example, a|b now alternates, while a\|b now matches a literal vertical bar.
+  An expression valid as BRE can also be invalid as ERE.
+- After a status-128 grep content call with empty stdout, git-safe probes the same ERE
+  against the empty tree for the resolved commit's object format. Probe status 128 with empty
+  stdout produces GIT_SAFE_PATTERN; every other probe outcome produces unchanged GIT_SAFE_GIT.
+  No repository content or Git diagnostic is emitted on either error.
+- The canonical agents permit bounded correction only for GIT_SAFE_ARGUMENT and
+  GIT_SAFE_PATTERN. This includes review-diff parse-time argument errors, but a correction
+  MUST NOT add --out or widen paths. Every other failure or denial still stops the task.
+- Malformed configuration can fail before command-line options take effect. Relevant classes
+  include grep.*, color.grep, color.grep.<slot>, color.ui and submodule.recurse.
+  If that also fails on the empty tree, a valid pattern may be classified GIT_SAFE_PATTERN;
+  the bounded correction budget still ends in a stop, never fallback access.
 - Git runs without a shell, so `**` globs are never expanded by Bash or mangled by PowerShell. Errors name the
   failure only, never a path, revision, pattern or Git output.
 

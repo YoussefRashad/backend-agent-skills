@@ -57,6 +57,7 @@ const DETAIL = {
   GIT_SAFE_REVISION: 'revision does not resolve to a commit',
   GIT_SAFE_RECORD: 'invalid Git metadata; no result was emitted',
   GIT_SAFE_GIT: 'Git operation failed; no result was emitted',
+  GIT_SAFE_PATTERN: 'grep pattern is not a valid extended regular expression (ERE); no result was emitted',
   GIT_SAFE_INTERNAL: 'internal failure; no result was emitted',
   GIT_SAFE_ARG_LIMIT: 'Git arguments exceed the safe invocation bound; narrow with -- <paths> or a smaller commit range. No result was emitted.',
 };
@@ -68,7 +69,11 @@ function gsError(code, message = `${code}: ${DETAIL[code]}`) {
   return e;
 }
 const inputError = () => gsError('GIT_SAFE_INPUT');
-const argError = (cmd) => gsError('GIT_SAFE_ARGUMENT', `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`);
+function argError(cmd) {
+  const guidance = cmd === 'cat' ? '; one path per call'
+    : cmd === 'grep' ? '; pattern uses extended regular expressions (ERE)' : '';
+  return gsError('GIT_SAFE_ARGUMENT', `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}${guidance}`);
+}
 // The low-level bound (session.git) has no guidance; executeGitSafe adds the command's (plan 3.9).
 const limitError = (cmd) => gsError('GIT_SAFE_LIMIT', `GIT_SAFE_LIMIT: output exceeds ${MAX_OUTPUT_BYTES} bytes${cmd
   ? `. ${NARROWING_GUIDANCE[cmd]} No partial result was emitted; this review is not complete.` : ''}`);
@@ -105,6 +110,10 @@ const byUtf8 = (a, b) => Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, '
 const EMPTY = () => Buffer.alloc(0);
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const OID_LINE = /^([0-9a-f]{40}|[0-9a-f]{64})\r?\n$/;
+const EMPTY_TREE = Object.freeze({
+  40: '4b825dc642cb6eb9a060e54bf8d69288fbee4904',
+  64: '6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321',
+});
 
 // ----------------------------------------------------------- environment ----
 // Plan 3.4: removal is case-insensitive by name; the user's GIT_CONFIG_GLOBAL/SYSTEM/NOSYSTEM are kept on purpose.
@@ -443,6 +452,16 @@ export async function executeGitSafe(request, session) {
     try { r = await call(state, argv, state.root, MAX_OUTPUT_BYTES); } catch (e) { throw e.code === 'GIT_SAFE_LIMIT' ? limitError(sub) : e; }
     if (r.status === 0) return r.stdout;
     if (noMatchOk && r.status === 1 && r.stdout.length === 0) return EMPTY(); // grep: no match is success
+    if (noMatchOk && r.status === 128 && r.stdout.length === 0) {
+      let invalidPattern = false;
+      try {
+        const probe = await call(state, ['grep', '--no-textconv', '--no-color', '--full-name',
+          '--no-column', '--no-heading', '--no-break', '-E', '-I', '-n', '-z', '-e', pattern,
+          EMPTY_TREE[A.length], '--'], state.root, MAX_OUTPUT_BYTES);
+        invalidPattern = probe.status === 128 && probe.stdout.length === 0;
+      } catch { /* A failed diagnostic never grants correction authority. */ }
+      if (invalidPattern) throw gsError('GIT_SAFE_PATTERN');
+    }
     throw gsError('GIT_SAFE_GIT');
   };
 
@@ -482,7 +501,7 @@ export async function executeGitSafe(request, session) {
   }
   // grep: exclusions are only the protected names under the selectors (all of them without selectors).
   const { visible, E } = classify(selected);
-  return visible ? content(['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-G', '-I', '-n', '-z', '-e', pattern, A, '--', ...L, ...E], true) : EMPTY();
+  return visible ? content(['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-E', '-I', '-n', '-z', '-e', pattern, A, '--', ...L, ...E], true) : EMPTY();
 }
 
 // ------------------------------------------------------------------- main ----

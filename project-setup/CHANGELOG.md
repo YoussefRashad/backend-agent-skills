@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.0.0-rc.3
+
+C16 addresses the R83-e subdirectory-launch failure and the A3/L10 incomplete-review failure.
+Root Claude instructions require a repository-root session start and refuse work after a
+positively established subdirectory start. This is an instruction mitigation, not host
+enforcement; nested Claude templates remain unchanged.
+
+git-safe grep now uses extended regular expressions and a content-free pattern probe after
+a status-128 content failure with empty stdout. cat remains one path per call, with clearer
+usage text.
+Canonical reviewer and docs-sync instructions permit bounded correction of GIT_SAFE_ARGUMENT
+and GIT_SAFE_PATTERN rejections only; other failed or denied reads still stop.
+Both Codex wrappers recognize that canonical exception; their other restrictions and both
+Claude wrappers remain unchanged.
+
+Living references record the dated Windows host measurements and their limitations.
+The hooks-selftest entry-guard comment now marks 8.3 short-name behavior untested.
+Manifest schema 3, policy schemas, ownership, approval and rollback behavior are unchanged.
+
+R83-e and A3/L10 require re-measurement after this candidate is released. See
+RELEASE-NOTES-3.0.0-rc.3.md. Publication remains a separate authorized action.
+
 ## 3.0.0-rc.2
 
 Review rules candidate: Adversarial, Consumer, Boundary and Contract passes; reachable
