@@ -31,7 +31,9 @@
     {"id":"A28","argv":["show","HEAD~"],"command":"show","accepted":true},
     {"id":"A29","argv":["diff","HEAD"],"command":"diff","accepted":false},
     {"id":"A30","argv":["grep","c4-head","--"],"command":"grep","accepted":true},
-    {"id":"A31","argv":["grep","c4-head","--","--","safe.txt"],"command":"grep","accepted":true}
+    {"id":"A31","argv":["grep","c4-head","--","--","safe.txt"],"command":"grep","accepted":true},
+    {"id":"A32","argv":["cat","c4-head","--","safe.txt","src/a.txt"],"command":"cat","accepted":false},
+    {"id":"A33","argv":["cat","c4-head","--","safe.txt",".env"],"command":"cat","accepted":false}
   ],
   "names": [
     {"id":"N01","path":"safe.txt","content":"needle\n"},

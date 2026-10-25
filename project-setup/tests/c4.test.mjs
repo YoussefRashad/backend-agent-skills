@@ -215,6 +215,15 @@ const SUPPORTED_FORMS = {
   ls: 'ls <commit> [-- <paths>]',
   grep: 'grep <commit> <pattern> [-- <paths>]',
 };
+// C16-8: the two amended argument diagnostics, verbatim from the plan (every other command keeps "supported: <form>").
+const ARGUMENT_GUIDED = {
+  cat: 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: cat <commit> -- <path>; one path per call',
+  grep: 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: grep <commit> <pattern> [-- <paths>]; pattern uses extended regular expressions (ERE)',
+};
+// C16-8: the empty tree of each object format (chosen by the length of the resolved commit ID) used by the content-free pattern probe.
+const EMPTY_TREE_SHA1 = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+const EMPTY_TREE_SHA256 = '6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321';
+const BSL = String.fromCharCode(92); // a backslash, spelled without an escape so a literal pattern like transfer\( is unambiguous in this file
 const NARROWING = {
   diff: 'Narrow with -- <paths> or a smaller commit range.',
   log: 'Narrow with -- <paths>, attached -n<k>, or a smaller commit range.',
@@ -239,7 +248,9 @@ const E = {
   INPUT: 'GIT_SAFE_INPUT: invalid Git helper input',
   // C5 plan 2.7 changes this one detail of the frozen C4 contract: the diagnostic now also names review-diff. It is the only C4 message that changes.
   COMMAND: 'GIT_SAFE_COMMAND: supported commands: diff, log, show, cat, ls, grep, review-diff',
-  ARGUMENT: (cmd) => `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`,
+  // C16-8 (plan docs/plans/2026-10-25-project-setup-v3-rc3-c16.md): only cat and grep carry guidance after the supported form; the exact strings are written out, never derived.
+  ARGUMENT: (cmd) => (hasOwn(ARGUMENT_GUIDED, cmd) ? ARGUMENT_GUIDED[cmd] : `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`),
+  PATTERN: 'GIT_SAFE_PATTERN: grep pattern is not a valid extended regular expression (ERE); no result was emitted',
   VERSION: 'GIT_SAFE_VERSION: Git 2.31 or later is required',
   REPOSITORY: 'GIT_SAFE_REPOSITORY: not inside a Git repository',
   POLICY_IO: 'GIT_SAFE_POLICY_IO: cannot read .ai/security-paths.json; refusing to run without a valid policy',
@@ -296,7 +307,12 @@ const V_DIFF = (fmt, left, right, L, X) => ['diff', ...D_FLAGS, ...FMT[fmt], lef
 const V_LOG = ({ oneline = false, p = false, n = null }, expr, L, X) => ['log', ...D_FLAGS, ...H_FLAGS, ...(oneline ? ['--oneline', '--abbrev=12'] : ['--format=medium', '--no-abbrev-commit']), ...(p ? ['-p'] : []), ...(n === null ? [] : [`--max-count=${n}`]), expr, '--', ...L, ...X];
 const V_SHOW = (fmt, c, L, X) => ['show', ...D_FLAGS, ...H_FLAGS, '--format=medium', '--no-abbrev-commit', '--cc', ...FMT[fmt], c, '--', ...L, ...X];
 const V_CAT = (c, p) => ['cat-file', 'blob', `${c}:${p}`];
-const V_GREP = (pattern, c, L, X) => ['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-G', '-I', '-n', '-z', '-e', pattern, c, '--', ...L, ...X];
+// C16-8: the content vector uses -E (it was -G); the vector is otherwise unchanged and has exactly as many argument units.
+const V_GREP = (pattern, c, L, X) => ['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-E', '-I', '-n', '-z', '-e', pattern, c, '--', ...L, ...X];
+const V_GREP_BRE = (pattern, c, L, X) => ['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-G', '-I', '-n', '-z', '-e', pattern, c, '--', ...L, ...X]; // the rc.1/rc.2 vector, kept only to prove the unit count did not move
+// C16-8 "The command portion is exactly": the content-free probe over the empty tree of the matching object format (no selectors, no exclusions).
+const V_PROBE = (pattern, emptyTree) => ['grep', '--no-textconv', '--no-color', '--full-name', '--no-column', '--no-heading', '--no-break', '-E', '-I', '-n', '-z', '-e', pattern, emptyTree, '--'];
+const isProbeOp = (op) => op[0] === 'grep' && op[op.length - 1] === '--' && (op[op.length - 2] === EMPTY_TREE_SHA1 || op[op.length - 2] === EMPTY_TREE_SHA256);
 const INV_KINDS = ['invDiff', 'invShow', 'invLog', 'invTree'];
 // The kind of an operation vector, for the limit it must carry (plan 3.8) and for the fake executor's routing.
 function kindOf(op) {
@@ -325,6 +341,8 @@ const ARG_ROWS = [
   ['A23', ['ls', 'c4-head', '--'], false], ['A24', ['cat', 'c4-head', '--', './safe.txt'], false], ['A25', ['cat', 'c4-head', '--', 'a/../safe.txt'], false],
   ['A26', ['grep', 'c4-head', 'a\u0000b'], false], ['A27', ['show', 'HEAD^'], true], ['A28', ['show', 'HEAD~'], true], ['A29', ['diff', 'HEAD'], false],
   ['A30', ['grep', 'c4-head', '--'], true], ['A31', ['grep', 'c4-head', '--', '--', 'safe.txt'], true],
+  // C16-15: cat takes exactly one path per call; the second path is a safe path or a path string only (agents never open it).
+  ['A32', ['cat', 'c4-head', '--', 'safe.txt', 'src/a.txt'], false], ['A33', ['cat', 'c4-head', '--', 'safe.txt', '.env'], false],
 ];
 const NAME_ROWS = [
   ['N01', 'safe.txt'], ['N02', 'MixedCase.txt'], ['N03', 'space name.txt'], ['N04', 'tab\tname.txt'], ['N05', 'line\nname.txt'], ['N06', 'docs/r\u00e9sum\u00e9.txt'],
@@ -364,7 +382,7 @@ function loadFixture(check, context) {
   check(eq(Object.keys(f), ['schema', 'arguments', 'names']) && f.schema === 1, 'the fixture has exactly schema 1, arguments and names, in that order', Object.keys(f));
   const wantArgs = ARG_ROWS.map(([id, argv, accepted]) => ({ id, argv, command: argv[0], accepted }));
   const wantNames = NAME_ROWS.map(([id, p]) => ({ id, path: p, content: 'needle\n' }));
-  check(eq(f.arguments, wantArgs), 'the argument rows are A01-A31 with command equal to argv[0], in the pinned order', f.arguments && f.arguments.map((r) => r.id));
+  check(eq(f.arguments, wantArgs), 'the argument rows are A01-A33 with command equal to argv[0], in the pinned order', f.arguments && f.arguments.map((r) => r.id));
   check(eq(f.names, wantNames), 'the name rows are N01-N09 with content "needle\\n", in the pinned order', f.names && f.names.map((r) => r.id));
   check((f.arguments || []).every((r) => eq(Object.keys(r), ['id', 'argv', 'command', 'accepted'])) && (f.names || []).every((r) => eq(Object.keys(r), ['id', 'path', 'content'])), 'every fixture row has exactly its pinned keys');
   const accepted = (f.arguments || []).filter((r) => r.accepted).map((r) => r.id);
@@ -552,6 +570,11 @@ const safeChangeText = (sid, file) => [
 const MARK = { env: 'C4-DUMMY-ENV-SECRET', priv: 'C4-DUMMY-PRIVATE-SECRET' };
 const GITLINK_SHA = '1111111111111111111111111111111111111111';
 const BIN_BYTES = Buffer.from([0x00, 0x01, 0x02, 0xff, 0x00, 0x0a, 0x00]);
+// The content of ledger.ts in the 'ere' commit (and the SHA-256 repository): five lines, the first four contain one of the measured search words.
+const ERE_LEDGER_LINES = ['validateTransfer called', 'transfer(a, b)', 'throw new RangeError', 'wallet.ledger', 'plain line'];
+const ERE_LEDGER = `${ERE_LEDGER_LINES.join('\n')}\n`;
+// <commit>:<path> NUL <line> NUL <text> LF, the pinned grep framing (restated independently).
+const grepFrame = (commit, p, hits) => Buffer.from(hits.map(([n, text]) => `${commit}:${p}\0${n}\0${text}\n`).join(''), 'utf8');
 // Every repository the real-Git assertions use, in one fast-import stream. Refs are plain branch names; `main` is not created, HEAD points at c4-head.
 function fxCommits() {
   const names = {};
@@ -569,6 +592,8 @@ function fxCommits() {
   // R42: the listing and grep tree of plan 4.5, and the regular-expression tree.
   add('lsgrep', 1699990200, 'ls and grep\n', [], { '.env': 'C4-DUMMY-LS-ENV needle\n', 'private/key.txt': 'C4-DUMMY-LS-KEY needle\n', 'safe.txt': 'needle\n', 'src/a.txt': 'needle\n' });
   add('rx', 1699990300, 'regular expressions\n', [], { 'rx.txt': 'a|b literal\nonly-b\n', 'neg.txt': '-needle here\n', 'dd.txt': 'a -- b\n' });
+  // C16-16 ERE searches: the measured review searches (validateTransfer|transfer\(|RangeError|wallet.ledger) over safe content, plus a protected file that holds the same words.
+  add('ere', 1699990400, 'ere searches\n', [], { 'ledger.ts': ERE_LEDGER, '.env': 'transfer( C4-DUMMY-ERE-ENV validateTransfer\n', 'src/other.ts': 'nothing here\n' });
   // R43 count regression 1 (all protected): A -> B -> C.
   add('cnt1-a', 1699991000, 'a\n', [], { 'README.md': 'readme\n' });
   add('cnt1-b', 1699991100, 'b\n', ['cnt1-a'], { 'README.md': 'readme\n', 'private/older.txt': 'C4-DUMMY-OLDER\n' });
@@ -644,7 +669,25 @@ function getFx(context) {
 async function useFx(failures, context) {
   try { return await getFx(context); } catch (e) { failures.push(`cannot build the real Git fixture: ${errMsg(e)}`); return null; }
 }
-// A seam executor that runs the real Git with the request the core made, and records it (argv, cwd, limit, status, stdout).
+// C16-8: a SHA-256 repository (object format sha256, 64-digit commit IDs) holding the same ledger content, one protected file and a safe selector target.
+const fx256Cache = new Map();
+function getFx256(context) {
+  const key = context.tmp;
+  if (!fx256Cache.has(key)) {
+    fx256Cache.set(key, Promise.resolve().then(() => {
+      const dir = scratchDir(context, 'fx256');
+      const root = path.join(dir, 'repo');
+      fs.mkdirSync(root);
+      gitOk(context, root, ['init', '-q', '--object-format=sha256']);
+      const commits = [{ ref: 's256-head', when: 1699990500, message: 'sha256 head\n', parents: [], files: { 'ledger.ts': ERE_LEDGER, 'safe.txt': 'needle\n', '.env': 'transfer( C4-DUMMY-S256-ENV\n' } }];
+      gitOk(context, root, ['fast-import', '--quiet'], { input: fiStream(commits) });
+      gitOk(context, root, ['symbolic-ref', 'HEAD', 'refs/heads/s256-head']);
+      return { dir, root, id: gitOk(context, root, ['rev-parse', 's256-head']).text, realRoot: fs.realpathSync.native(root) };
+    }));
+  }
+  return fx256Cache.get(key);
+}
+// A seam executor that runs the real Git with the request the core made, and records it (argv, cwd, env, limit, status, stdout).
 function realExecutor(log = null) {
   return async (req) => {
     const r = spawnSync('git', req.argv, { cwd: req.cwd, env: req.env, encoding: 'buffer', shell: false, windowsHide: true, maxBuffer: 1 << 29, timeout: 120000 });
@@ -653,7 +696,7 @@ function realExecutor(log = null) {
     else if (r.signal) result = { status: null, signal: String(r.signal), error: null, stdout: EMPTY, overflow: false };
     else if (req.limit !== null && r.stdout.length > req.limit) result = { status: null, signal: null, error: null, stdout: r.stdout.subarray(0, req.limit), overflow: true };
     else result = { status: r.status, signal: null, error: null, stdout: r.stdout, overflow: false };
-    if (log) log.push({ argv: req.argv, op: req.argv.slice(PREFIX.length), cwd: req.cwd, limit: req.limit, status: r.status, stdout: result.stdout, stderr: r.stderr });
+    if (log) log.push({ argv: req.argv, op: req.argv.slice(PREFIX.length), cwd: req.cwd, env: { ...req.env }, limit: req.limit, status: r.status, stdout: result.stdout, stderr: r.stderr });
     return result;
   };
 }
@@ -830,38 +873,248 @@ async function grepGroup(context) {
       check(sameBuf(await grep(RX, '--', '--', 'dd.txt'), Buffer.from(`${RX}:dd.txt\0` + '1\0' + 'a -- b\n')), 'grep C -- -- dd.txt searches for -- in the literal selector dd.txt');
       check(sameBuf(await grep(RX, 'zzz-no-match'), EMPTY), 'no match is an empty successful result');
     });
-    await step('real Git: basic regular expressions and the pinned framing despite extended-regexp and column configuration', async () => {
-      const env = isoEnv(context, '[grep]\n\textendedRegexp = true\n\tpatternType = extended\n\tcolumn = true\n\tlineNumber = false\n');
-      const hh = await openReal(core, context, fx, PL, { env });
-      const r = await hh.attempt(['grep', RX, 'a|b']);
-      check(!r.threw && sameBuf(r.value, Buffer.from(`${RX}:rx.txt\0` + '1\0' + 'a|b literal\n')), 'a|b is a literal in a basic expression (an extended expression would also match only-b and a -- b)', r.threw ? errMsg(r.error) : r.value);
-      const r2 = await hh.attempt(['grep', C, 'needle', '--', 'safe.txt']);
-      check(!r2.threw && sameBuf(r2.value, Buffer.from(`${C}:safe.txt\0` + '1\0' + 'needle\n')), 'grep.column does not add a column field', r2.threw ? errMsg(r2.error) : r2.value);
+    await step('real Git (C16-8, ERE): a|b alternates and a\\|b is a literal bar, the pinned framing holds under conflicting basic, fixed-string, extended and column configuration (valid conflicting settings change neither the regular-expression language nor the framing)', async () => {
+      // Independent expectations from the rx fixture (rx.txt: "a|b literal", "only-b"; neg.txt: "-needle here"; dd.txt: "a -- b"): ERE a|b matches every line holding an a or a b.
+      const alt = Buffer.concat([grepFrame(RX, 'dd.txt', [[1, 'a -- b']]), grepFrame(RX, 'rx.txt', [[1, 'a|b literal'], [2, 'only-b']])]);
+      const bar = grepFrame(RX, 'rx.txt', [[1, 'a|b literal']]);
+      const lit = `a${BSL}|b`;
+      check(lit.length === 4 && lit.charCodeAt(1) === 92, 'the literal-bar pattern is the four characters a, backslash, vertical bar, b');
+      const configs = [
+        ['no extra configuration', ''],
+        ['grep.patternType basic with extendedRegexp false', '[grep]\n\tpatternType = basic\n\textendedRegexp = false\n\tcolumn = true\n\tlineNumber = false\n'],
+        ['grep.patternType fixed', '[grep]\n\tpatternType = fixed\n\tcolumn = true\n\tlineNumber = false\n'],
+        ['grep.extendedRegexp true with patternType extended', '[grep]\n\textendedRegexp = true\n\tpatternType = extended\n\tcolumn = true\n\tlineNumber = false\n'],
+      ];
+      for (const [label, cfg] of configs) {
+        const hh = await openReal(core, context, fx, PL, { env: cfg === '' ? context.env : isoEnv(context, cfg) });
+        const r = await hh.attempt(['grep', RX, 'a|b']);
+        check(!r.threw && sameBuf(r.value, alt), `${label}: a|b alternates (it also matches only-b and a -- b, unlike a basic expression)`, r.threw ? errMsg(r.error) : r.value);
+        check(eq(hh.ops(), [V_RESOLVE(RX), V_INV_TREE(RX), V_GREP('a|b', RX, [], [])]), `${label}: a|b issues the pinned resolution, inventory and -E content vectors and no probe`, hh.ops());
+        const r1 = await hh.attempt(['grep', RX, lit]);
+        check(!r1.threw && sameBuf(r1.value, bar), `${label}: a, backslash, bar, b matches only the literal vertical bar line (the rc.1 meaning of an unescaped bar)`, r1.threw ? errMsg(r1.error) : r1.value);
+        const r2 = await hh.attempt(['grep', C, 'needle', '--', 'safe.txt']);
+        check(!r2.threw && sameBuf(r2.value, Buffer.from(`${C}:safe.txt\0` + '1\0' + 'needle\n')), `${label}: grep.column and grep.lineNumber do not change the pinned framing`, r2.threw ? errMsg(r2.error) : r2.value);
+      }
     });
-    await step('real Git: binary content is omitted; an invalid expression is GIT_SAFE_GIT', async () => {
+    await step('real Git: binary content is omitted; an invalid extended expression on visible content is the exact GIT_SAFE_PATTERN with the probe vector recorded after the content vector', async () => {
       const head = rev(fx, 'c4-head');
       check(sameBuf(await grep(head, 'needle', '--', 'binneedle.dat'), EMPTY), 'a binary file that contains the pattern is not matched (-I)');
       check(sameBuf(await grep(head, 'needle', '--', 'safe.txt', 'binneedle.dat'), Buffer.from(`${head}:safe.txt\0` + '1\0' + 'needle\n')), 'only the text match is returned when a binary file is also selected');
       const bad = await h.attempt(['grep', C, '[', '--', 'safe.txt']);
-      check(bad.threw && bad.error.message === E.GIT, 'an invalid basic regular expression is GIT_SAFE_GIT', bad.threw ? bad.error.message : bad.value);
+      check(bad.threw && bad.error.code === 'GIT_SAFE_PATTERN' && bad.error.message === E.PATTERN, 'an invalid extended regular expression on a visible selection is GIT_SAFE_PATTERN, exactly', bad.threw ? bad.error.message : bad.value);
+      check(eq(h.ops(), [V_RESOLVE(C), V_INV_TREE(C), V_GREP('[', C, [LIT('safe.txt')], []), V_PROBE('[', EMPTY_TREE_SHA1)]), 'the failed grep is followed by exactly one probe over the SHA-1 empty tree (and nothing else)', h.ops());
+      const [content, probe] = h.log.slice(4, 6);
+      check(content && probe && content.status === 128 && content.stdout.length === 0 && probe.status === 128 && probe.stdout.length === 0, 'real Git: the content call and the probe both exit 128 with empty stdout', { content: content && content.status, probe: probe && probe.status });
+      // An invalid expression never reaches the probe when nothing is visible (the empty-selection short circuit stays): no content call, no probe, an empty success.
+      const none = await h.attempt(['grep', C, '[', '--', '.env']);
+      check(!none.threw && sameBuf(none.value, EMPTY) && eq(h.ops(), [V_RESOLVE(C), V_INV_TREE(C)]), 'an invalid pattern with only a protected selection is an empty success: no content call and no probe', none.threw ? none.error.message : h.ops());
     });
-    await step('seam: status 1 with empty output exits 0; status 1 with output, status 2, a signal and a spawn failure are the exact Git failure', async () => {
+    await step('real Git (C16-8, C16-21): the measured searches over safe content; transfer( is invalid ERE and is a correctable GIT_SAFE_PATTERN, then transfer followed by an escaped paren succeeds; a{2, *x and [ are invalid; the protected file holding the same words never appears', async () => {
+      const E_ = rev(fx, 'ere');
+      const hh = await openReal(core, context, fx, PL);
+      const run = async (pattern, ...rest) => { const r = await hh.attempt(['grep', E_, pattern, ...rest]); return r.threw ? { err: r.error } : { out: r.value }; };
+      const frame = (hits) => grepFrame(E_, 'ledger.ts', hits);
+      const four = await run(`validateTransfer|transfer${BSL}(|RangeError|wallet.ledger`);
+      check(four.out && sameBuf(four.out, frame([[1, ERE_LEDGER_LINES[0]], [2, ERE_LEDGER_LINES[1]], [3, ERE_LEDGER_LINES[2]], [4, ERE_LEDGER_LINES[3]]])), 'validateTransfer|transfer-paren|RangeError|wallet.ledger finds the four lines of the safe ledger and nothing of the protected .env', four.err ? four.err.message : four.out);
+      check(eq(hh.ops(), [V_RESOLVE(E_), V_INV_TREE(E_), V_GREP(`validateTransfer|transfer${BSL}(|RangeError|wallet.ledger`, E_, [], [EXC('.env')])]), 'the content vector excludes exactly the protected .env and no probe follows a success', hh.ops());
+      const both = await run('validateTransfer|transfer');
+      check(both.out && sameBuf(both.out, frame([[1, ERE_LEDGER_LINES[0]], [2, ERE_LEDGER_LINES[1]]])), 'validateTransfer|transfer finds both names (alternation, not a literal bar)', both.err ? both.err.message : both.out);
+      const bad = await run('transfer(');
+      check(bad.err && bad.err.code === 'GIT_SAFE_PATTERN' && bad.err.message === E.PATTERN, 'transfer( (valid as BRE, invalid as ERE) is GIT_SAFE_PATTERN', bad.err ? bad.err.message : bad.out);
+      const fixed = await run(`transfer${BSL}(`);
+      check(fixed.out && sameBuf(fixed.out, frame([[2, ERE_LEDGER_LINES[1]]])), 'the corrected transfer-backslash-paren succeeds and finds the one line', fixed.err ? fixed.err.message : fixed.out);
+      for (const p of ['a{2', '*x', '[']) {
+        const r = await run(p);
+        check(r.err && r.err.code === 'GIT_SAFE_PATTERN' && r.err.message === E.PATTERN, `${show(p)} is invalid ERE on visible content: GIT_SAFE_PATTERN`, r.err ? r.err.message : r.out);
+        check(eq(hh.ops().slice(-1), [V_PROBE(p, EMPTY_TREE_SHA1)]) && hh.ops().length === 4, `${show(p)}: the probe carries the same pattern over the SHA-1 empty tree`, hh.ops().slice(-2));
+      }
+      for (const p of ['wallet[.]ledger', 'Range(Error)', 'plain line', 'x|y']) {
+        const r = await run(p);
+        check(r.out !== undefined && hh.ops().length === 3, `${show(p)}: a valid expression never reaches the probe (success or empty success)`, r.err ? r.err.message : hh.ops().length);
+      }
+      const none = await run('zzz-no-match-anywhere');
+      check(none.out && none.out.length === 0 && hh.ops().length === 3, 'a valid expression with no match is the empty success with no probe', none.err ? none.err.message : none.out);
+    });
+    await step('real Git, empty-tree id by object format: SHA-1 and SHA-256 repositories probe over their own empty tree; the other format id exits 128 for every pattern, so the choice is mandatory (C16-8 and P4)', async () => {
+      const f2 = await getFx256(context).catch((e) => { failures.push(`cannot build the SHA-256 fixture: ${errMsg(e)}`); return null; });
+      if (!f2) return;
+      check(/^[0-9a-f]{64}$/.test(f2.id), 'premise: the SHA-256 repository resolves a 64-digit commit ID', f2.id);
+      const h2 = await openReal(core, context, f2, PL);
+      const frame2 = (hits) => grepFrame(f2.id, 'ledger.ts', hits);
+      const ok2 = await h2.attempt(['grep', 's256-head', `validateTransfer|transfer${BSL}(|RangeError|wallet.ledger`]);
+      check(!ok2.threw && sameBuf(ok2.value, frame2([[1, ERE_LEDGER_LINES[0]], [2, ERE_LEDGER_LINES[1]], [3, ERE_LEDGER_LINES[2]], [4, ERE_LEDGER_LINES[3]]])), 'SHA-256: the measured four-name search succeeds with 64-digit commit IDs in the framing', ok2.threw ? errMsg(ok2.error) : ok2.value);
+      check(eq(h2.ops(), [V_RESOLVE('s256-head'), V_INV_TREE(f2.id), V_GREP(`validateTransfer|transfer${BSL}(|RangeError|wallet.ledger`, f2.id, [], [EXC('.env')])]) && h2.ops().length === 3, 'SHA-256: no probe after a success', h2.ops());
+      const bad2 = await h2.attempt(['grep', 's256-head', 'transfer(']);
+      check(bad2.threw && bad2.error.code === 'GIT_SAFE_PATTERN' && bad2.error.message === E.PATTERN, 'SHA-256: transfer( is GIT_SAFE_PATTERN (the SHA-256 empty tree compiled the pattern and failed it)', bad2.threw ? bad2.error.message : bad2.value);
+      check(eq(h2.ops(), [V_RESOLVE('s256-head'), V_INV_TREE(f2.id), V_GREP('transfer(', f2.id, [], [EXC('.env')]), V_PROBE('transfer(', EMPTY_TREE_SHA256)]), 'SHA-256: the probe is exactly the plan vector over the 64-digit empty tree id, not the SHA-1 one', h2.ops());
+      const fix2 = await h2.attempt(['grep', 's256-head', `transfer${BSL}(`]);
+      check(!fix2.threw && sameBuf(fix2.value, frame2([[2, ERE_LEDGER_LINES[1]]])), 'SHA-256: the corrected transfer-backslash-paren succeeds', fix2.threw ? errMsg(fix2.error) : fix2.value);
+      // The probe call's whole request: fixed prefix (inside op slicing), bounded output, the repository root as cwd, the same sanitized environment as the content call.
+      for (const [label, hx, argv, root, wantTree] of [['SHA-1', h, ['grep', rev(fx, 'ere'), 'transfer('], fx.realRoot, EMPTY_TREE_SHA1], ['SHA-256', h2, ['grep', 's256-head', 'transfer('], f2.realRoot, EMPTY_TREE_SHA256]]) {
+        const r = await hx.attempt(argv);
+        check(r.threw && r.error.message === E.PATTERN, `${label}: the request fails with the pattern diagnostic`, r.threw ? r.error.message : r.value);
+        const calls = hx.log.slice(2);
+        const content = calls[calls.length - 2];
+        const probe = calls[calls.length - 1];
+        check(eq(probe.argv.slice(0, PREFIX.length), PREFIX) && eq(probe.argv.slice(PREFIX.length), V_PROBE('transfer(', wantTree)), `${label}: the probe argv is the exact fixed prefix then the plan command`, probe.argv.slice(PREFIX.length));
+        check(probe.limit === MAX_BYTES && content.limit === MAX_BYTES, `${label}: the probe has the 1,048,576-byte output limit`, probe.limit);
+        check(fs.realpathSync.native(probe.cwd) === root && probe.cwd === content.cwd, `${label}: the probe runs in the repository root, the cwd of the content call`, { probe: probe.cwd, content: content.cwd });
+        check(eq(entriesOf(probe.env), entriesOf(content.env)) && eq(entriesOf(probe.env), entriesOf(expectedEnv(context.env))), `${label}: the probe receives the same sanitized environment as the content call`, Object.keys(probe.env).sort());
+        check(probe.status === 128 && probe.stdout.length === 0 && content.status === 128 && content.stdout.length === 0, `${label}: both real calls exit 128 with empty stdout`, { probe: probe.status, content: content.status });
+        check(argvUnits(probe.argv) < argvUnits(content.argv), `${label}: the probe argument units stay below the content call (no selectors, no exclusions)`, [argvUnits(probe.argv), argvUnits(content.argv)]);
+      }
+      // P4 on this Git: the other format's empty tree id exits 128 for every pattern, the matching id exits 1 or 128 by pattern validity (empty stdout throughout).
+      for (const [label, root, matching, other] of [['SHA-1 repository', fx.root, EMPTY_TREE_SHA1, EMPTY_TREE_SHA256], ['SHA-256 repository', f2.root, EMPTY_TREE_SHA256, EMPTY_TREE_SHA1]]) {
+        const code = (tree, p) => { const r = gitRun(context, root, ['grep', '-E', '-I', '-n', '-z', '-e', p, tree, '--']); return { status: r.code, empty: r.out.length === 0 }; };
+        for (const [p, want] of [['transfer(', 128], ['a{2', 128], ['transfer', 1], ['x|y', 1]]) {
+          const m = code(matching, p);
+          check(m.status === want && m.empty, `${label}: ${show(p)} over the matching empty tree exits ${want} with empty stdout (P4)`, m);
+          const o = code(other, p);
+          check(o.status === 128 && o.empty, `${label}: ${show(p)} over the other format's empty tree exits 128 (object-format selection is mandatory)`, o);
+        }
+      }
+    });
+    await step('seam: status 1 with empty output exits 0 without a probe; status 1 with output, status 2, a signal, a spawn failure and (with a probe answering status 1) status 128 with empty output are the exact Git failure', async () => {
       const w = (content) => ({ tree: ['safe.txt'], content });
       const none = await seamMain(core, context, ['grep', 'c4-head', 'x'], { world: w({ status: 1, signal: null, error: null, stdout: EMPTY, overflow: false }) });
       expectMain(check, 'no match', none.r, { exit: 0, stdout: EMPTY });
+      check(none.fake.calls.filter((c) => isProbeOp(c.op)).length === 0, 'no match: no probe call', none.fake.kinds());
+      // C16-15: the status 128 with empty output row now carries an explicit probe response of status 1 with empty stdout (the pattern compiled): unchanged GIT_SAFE_GIT.
+      const probeOk = (call) => (isProbeOp(call.op) ? { status: 1, signal: null, error: null, stdout: EMPTY, overflow: false } : undefined);
       const bad = [
-        ['status 1 with output', { status: 1, signal: null, error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }],
-        ['status 2', { status: 2, signal: null, error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }],
-        ['status 128 with empty output', { status: 128, signal: null, error: null, stdout: EMPTY, overflow: false }],
-        ['a signal', { status: null, signal: 'SIGKILL', error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }],
-        ['a spawn failure', { status: null, signal: null, error: 'ENOENT MARKER-LEAK', stdout: EMPTY, overflow: false }],
+        ['status 1 with output', { status: 1, signal: null, error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }, null],
+        ['status 2', { status: 2, signal: null, error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }, null],
+        ['status 128 with empty output and a probe that compiles the pattern (status 1)', { status: 128, signal: null, error: null, stdout: EMPTY, overflow: false }, probeOk],
+        ['a signal', { status: null, signal: 'SIGKILL', error: null, stdout: Buffer.from('MARKER-LEAK\n'), overflow: false }, null],
+        ['a spawn failure', { status: null, signal: null, error: 'ENOENT MARKER-LEAK', stdout: EMPTY, overflow: false }, null],
       ];
-      for (const [label, content] of bad) {
-        const s = await seamMain(core, context, ['grep', 'c4-head', 'x'], { world: w(content) });
+      for (const [label, content, onProbe] of bad) {
+        const world = onProbe === null ? w(content) : { ...w(content), handle: (k, op, call) => onProbe(call) };
+        const s = await seamMain(core, context, ['grep', 'c4-head', 'x'], { world });
         expectMain(check, label, s.r, failMain(E.GIT));
+        check(s.fake.calls.filter((c) => isProbeOp(c.op)).length === (onProbe === null ? 0 : 1), `${label}: ${onProbe === null ? 'no probe call' : 'exactly one probe call'}`, s.fake.kinds());
       }
       const ok = await seamMain(core, context, ['grep', 'c4-head', 'x'], { world: w(Buffer.from(`${rid('c4-head')}:safe.txt\0` + '1\0' + 'x\n')) });
       expectMain(check, 'status 0', ok.r, { exit: 0, stdout: `${rid('c4-head')}:safe.txt\0` + '1\0' + 'x\n' });
+    });
+    await step('seam, the complete C16-8 probe outcome table: after a content call with status 128 and empty stdout exactly one probe runs; only a probe with status 128, empty stdout and no signal, error or overflow is GIT_SAFE_PATTERN; every other probe outcome (status 1, 0, any stdout, other statuses, signal, spawn error, E2BIG, rejection, throw, invalid result, overflow, oversized stdout) is the unchanged GIT_SAFE_GIT; no marker byte reaches the diagnostic', async () => {
+      const R = (status, stdout = EMPTY, extra = {}) => ({ status, signal: null, error: null, stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout), overflow: false, ...extra });
+      const MK = 'MARKER-LEAK\n';
+      const pattern = 'MARKER-PATTERN-(';
+      const probeRun = async (probe, { ids = null, tree = ['safe.txt'] } = {}) => {
+        const world = { tree, content: R(128), handle: (k, op, call) => (isProbeOp(call.op) ? (typeof probe === 'function' ? probe(call) : probe) : undefined), ...(ids ? { ids } : {}) };
+        return seamMain(core, context, ['grep', 'c4-head', pattern], { world });
+      };
+      const rows = [
+        ['status 128, empty stdout', R(128), E.PATTERN],
+        ['status 1, empty stdout', R(1), E.GIT], ['status 0, empty stdout', R(0), E.GIT], ['status 0 with stdout', R(0, MK), E.GIT],
+        ['status 128 with stdout', R(128, MK), E.GIT], ['status 1 with stdout', R(1, MK), E.GIT], ['status 2', R(2), E.GIT], ['status 127', R(127), E.GIT], ['status 255', R(255), E.GIT],
+        ['a signal', { status: null, signal: 'SIGKILL', error: null, stdout: EMPTY, overflow: false }, E.GIT],
+        ['a spawn error', { status: null, signal: null, error: 'ENOENT MARKER-LEAK', stdout: EMPTY, overflow: false }, E.GIT],
+        ['E2BIG (an argument-limit style failure)', { status: null, signal: null, error: 'E2BIG', stdout: EMPTY, overflow: false }, E.GIT],
+        ['ENAMETOOLONG', { status: null, signal: null, error: 'ENAMETOOLONG', stdout: EMPTY, overflow: false }, E.GIT],
+        ['a rejected promise', () => Promise.reject(new Error('MARKER-LEAK')), E.GIT], ['a synchronous throw', () => { throw new Error('MARKER-LEAK'); }, E.GIT],
+        ['an invalid result: null', { __raw: null }, E.GIT], ['an invalid result: empty object', { __raw: {} }, E.GIT], ['an invalid result: extra key', R(128, EMPTY, { extra: 1 }), E.GIT],
+        ['an invalid result: status 256', R(256), E.GIT], ['an invalid result: string stdout', { __raw: { status: 128, signal: null, error: null, stdout: '', overflow: false } }, E.GIT],
+        ['an invalid result: a signal together with status 128', R(128, EMPTY, { signal: 'SIGTERM' }), E.GIT],
+        ['an overflow result', { status: null, signal: null, error: null, stdout: EMPTY, overflow: true }, E.GIT],
+        ['oversized stdout with status 128', R(128, Buffer.alloc(MAX_BYTES + 1, 0x78)), E.GIT], ['exactly 1 MiB of stdout with status 128', R(128, Buffer.alloc(MAX_BYTES, 0x78)), E.GIT],
+      ];
+      for (const [label, probe, message] of rows) {
+        const s = await probeRun(probe);
+        expectMain(check, `probe ${label}`, s.r, failMain(message));
+        const probes = s.fake.calls.filter((c) => isProbeOp(c.op));
+        check(probes.length === 1 && s.fake.calls.length === 6 && s.fake.calls[5] === probes[0], `probe ${label}: exactly one probe, and it is the last call after version, root, resolution, inventory and content`, s.fake.kinds());
+        check(!s.r.stderr.includes('MARKER'), `probe ${label}: no pattern, stdout, error text or exception text reaches the diagnostic`, s.r.stderr);
+      }
+      // The first row's complete request: vectors, fixed prefix, limits, cwd and sanitized environment of every call, including the probe.
+      const one = await probeRun(R(128));
+      checkOps(check, 'probe over the SHA-1 empty tree', one.fake, [V_RESOLVE('c4-head'), V_INV_TREE(rid('c4-head')), V_GREP(pattern, rid('c4-head'), [], []), V_PROBE(pattern, EMPTY_TREE_SHA1)]);
+      // The empty tree follows the length of the resolved commit ID: a 64-digit ID selects the SHA-256 empty tree (and the SHA-1 one is never used).
+      const long = 'a'.repeat(64);
+      const s64 = await probeRun(R(128), { ids: { 'c4-head': long } });
+      expectMain(check, 'probe with a 64-digit commit ID', s64.r, failMain(E.PATTERN));
+      checkOps(check, 'probe over the SHA-256 empty tree', s64.fake, [V_RESOLVE('c4-head'), V_INV_TREE(long), V_GREP(pattern, long, [], []), V_PROBE(pattern, EMPTY_TREE_SHA256)]);
+      const s64b = await probeRun(R(1), { ids: { 'c4-head': long } });
+      expectMain(check, 'a 64-digit probe with status 1', s64b.r, failMain(E.GIT));
+      // The probe carries no selectors and no protected-path exclusions, whatever the content call carried.
+      const sel = await seamMain(core, context, ['grep', 'c4-head', pattern, '--', 'src', 'safe.txt'], { world: { tree: ['.env', 'src/.env', 'src/a.txt', 'safe.txt'], content: R(128), handle: (k, op, call) => (isProbeOp(call.op) ? R(128) : undefined) } });
+      expectMain(check, 'probe with selectors and exclusions on the content call', sel.r, failMain(E.PATTERN));
+      checkOps(check, 'selectors and exclusions stay on the content call only', sel.fake, [V_RESOLVE('c4-head'), V_INV_TREE(rid('c4-head')), V_GREP(pattern, rid('c4-head'), [LIT('src'), LIT('safe.txt')], [EXC('src/.env')]), V_PROBE(pattern, EMPTY_TREE_SHA1)]);
+      // Content-stage rows never probe; the content stage keeps its own LIMIT and ARG_LIMIT behavior.
+      const noProbe = [
+        ['status 1 with empty stdout (no match)', R(1), { exit: 0, stdout: EMPTY }], ['status 0 (a match)', R(0, 'x\n'), { exit: 0, stdout: 'x\n' }],
+        ['status 1 with stdout', R(1, MK), failMain(E.GIT)], ['status 2', R(2, MK), failMain(E.GIT)], ['status 255 with empty stdout', R(255), failMain(E.GIT)],
+        ['status 128 with stdout (nonempty failed output)', R(128, MK), failMain(E.GIT)], ['status 128 with one byte of stdout', R(128, 'x'), failMain(E.GIT)],
+        ['a signal', { status: null, signal: 'SIGKILL', error: null, stdout: Buffer.from(MK), overflow: false }, failMain(E.GIT)],
+        ['a spawn failure', { status: null, signal: null, error: 'ENOENT MARKER-LEAK', stdout: EMPTY, overflow: false }, failMain(E.GIT)],
+        ['E2BIG', { status: null, signal: null, error: 'E2BIG', stdout: EMPTY, overflow: false }, failMain(E.ARG_LIMIT)], ['ENAMETOOLONG', { status: null, signal: null, error: 'ENAMETOOLONG', stdout: EMPTY, overflow: false }, failMain(E.ARG_LIMIT)],
+        ['an overflow result', { status: null, signal: null, error: null, stdout: EMPTY, overflow: true }, failMain(E.LIMIT('grep'))], ['an oversized stdout with status 128', R(128, Buffer.alloc(MAX_BYTES + 1, 0x78)), failMain(E.LIMIT('grep'))],
+        ['an invalid result', { __raw: { status: 128 } }, failMain(E.GIT)], ['a rejected promise', () => Promise.reject(new Error(MK)), failMain(E.GIT)], ['a synchronous throw', () => { throw new Error(MK); }, failMain(E.GIT)],
+      ];
+      for (const [label, content, want] of noProbe) {
+        const world = { tree: ['safe.txt'], content: typeof content === 'function' ? undefined : content, handle: (k, op, call) => (call.kind === 'content' && typeof content === 'function' ? content() : undefined) };
+        const s = await seamMain(core, context, ['grep', 'c4-head', pattern], { world });
+        expectMain(check, `content ${label}`, s.r, want);
+        check(s.fake.calls.length === 5 && s.fake.calls.filter((c) => isProbeOp(c.op)).length === 0, `content ${label}: no probe call (five calls: version, root, resolution, inventory, content)`, s.fake.kinds());
+      }
+      // Only grep probes: a content call with status 128 and empty stdout in any other subcommand is the Git failure with no second content-stage call.
+      for (const [label, argv, world] of [['cat', ['cat', 'c4-head', '--', 'safe.txt'], { content: R(128) }], ['diff', ['diff', 'c4-base..c4-head'], tableWorld({ content: R(128) })], ['show', ['show', 'c4-head'], tableWorld({ content: R(128) })], ['log', ['log', '-p', 'c4-head'], tableWorld({ content: R(128) })]]) {
+        const s = await seamMain(core, context, argv, { world });
+        expectMain(check, `${label}: content status 128 with empty stdout`, s.r, failMain(E.GIT));
+        check(s.fake.calls.filter((c) => c.kind === 'content').length === 1 && s.fake.calls.every((c) => !isProbeOp(c.op)), `${label}: exactly one content call and no probe (the diagnostic is grep only)`, s.fake.kinds());
+      }
+      // A failure before the content stage never probes either: version, root, policy, revision and inventory failures.
+      const early = [
+        ['a policy read failure', { readFile: async () => { throw new Error('MARKER-LEAK'); } }, failMain(E.POLICY_IO)],
+        ['an unresolvable revision', { world: { tree: ['safe.txt'], missing: new Set(['c4-head']) } }, failMain(E.REVISION)],
+        ['a tree inventory failure with status 128 and empty stdout', { world: { tree: ['safe.txt'], handle: (k) => (k === 'invTree' ? R(128) : undefined) } }, failMain(E.GIT)],
+        ['a version failure', { world: { version: R(128) } }, failMain(E.GIT)],
+        ['a root failure', { world: { root: R(128) } }, failMain(E.REPOSITORY)],
+        ['an all-protected selection (no content call at all)', { world: { tree: ['.env', 'private/k'], content: R(128) } }, { exit: 0, stdout: EMPTY }],
+      ];
+      for (const [label, o, want] of early) {
+        const s = await seamMain(core, context, ['grep', 'c4-head', pattern], o);
+        expectMain(check, `early ${label}`, s.r, want);
+        check(s.fake.calls.every((c) => !isProbeOp(c.op) && c.kind !== 'content'), `early ${label}: no content call and no probe`, s.fake.kinds());
+      }
+      // Argument bound: the probe is never larger than the content call, so a request that fits never fails in the probe; the content vector keeps its unit count with -E.
+      const base = argvUnits([...PREFIX, ...V_GREP('x', rid('c4-head'), [LIT('safe.txt')], [])]);
+      check(base === argvUnits([...PREFIX, ...V_GREP_BRE('x', rid('c4-head'), [LIT('safe.txt')], [])]), 'the -E content vector has exactly the argument units of the former -G vector', base);
+      const real = await seamMain(core, context, ['grep', 'c4-head', 'x', '--', 'safe.txt'], { world: { tree: ['safe.txt'], content: Buffer.from('X\n') } });
+      check(real.fake.calls.length === 5 && argvUnits(real.fake.calls[4].argv) === base, 'the content call the core issues has exactly that many argument units (C16 adds zero prefix units)', real.fake.calls.map((c) => argvUnits(c.argv)));
+    });
+    await step('real Git through main with an injected content-stage status 128 (C16-16): a valid pattern whose real empty-tree probe exits 1 stays GIT_SAFE_GIT, an invalid pattern whose real probe exits 128 is GIT_SAFE_PATTERN; exit 2, empty stdout and one exact stderr line', async () => {
+      const real = realExecutor();
+      const inject = async (req) => {
+        const op = req.argv.slice(PREFIX.length);
+        if (op[0] === 'grep' && !isProbeOp(op)) return { status: 128, signal: null, error: null, stdout: EMPTY, overflow: false };
+        return real(req);
+      };
+      const deps = { cwd: fx.root, env: context.env, execute: inject, readFile: async () => bytes(jsonText(PL)) };
+      const valid = await core.main(['grep', C, 'needle', '--', 'safe.txt'], deps);
+      expectMain(check, 'valid pattern, injected content 128, real probe', valid, failMain(E.GIT));
+      const invalid = await core.main(['grep', C, 'needle(', '--', 'safe.txt'], deps);
+      expectMain(check, 'invalid pattern, injected content 128, real probe', invalid, failMain(E.PATTERN));
+    });
+    await step('known residual C16-R1 (malformed configuration): grep.threads=bogus in the isolated global configuration fails the content call AND the empty-tree probe with status 128, so a VALID pattern on visible content is reported as the exact GIT_SAFE_PATTERN with exit 2 and empty stdout; this is a known misclassification, not proof that the pattern is invalid', async () => {
+      const env = isoEnv(context, '[grep]\n\tthreads = bogus\n');
+      const hh = await openReal(core, context, fx, PL, { env });
+      const r = await hh.attempt(['grep', C, 'needle', '--', 'safe.txt']);
+      check(r.threw && r.error.code === 'GIT_SAFE_PATTERN' && r.error.message === E.PATTERN, 'the valid pattern needle on visible content throws GIT_SAFE_PATTERN under the malformed configuration (known misclassification)', r.threw ? r.error.message : r.value);
+      check(eq(hh.ops(), [V_RESOLVE(C), V_INV_TREE(C), V_GREP('needle', C, [LIT('safe.txt')], []), V_PROBE('needle', EMPTY_TREE_SHA1)]), 'the vectors are the content call then the probe', hh.ops());
+      const [content, probe] = hh.log.slice(4, 6);
+      check(content && probe && content.status === 128 && probe.status === 128 && content.stdout.length === 0 && probe.stdout.length === 0, 'both real calls exit 128 with empty stdout (the configuration, not the pattern, failed)', { content: content && content.status, probe: probe && probe.status });
+      const m = await core.main(['grep', C, 'needle', '--', 'safe.txt'], { cwd: fx.root, env, readFile: async () => bytes(jsonText(PL)) });
+      expectMain(check, 'main under the malformed configuration', m, failMain(E.PATTERN));
+      // Repeating the eligible error does not change it (the agents' bounded correction budget then ends in a stop, an instruction-level behavior tested in C16): the same exact error each time and never content.
+      for (let i = 0; i < 3; i++) {
+        const again = await core.main(['grep', C, 'needle', '--', 'safe.txt'], { cwd: fx.root, env, readFile: async () => bytes(jsonText(PL)) });
+        expectMain(check, `repeat ${i + 1}`, again, failMain(E.PATTERN));
+      }
+      // Control: the same request in the ordinary isolated configuration succeeds, so the malformed configuration is the cause.
+      const ok = await h.attempt(['grep', C, 'needle', '--', 'safe.txt']);
+      check(!ok.threw && sameBuf(ok.value, Buffer.from(`${C}:safe.txt\0` + '1\0' + 'needle\n')), 'control: without the malformed configuration the same request succeeds', ok.threw ? ok.error.message : ok.value);
     });
     await step('seam: an all-protected selection makes no content call; the exclusions are exactly the protected names under the selectors (all of them without selectors)', async () => {
       const tree = ['.env', 'private/k', 'safe.txt', 'src/.env', 'src/a.txt', 'src2/.env'];
@@ -1488,7 +1741,7 @@ async function argumentsGroup(context) {
       }
       check(!rc.REQUIRED_CASE_IDS.some((x) => x.includes('/C4/')) && eq(rc.BASELINE_CASE_IDS.length, 60) && eq(rc.RC1_CASE_IDS.length, 40), 'the complete-case inventories are untouched', { baseline: rc.BASELINE_CASE_IDS.length, rc1: rc.RC1_CASE_IDS.length });
     });
-    await step('the fixture rows A01-A31: accepted rows give the exact result, refused rows the exact usage error; arguments are parsed before any session, call or policy read', async () => {
+    await step('the fixture rows A01-A33: accepted rows give the exact result, refused rows the exact usage error; arguments are parsed before any session, call or policy read', async () => {
       if (!fixture) return;
       const fmts = {};
       for (const row of fixture.args) {
@@ -1509,6 +1762,33 @@ async function argumentsGroup(context) {
       }
       // PLAN-GAP: the summary format strings are not pinned; they must at least be consistent across commands and distinct from each other.
       check(fmts.A02 === fmts.A09 && fmts.A03 === fmts.A10 && fmts.A02 !== fmts.A03 && fmts.A03 !== fmts.A04 && fmts.A02 !== fmts.A04, 'the stat, name-status and name-only formats are consistent across diff and show and distinct from each other', fmts);
+    });
+    await step('C16-8 diagnostics: only cat and grep carry guidance after the supported form (one path per call; extended regular expressions), cardinality fails before any session, duplicates fail before deduplication, a safe-plus-protected pair fails as an argument error, and a NUL or missing grep pattern gets the ERE guidance', async () => {
+      check(E.ARGUMENT('cat') === 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: cat <commit> -- <path>; one path per call', 'the cat diagnostic is exactly the plan string');
+      check(E.ARGUMENT('grep') === 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: grep <commit> <pattern> [-- <paths>]; pattern uses extended regular expressions (ERE)', 'the grep diagnostic is exactly the plan string');
+      for (const cmd of COMMANDS) check(E.ARGUMENT(cmd) === (cmd === 'cat' || cmd === 'grep' ? ARGUMENT_GUIDED[cmd] : `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`) && E.ARGUMENT(cmd).startsWith(`GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`), `${cmd}: the diagnostic starts with its supported form and only cat and grep add guidance`);
+      const catBad = [['two paths (A32)', ['cat', 'c4-head', '--', 'safe.txt', 'src/a.txt']], ['a safe and a protected path (A33)', ['cat', 'c4-head', '--', 'safe.txt', '.env']], ['a protected path first', ['cat', 'c4-head', '--', '.env', 'safe.txt']],
+        ['a duplicated path (cardinality before deduplication)', ['cat', 'c4-head', '--', 'safe.txt', 'safe.txt']], ['three paths', ['cat', 'c4-head', '--', 'a', 'b', 'c']], ['no path', ['cat', 'c4-head', '--']], ['no separator', ['cat', 'c4-head', 'safe.txt']]];
+      for (const [label, argv] of catBad) {
+        await expectErr(check, `cat ${label}`, () => parse(argv), E.ARGUMENT('cat'));
+        const s = await seamMain(core, context, argv, { world: tableWorld() });
+        expectMain(check, `main cat ${label}`, s.r, failMain(E.ARGUMENT('cat')));
+        check(s.fake.calls.length === 0 && s.reads.length === 0 && !s.r.stderr.includes('SECRET'), `main cat ${label}: no session, no executor call and no policy read (a protected second path is an argument error, not a secret refusal)`, { calls: s.fake.calls.length, reads: s.reads.length });
+      }
+      for (const [label, argv] of [['no pattern', ['grep', 'c4-head']], ['a NUL pattern', ['grep', 'c4-head', 'a\u0000b']], ['a separator without paths', ['grep', 'c4-head', 'x', '--']], ['a stray argument', ['grep', 'c4-head', 'x', 'y']]]) {
+        await expectErr(check, `grep ${label}`, () => parse(argv), E.ARGUMENT('grep'));
+        const s = await seamMain(core, context, argv, { world: tableWorld() });
+        expectMain(check, `main grep ${label}`, s.r, failMain(E.ARGUMENT('grep')));
+        check(s.fake.calls.length === 0 && s.reads.length === 0, `main grep ${label}: no session and no policy read`, { calls: s.fake.calls.length, reads: s.reads.length });
+      }
+      await expectErr(check, 'ls keeps the unguided diagnostic', () => parse(['ls', 'c4-head', '--']), E.ARGUMENT('ls'));
+      // A hand-built request with a NUL pattern or two cat paths is the input failure, never an argument-guidance message.
+      const sess = await attempt(async () => core.createGitSession({ cwd: makeFake(context).paths.start, env: SEAM_ENV, execute: makeFake(context).execute, readFile: async () => bytes(jsonText(DEFAULT_POLICY)) }));
+      check(!sess.threw, 'premise: a session over the fake exists');
+      if (!sess.threw) {
+        await expectErr(check, 'a direct request with a NUL pattern', () => core.executeGitSafe({ subcommand: 'grep', revisions: ['c4-head'], paths: [], format: null, patch: false, maxCount: null, pattern: 'a\u0000b' }, sess.value), E.INPUT);
+        await expectErr(check, 'a direct cat request with two paths', () => core.executeGitSafe({ subcommand: 'cat', revisions: ['c4-head'], paths: ['safe.txt', 'src/a.txt'], format: null, patch: false, maxCount: null, pattern: null }, sess.value), E.INPUT);
+      }
     });
     await step('every accepted option position, order independence, duplicates, exclusive formats, counts, literal selectors, and the pattern rules', async () => {
       for (const [argv, want] of OK_FORMS) {

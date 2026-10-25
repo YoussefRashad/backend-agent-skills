@@ -2300,7 +2300,7 @@ const blocksOf = (text) => text.split(/\n[ \t]*\n/).map((b) => b.trim()).filter(
 const DOC_TEXT = {
   validateRow: '| `validate.mjs` | Static setup checks and installed hook self-test; exit 1 on any failure |',
   doctorRow: '| `doctor.mjs` | Audit lane configuration and local diagnostics without a model session or sandbox probe |',
-  phase3a: 'Validation uses the installed policy baseline and shared ownership schemas. Schema 2 reports needs update. The installed hook self-test proves direct script behavior only; Claude hook loading remains not verified.',
+  phase3a: 'Validation uses the installed policy baseline and shared ownership schemas. Schema 2 reports needs update. The installed hook self-test proves direct script behavior only; it does not establish hook loading in the current Claude session. See references/claude.md for dated host measurements and the root-start requirement.',
   phase3b: 'Run validation in a trusted checkout because the installed hook self-test executes project code.',
   phase3c: 'After migration, a schema-2 policy content change in a project with catalog tools, including a projectPatterns addition, still goes through migrate-security-paths.mjs and security-decisions.json. Validation reports project patterns and stale snippets; it does not bypass that reviewed migration workflow.',
   phase4: 'Run doctor.mjs only with the worker\'s effective lane options. Its configuration and diagnostic results do not verify connector-tool absence or sandbox enforcement.',
