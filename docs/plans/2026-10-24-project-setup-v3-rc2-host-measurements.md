@@ -161,3 +161,14 @@ Scored after all four reviews were recorded, against the fixture meta (`defectiv
   reviewer's stop rule).
 - After rc.3: re-measure R83-e and A3/L10, then tag and publish 3.0.0.
 - Optional: the Codex profile row on a host where the isolated elevated sandbox works, or under WSL2.
+
+## Correction (2026-10-25)
+
+The L10 root cause above is wrong in one point. The Codex `GIT_SAFE_GIT` did not come from a
+pathspec absent at the commit: re-probed on the fixture, an absent selector is filtered and grep
+succeeds. It came from the pattern. git-safe ran `git grep -G` (basic regular expression), where
+`\(` opens a group, so the pattern `validateTransfer|transfer\(|RangeError|wallet.ledger` failed to
+compile and Git exited 128. Under the same BRE, `validateTransfer|transfer` returned an empty
+success although both words occur, which a reviewer reads as "no consumers". The `cat` finding
+(one path per call) stands. The rest of this record is unchanged. rc.3 (component C16) addresses
+both; see `docs/plans/2026-10-25-project-setup-v3-rc3-c16-decisions.md` on that branch.
