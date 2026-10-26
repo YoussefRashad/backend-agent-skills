@@ -22,6 +22,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { reverseForFile } from './helpers/c16-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -175,7 +176,33 @@ async function withStreamGuard(fn) {
 
 // ================================================ plan literals (generated from the frozen plan text) ====
 // C13-14: the exact rc.2 CHANGELOG entry, inserted after "# Changelog" and one blank line (the last line is the blank separator); the complete rc.1 entry follows it unchanged. C14-14 amendment L (two paragraphs) is part of this current-candidate array.
+// C16-13: the exact rc.3 CHANGELOG entry (plan C16-13), prepended after "# Changelog" and one blank line; the last line is the blank separator before the preserved rc.2 entry.
 const CHANGELOG_ENTRY_LINES = [
+  "## 3.0.0-rc.3",
+  "",
+  "C16 addresses the R83-e subdirectory-launch failure and the A3/L10 incomplete-review failure.",
+  "Root Claude instructions require a repository-root session start and refuse work after a",
+  "positively established subdirectory start. This is an instruction mitigation, not host",
+  "enforcement; nested Claude templates remain unchanged.",
+  "",
+  "git-safe grep now uses extended regular expressions and a content-free pattern probe after",
+  "a status-128 content failure with empty stdout. cat remains one path per call, with clearer",
+  "usage text.",
+  "Canonical reviewer and docs-sync instructions permit bounded correction of GIT_SAFE_ARGUMENT",
+  "and GIT_SAFE_PATTERN rejections only; other failed or denied reads still stop.",
+  "Both Codex wrappers recognize that canonical exception; their other restrictions and both",
+  "Claude wrappers remain unchanged.",
+  "",
+  "Living references record the dated Windows host measurements and their limitations.",
+  "The hooks-selftest entry-guard comment now marks 8.3 short-name behavior untested.",
+  "Manifest schema 3, policy schemas, ownership, approval and rollback behavior are unchanged.",
+  "",
+  "R83-e and A3/L10 require re-measurement after this candidate is released. See",
+  "RELEASE-NOTES-3.0.0-rc.3.md. Publication remains a separate authorized action.",
+  "",
+];
+// Historical (C16-15: preserved separately, as C13 preserved the rc.1 arrays): the complete rc.2 entry as it stands after C15, now the second entry of CHANGELOG.md.
+const RC2_CHANGELOG_ENTRY_LINES = [
   "## 3.0.0-rc.2",
   "",
   "Review rules candidate: Adversarial, Consumer, Boundary and Contract passes; reachable",
@@ -229,10 +256,20 @@ const RC1_CHANGELOG_ENTRY_LINES = [
 ];
 // Plan 3.6 and C13-14: the SKILL.md release heading.
 const SKILL_HEADING_LINES = [
-  "# project-setup 3.0.0-rc.2",
+  "# project-setup 3.0.0-rc.3",
 ];
 // Plan 3.6 and C13-14: the complete resulting opening seven lines of README.md.
 const README_OPENING_LINES = [
+  "# project-setup 3.0.0-rc.3 - skill source",
+  "",
+  "**Release candidate 3.0.0-rc.3.** See RELEASE-NOTES-3.0.0-rc.3.md for compatibility,",
+  "acceptance requirements and the remaining R83-e and A3/L10 host measurements.",
+  "",
+  "Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent",
+  "can still read secret files. Keep real secrets out of development working trees.",
+];
+// Historical (C16-15): the rc.2 opening of README.md, seen after the C16 README amendments are reversed.
+const RC2_README_OPENING_LINES = [
   "# project-setup 3.0.0-rc.2 - skill source",
   "",
   "**Release candidate 3.0.0-rc.2.** See `RELEASE-NOTES-3.0.0-rc.2.md` for acceptance requirements,",
@@ -245,8 +282,116 @@ const README_OPENING_LINES = [
 const README_INVENTORY_ROW_LINES = [
   "install/release.mjs local tagged ZIP and publication-note builder (not copied into installs)",
 ];
-// C13-14: the complete RELEASE-NOTES-3.0.0-rc.2.md, exactly (ASCII, LF, one final LF). C14-14 amendment N (opening description, four Changes bullets, the schema, compatibility, R29 and limitation sentences) is part of this current-candidate array.
+// C16-13: the complete RELEASE-NOTES-3.0.0-rc.3.md, exactly (ASCII, LF, one final LF).
 const RELEASE_NOTES_LINES = [
+  "# project-setup 3.0.0-rc.3",
+  "",
+  "Release candidate containing C16: root-start instructions and git-safe review usability.",
+  "Final 3.0.0 remains blocked on the post-release R83-e and A3/L10 measurements below.",
+  "",
+  "## Changes",
+  "",
+  "- Root Claude instructions require a repository-root session start.",
+  "- A positively established subdirectory start must stop and request a root restart.",
+  "- The nested Claude template and its sibling import remain unchanged.",
+  "- git-safe grep uses extended regular expressions instead of basic regular expressions.",
+  "- A status-128 grep content failure with empty stdout triggers an empty-tree pattern probe.",
+  "- cat retains one path per call and prints that requirement on argument rejection.",
+  "- Reviewer and docs-sync may correct ARGUMENT and PATTERN rejections within a bounded budget.",
+  "- Both Codex wrappers recognize only that canonical bounded-correction exception.",
+  "- Corrections never add --out or widen paths; other failures retain stop and no-fallback rules.",
+  "- Living references record the dated Windows host measurements and remaining unknowns.",
+  "- The hooks-selftest entry-guard comment marks 8.3 short-name behavior untested.",
+  "",
+  "## Compatibility and rollback",
+  "",
+  "The project manifest schema remains 3. C16 adds no policy or apply migration.",
+  "",
+  "Upgrade the known v2 project together with its skill. V2 validation rejects manifest schema 3.",
+  "This is a compatibility signal, not a retrofitted pre-write guard in every old command.",
+  "Do not use v2 commands to repair a schema-3 project.",
+  "",
+  "Roll back project state with the tooling used for the update before reverting the installed",
+  "skill. If later independent runs exist, roll them back newest first. Do not split this",
+  "migration into successive manifest commits.",
+  "",
+  "Existing rc.1 and rc.2 projects receive reviewed managed drafts for the changed instructions,",
+  "both Codex wrappers and the complete seven-file runtime unit. User edits keep their normal",
+  "approval protection. Keeping old instructions means an incomplete update.",
+  "Both Claude wrappers remain unchanged.",
+  "",
+  "grep patterns must be checked for ERE meaning before reuse. a|b now alternates; a\\|b matches",
+  "a literal vertical bar. Empty patterns and leading-dash patterns retain their accepted forms.",
+  "A valid BRE can be invalid ERE. \\d is not a digit class; use [0-9].",
+  "GIT_SAFE_PATTERN permits only the canonical agents' bounded same-helper correction.",
+  "GIT_SAFE_GIT retains its unchanged operational-failure message and is never retry authority.",
+  "",
+  "## Verification",
+  "",
+  "Run node tests/accept-rc1.mjs for complete candidate acceptance.",
+  "The rc.1 case names and accept-rc1.mjs are retained for rc.3.",
+  "C16 contributes through R29 without adding numbered case records.",
+  "",
+  "Required totals are 100 PASS / 0 FAIL / 0 SKIP, or 99 PASS / 0 FAIL / 1 SKIP with only the",
+  "recorded Windows R13d file-symlink privilege exception. No rc.1 case may skip.",
+  "R91 must retain real Windows junction coverage.",
+  "",
+  "The acceptance record identifies executed commands, tested bytes, results and evidence.",
+  "Static instruction tests and evaluation objects do not prove agent behavior.",
+  "",
+  "## Pending host measurements",
+  "",
+  "After release, re-measure R83-e on the existing fixture. A subdirectory-started Claude",
+  "session must refuse by instruction and request a root restart before any tool or file read.",
+  "Root-started cases, including a later cd within the project, must still pass without a",
+  "false launch refusal. Repeat the root and subdirectory cases in the interactive TUI with",
+  "the maintainer; pre-freeze headless probes do not establish TUI behavior.",
+  "Include multi-turn TUI cases that change directory before reading or spawning the reviewer.",
+  "",
+  "Re-run both Codex L10 reviews. Both must complete without an incomplete verdict.",
+  "The change-1 lost update in WalletLedger.transfer must be a HIGH or CRITICAL finding with",
+  "a concrete concurrent-debit scenario. The control range must have no money-integrity finding.",
+  "The root-started Claude L08 reviews must not falsely refuse because of the launch rule.",
+  "Record completeness for both Claude ranges; rc.2 change-2 was self-declared partial.",
+  "",
+  "These measurements block final 3.0.0, not rc.3 implementation acceptance.",
+  "",
+  "## Limitations",
+  "",
+  "The launch refusal is weaker than host enforcement. Probes P1/P2 were model self-reports.",
+  "The 2026-10-24/25 Windows measurements used Claude Code 2.1.310 and codex-cli 0.163.0.",
+  "The separate instruction-loading probes and corrected grep diagnosis are dated 2026-10-25.",
+  "A start above or outside the target root may load its instructions only after an initial read.",
+  "The nearest-at-or-above comparison does not refuse that start even after the rule loads.",
+  "Missing launch context alone neither establishes a refusal condition nor verifies controls.",
+  "Commit installed setup before worktree sessions so new worktrees have their own instructions.",
+  "",
+  "Claude root-started hook behavior passed on that host; subdirectory starts lacked controls.",
+  "Missing Node failed open. Claude subprocess reads were not protected by tool deny rules.",
+  "Codex profile enforcement remained blocked; its negative-capability measurement was",
+  "inconclusive. macOS, Linux and WSL2 remain unverified for these measurements.",
+  "",
+  "P4 verified empty-tree behavior on Git 2.53.0.windows.2 in SHA-1 and SHA-256 repositories.",
+  "The Git 2.31 floor and macOS/Linux regex engines remain unverified.",
+  "Malformed grep.*, color.grep, color.grep.<slot>, color.ui or submodule.recurse configuration",
+  "can fail before command-line options take effect. Such a failure can also fail on the empty",
+  "tree and be classified GIT_SAFE_PATTERN; the bounded corrections still stop without content",
+  "or fallback access.",
+  "Existing path-policy, trusted-checkout and agent-read confinement limitations remain.",
+  "No backend-standards scaffold integration is established by this component.",
+  "",
+  "## Provenance and release artifacts",
+  "",
+  "The local release builder uses an existing reviewed tag and an unused external directory.",
+  "It does not create tags, install the skill or publish a release.",
+  "",
+  "The tagged subtree ID, archive SHA256, installer payload hash and backup snapshot digest",
+  "identify different bytes. Publication notes record the resolved release identities.",
+  "Historical release notes and frozen plans remain unchanged.",
+];
+// Historical (C16-15): the complete RELEASE-NOTES-3.0.0-rc.2.md, which C16 leaves byte for byte unchanged.
+// C13-14: the complete RELEASE-NOTES-3.0.0-rc.2.md, exactly (ASCII, LF, one final LF). C14-14 amendment N (opening description, four Changes bullets, the schema, compatibility, R29 and limitation sentences) is part of this current-candidate array.
+const RC2_RELEASE_NOTES_LINES = [
   "# project-setup 3.0.0-rc.2",
   "",
   "This is the review rules and project-rules integration release candidate, following the rc.1",
@@ -413,8 +558,29 @@ const README_TEST_FIRST_LINES = [
   "node tests/accept-rc1.mjs",
   "```",
 ];
-// Plan 5.9 and C13-14: the complete README section appended at the end (its two candidate tag occurrences are rc.2).
+// Plan 5.9 and C13-14, with the two candidate tag occurrences changed to rc.3 by C16-11: the complete README section appended at the end.
 const README_RELEASE_SECTION_LINES = [
+  "## Local candidate release",
+  "",
+  "The release builder reads an existing local tag and writes a ZIP plus RELEASE-NOTES.md into",
+  "a new directory outside project-setup. It does not create tags, publish releases or install",
+  "the skill. Run complete candidate acceptance before a later authorized release action.",
+  "",
+  "S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never",
+  "requires or creates project-setup-v3.0.0-rc.3 in the distribution repository.",
+  "",
+  "The installer payload hash, archive SHA256 and backup snapshot digest identify different",
+  "bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;",
+  "do not rebuild or replace its archive.",
+  "",
+  "Later local build, after the reviewed tag already exists:",
+  "",
+  "```text",
+  "node install/release.mjs --tag project-setup-v3.0.0-rc.3 --out <unused-directory>",
+  "```",
+];
+// Historical (C16-15): the same section as the rc.2 README carried it (seen after the C16 README amendments are reversed).
+const RC2_README_RELEASE_SECTION_LINES = [
   "## Local candidate release",
   "",
   "The release builder reads an existing local tag and writes a ZIP plus RELEASE-NOTES.md into",
@@ -527,6 +693,7 @@ const PAYLOAD_ABSENT = [
   "RELEASE-NOTES-2.0.0.md",
   "RELEASE-NOTES-3.0.0-rc.1.md",
   "RELEASE-NOTES-3.0.0-rc.2.md",
+  "RELEASE-NOTES-3.0.0-rc.3.md",
   "RELEASE-NOTES.md",
   "install/",
   "tests/",
@@ -707,7 +874,7 @@ const ERRORS = deepFreeze({
 });
 const failResult = (code) => ({ exitCode: ERRORS[code][0], stdout: '', stderr: `${code}: ${ERRORS[code][1]}\n` });
 const USAGE_MESSAGE = `RELEASE_USAGE: ${ERRORS.RELEASE_USAGE[1]}`;
-const CANDIDATE_VERSION = '3.0.0-rc.2';
+const CANDIDATE_VERSION = '3.0.0-rc.3';
 const OP_ORDER = ['toplevel', 'commit', 'tree', 'type', 'version', 'notes', 'archive'];
 // Plan 3.3: the validated hexadecimal check of the tagged notes, and the version grammar.
 const NOTES_HEX_RE = /(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])/i;
@@ -818,7 +985,7 @@ const THROW = Symbol('throw');
 const asBuf = (s) => Buffer.from(s, 'utf8');
 const FAKE_COMMIT = 'a1'.repeat(20);
 const FAKE_TREE = 'b2'.repeat(20);
-const FAKE_NOTES = asBuf(lines(['# project-setup 3.0.0-rc.2', '', 'Fixture notes without any object identifier.']));
+const FAKE_NOTES = asBuf(lines(['# project-setup 3.0.0-rc.3', '', 'Fixture notes without any object identifier.']));
 const FAKE_ZIP = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from([0x0d, 0x0a, 0xff, 0xfe, 0x00, 0x7f, 0x80]), Buffer.from('raw zip bytes are never decoded or rewritten')]);
 // The scripted executor answers each of the seven operations from `spec` (a value, a function of the call, THROW or REJECT) and records every call.
 function scriptedExecutor(spec = {}) {
@@ -1516,7 +1683,7 @@ async function identity(context) {
         }
       });
     });
-    await step('plan 3.3 and 5.2: tagged VERSION validation (grammar, LF, no BOM or CR, missing blob) and the derived note path, ZIP name, success version and publication heading for 3.0.0-rc.1, 3.0.0-rc.2, 3.0.0 and 4.2.1-rc.12 (the matrix keeps the earlier candidate and the final version)', async () => {
+    await step('plan 3.3 and 5.2: tagged VERSION validation (grammar, LF, no BOM or CR, missing blob) and the derived note path, ZIP name, success version and publication heading for 3.0.0-rc.1, 3.0.0-rc.2, 3.0.0-rc.3, 3.0.0 and 4.2.1-rc.12 (the matrix keeps the earlier candidates and the final version)', async () => {
       await withScratch(context, 'version', async (dir) => {
         const repo = miniRepo(dir);
         const bom = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -1530,7 +1697,7 @@ async function identity(context) {
         }
         const missing = await scriptedRun(rel, dir, repo, { over: { version: nonzero() }, label: 'v-missing' });
         expectFail(check, 'a missing VERSION blob', missing.rec, 'RELEASE_VERSION');
-        for (const v of ['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0', '4.2.1-rc.12']) {
+        for (const v of ['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0-rc.3', '3.0.0', '4.2.1-rc.12']) {
           const notes = asBuf(lines([`# project-setup ${v}`, '', `Notes for ${v} without identifiers.`]));
           const r = await scriptedRun(rel, dir, repo, { over: { version: okRes(`${v}\n`), notes: okRes(notes) }, label: `derive-${v}` });
           const sha = sha256(FAKE_ZIP); const o = r.out;
@@ -1696,6 +1863,7 @@ const ROLLBACK_TEXT = 'Roll back project state with the rc.1 tooling before reve
 // ROLLBACK_TEXT is the historical rc.1 wording (the preserved rc.1 notes); CURRENT_ROLLBACK_TEXT is C13-13's version-neutral paragraph (the rc.2 notes and migration section 5).
 const CURRENT_ROLLBACK_TEXT = 'Roll back project state with the tooling used for the update before reverting the installed skill. If later independent runs exist, roll them back newest first. Do not split this migration into successive manifest commits.';
 const RELEASE_NOTES_TEXT = lines(RELEASE_NOTES_LINES);
+const RC2_RELEASE_NOTES_TEXT = lines(RC2_RELEASE_NOTES_LINES);
 const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);
 // The text of "## <heading>" up to the next level-1 or level-2 heading (or the end).
 function sectionOf(doc, heading) {
@@ -1737,8 +1905,11 @@ async function notesGroup(context) {
       };
       wantSec('the in-tree notes', inTree);
       const sourceNotes = readText(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`));
-      check(sourceNotes === RELEASE_NOTES_TEXT, 'the working-tree RELEASE-NOTES-3.0.0-rc.2.md is exactly the candidate text (byte equality)', sourceNotes === null ? 'missing' : sourceNotes.slice(0, 120));
+      check(sourceNotes === RELEASE_NOTES_TEXT, 'the working-tree RELEASE-NOTES-3.0.0-rc.3.md is exactly the candidate text (byte equality)', sourceNotes === null ? 'missing' : sourceNotes.slice(0, 120));
       wantSec('the working-tree notes file', sourceNotes);
+      const rc2Notes = readText(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.2.md'));
+      check(rc2Notes === RC2_RELEASE_NOTES_TEXT, 'the preserved RELEASE-NOTES-3.0.0-rc.2.md is exactly the historical rc.2 text (byte equality; C16 leaves it unchanged)', rc2Notes === null ? 'missing' : rc2Notes.slice(0, 120));
+      wantSec('the preserved rc.2 notes file', rc2Notes);
       const rc1Notes = readText(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.1.md'));
       check(rc1Notes === RC1_RELEASE_NOTES_TEXT, 'the preserved RELEASE-NOTES-3.0.0-rc.1.md is exactly the historical rc.1 text (byte equality, still pinned independently)', rc1Notes === null ? 'missing' : rc1Notes.slice(0, 120));
       wantSec('the preserved rc.1 notes file', rc1Notes, ROLLBACK_TEXT);
@@ -2027,8 +2198,8 @@ async function v2Compatibility(context) {
         check(eq(inventoryOf(project, { skip }), before), 'the project bytes are unchanged by the validation');
       });
       await step('Q6: the candidate documents state the compatibility signal without claiming a general old-command guard (CHANGELOG entry, in-tree notes and C8\'s migration reference)', async () => {
-        const entry = squash(lines(CHANGELOG_ENTRY_LINES));
-        check(entry.includes('V2 validation rejects schema 3; this is not a retrofitted pre-write guard in every old command.'), 'the CHANGELOG entry carries the exact Q6 limitation');
+        const entry = squash(lines(RC2_CHANGELOG_ENTRY_LINES)); // the rc.3 entry does not repeat the Q6 sentence; the preserved rc.2 entry carries it and stays in the file
+        check(entry.includes('V2 validation rejects schema 3; this is not a retrofitted pre-write guard in every old command.'), 'the preserved rc.2 CHANGELOG entry carries the exact Q6 limitation');
         check(squash(RELEASE_NOTES_TEXT).includes('This is a compatibility signal, not a retrofitted pre-write guard in every old command. Do not use v2 commands to repair a schema-3 project.'), 'the notes carry the exact Q6 limitation');
         const changelog = readText(skillPath(context, 'CHANGELOG.md')) || '';
         check(squash(changelog).includes(entry), 'the working-tree CHANGELOG.md carries that entry');
@@ -2534,10 +2705,10 @@ const LF = (s) => String(s).replace(/\r\n/g, '\n');
 async function documentation(context) {
   return runAssertion(async ({ failures, check, step }) => {
     const text = (rel) => { const t = readText(skillPath(context, rel)); if (t === null) check(false, `${rel} is readable`); return t === null ? null : LF(t); };
-    await step('plan 3.6 and C13-14: VERSION is exactly 3.0.0-rc.2 plus LF; the release builder and the candidate notes exist in the source tree beside the preserved rc.1 notes; the installer, the runtime catalog and the v2 notes are unchanged', async () => {
+    await step('plan 3.6 and C13-14: VERSION is exactly 3.0.0-rc.3 plus LF; the release builder and the candidate notes exist in the source tree beside the preserved rc.1 and rc.2 notes; the installer, the runtime catalog and the v2 notes are unchanged', async () => {
       const v = readBytes(skillPath(context, 'VERSION'));
-      check(v !== null && v.toString('latin1') === `${CANDIDATE_VERSION}\n`, 'VERSION is exactly "3.0.0-rc.2\\n"', v && v.toString('latin1'));
-      check(exists(skillPath(context, 'install/release.mjs')) && exists(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`)) && exists(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.1.md')), 'install/release.mjs, RELEASE-NOTES-3.0.0-rc.2.md and the preserved RELEASE-NOTES-3.0.0-rc.1.md exist under project-setup/');
+      check(v !== null && v.toString('latin1') === `${CANDIDATE_VERSION}\n`, 'VERSION is exactly "3.0.0-rc.3\\n"', v && v.toString('latin1'));
+      check(exists(skillPath(context, 'install/release.mjs')) && exists(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`)) && exists(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.2.md')) && exists(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.1.md')), 'install/release.mjs, RELEASE-NOTES-3.0.0-rc.3.md and the preserved RELEASE-NOTES-3.0.0-rc.2.md and RELEASE-NOTES-3.0.0-rc.1.md exist under project-setup/');
       const installer = text('install/install.mjs'); const old = text('RELEASE-NOTES-2.0.0.md');
       check(installer !== null && sha256(installer) === PINS.installer, 'install/install.mjs is unchanged (no second installer, no inclusion-rule change, no version.json)');
       check(old !== null && sha256(old) === PINS.notes200, 'RELEASE-NOTES-2.0.0.md is unchanged');
@@ -2547,50 +2718,64 @@ async function documentation(context) {
     });
     await step('plan 3.6: the candidate release notes are exactly the plan bytes (ASCII, no BOM, LF, final LF) and state the Q6 compatibility paragraphs and the pending host measurements', async () => {
       const raw = readBytes(skillPath(context, `RELEASE-NOTES-${CANDIDATE_VERSION}.md`));
-      check(raw !== null && raw.toString('utf8') === RELEASE_NOTES_TEXT && Buffer.compare(raw, Buffer.from(RELEASE_NOTES_TEXT, 'utf8')) === 0, 'RELEASE-NOTES-3.0.0-rc.2.md equals the exact candidate text byte for byte', raw && raw.toString('utf8').slice(0, 120));
+      check(raw !== null && raw.toString('utf8') === RELEASE_NOTES_TEXT && Buffer.compare(raw, Buffer.from(RELEASE_NOTES_TEXT, 'utf8')) === 0, 'RELEASE-NOTES-3.0.0-rc.3.md equals the exact candidate text byte for byte', raw && raw.toString('utf8').slice(0, 120));
       check(raw !== null && !/[^\x00-\x7f]/.test(raw.toString('latin1')) && !raw.includes(0x0d) && raw[0] !== 0xef && raw[raw.length - 1] === 0x0a, 'the notes are ASCII, UTF-8 without BOM, LF only, with a final LF');
       check(!NOTES_HEX_RE.test(RELEASE_NOTES_TEXT), 'the notes carry no standalone 40- or 64-hex ID (no resolved identity or digest in tree)');
       const sec = sectionOf(RELEASE_NOTES_TEXT, 'Pending host measurements') || '';
-      check(squash(sec).includes('TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling; A3 trusted-checkout live review; A5 host negative capability.'), 'the pending host measurements are listed exactly');
-      check(squash(sectionOf(RELEASE_NOTES_TEXT, 'Verification') || '').includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.'), 'the verification totals and the no-skip rule are exact');
+      check(squash(sec).includes('After release, re-measure R83-e on the existing fixture. A subdirectory-started Claude session must refuse by instruction and request a root restart before any tool or file read.') && squash(sec).includes('Re-run both Codex L10 reviews. Both must complete without an incomplete verdict.') && squash(sec).includes('These measurements block final 3.0.0, not rc.3 implementation acceptance.'), 'the pending rc.3 host measurements (R83-e and A3/L10 re-measurement) are listed exactly');
+      const rc2Raw = readBytes(skillPath(context, 'RELEASE-NOTES-3.0.0-rc.2.md'));
+      check(rc2Raw !== null && rc2Raw.toString('utf8') === RC2_RELEASE_NOTES_TEXT && Buffer.compare(rc2Raw, Buffer.from(RC2_RELEASE_NOTES_TEXT, 'utf8')) === 0, 'the preserved RELEASE-NOTES-3.0.0-rc.2.md equals the historical rc.2 text byte for byte (C16 leaves it unchanged)', rc2Raw && rc2Raw.toString('utf8').slice(0, 120));
+      const rc2Sec = sectionOf(RC2_RELEASE_NOTES_TEXT, 'Pending host measurements') || '';
+      check(squash(rc2Sec).includes('TO VERIFY: R83; R44/R74 host enforcement; R51 Claude continuation and stderr handling; A3 trusted-checkout live review; A5 host negative capability.') && squash(rc2Sec).includes('These measurements remain pending and block final 3.0.0, not rc.2 implementation acceptance.'), 'the preserved rc.2 pending host measurements stay exact (historical text)');
+      check(squash(sectionOf(RC2_RELEASE_NOTES_TEXT, 'Verification') || '').includes('99 PASS / 0 FAIL / 1 SKIP when R13d cannot create a Windows file symlink, or 100 PASS / 0 FAIL / 0 SKIP when it can. No rc.1 case may skip. R91 requires real junction coverage on Windows.'), 'the preserved rc.2 verification totals stay exact (historical text)');
+      check(squash(sectionOf(RELEASE_NOTES_TEXT, 'Verification') || '').includes('Required totals are 100 PASS / 0 FAIL / 0 SKIP, or 99 PASS / 0 FAIL / 1 SKIP with only the recorded Windows R13d file-symlink privilege exception. No rc.1 case may skip. R91 must retain real Windows junction coverage.'), 'the verification totals and the no-skip rule are exact');
     });
-    await step('plan 3.6 and C13-14: CHANGELOG.md is "# Changelog", the exact rc.2 entry, the exact preserved rc.1 entry, then the unchanged historical suffix beginning "## 2.0.0"', async () => {
+    await step('plan 3.6 and C13-14: CHANGELOG.md is "# Changelog", the exact rc.3 entry, the exact preserved rc.2 entry, the exact preserved rc.1 entry, then the unchanged historical suffix beginning "## 2.0.0"', async () => {
       const cl = text('CHANGELOG.md');
       if (cl === null) return;
-      const head = `# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}${lines(RC1_CHANGELOG_ENTRY_LINES)}`;
-      check(cl.startsWith(`# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}`), 'the file starts with "# Changelog", a blank line and the exact rc.2 entry (ending in one blank line)', cl.slice(0, 200));
-      check(cl.startsWith(head), 'the exact rc.2 entry is followed by the exact preserved rc.1 entry (the last line of each is the blank separator)', cl.slice(0, 200));
+      const head = `# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}${lines(RC2_CHANGELOG_ENTRY_LINES)}${lines(RC1_CHANGELOG_ENTRY_LINES)}`;
+      check(cl.startsWith(`# Changelog\n\n${lines(CHANGELOG_ENTRY_LINES)}`), 'the file starts with "# Changelog", a blank line and the exact rc.3 entry (ending in one blank line)', cl.slice(0, 200));
+      check(cl.startsWith(head), 'the exact rc.3 entry is followed by the exact preserved rc.2 entry and then the exact preserved rc.1 entry (the last line of each is the blank separator)', cl.slice(0, 200));
       const suffix = cl.startsWith(head) ? cl.slice(head.length) : '';
       check(suffix.startsWith('## 2.0.0\n') && sha256(suffix) === PINS.changelogSuffix, 'the historical entries from "## 2.0.0" onward are byte-identical to the post-C10 file', { starts: suffix.slice(0, 20), bytes: suffix.length });
-      check(cl.split('\n## 3.0.0-rc.2\n').length === 2, 'the candidate entry appears once');
+      check(cl.split('\n## 3.0.0-rc.3\n').length === 2 && cl.split('\n## 3.0.0-rc.2\n').length === 2, 'the candidate entry and the preserved rc.2 entry each appear once');
       check(cl.split('\n## 3.0.0-rc.1\n').length === 2, 'exactly one historical rc.1 entry remains');
     });
-    await step('plan 3.6, C12-15 and C13-14: SKILL.md carries the top-level release heading "# project-setup 3.0.0-rc.2" and every other byte is the pinned text', async () => {
+    await step('plan 3.6, C12-15 and C13-14: SKILL.md carries the top-level release heading "# project-setup 3.0.0-rc.3" and every other byte is the pinned text (after the exact C16 body reversal)', async () => {
       const skill = text('SKILL.md');
       if (skill === null) return;
       const ls = skill.split('\n');
-      check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.2"', ls[5]);
-      const restored = [...ls]; restored[5] = '# project-setup v2';
-      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits and C14 project-rule insertion)', sha256(restored.join('\n')));
+      check(ls[5] === SKILL_HEADING_LINES[0], 'line 6 is exactly "# project-setup 3.0.0-rc.3"', ls[5]);
+      // C16 (plan C16-14): the exact C16 SKILL.md body amendments (S3, S2, S1) are reversed first; the heading amendment is left for the existing heading normalization below.
+      const body = reverseForFile(skill, 'SKILL.md', { keepHeading: true });
+      check(body.text !== null, 'the C16 SKILL.md body amendments S3, S2 and S1 each stand exactly once at their anchors and reverse', body.failed);
+      const restored = body.text === null ? [...ls] : body.text.split(String.fromCharCode(10)); restored[5] = '# project-setup v2';
+      check(sha256(restored.join('\n')) === PINS.skillWithOldHeading, 'every other byte of SKILL.md is the pinned text once the C16 body edits are reversed (the C8, C9 and C10 text plus the deliberate C12 policy-workflow edits and C14 project-rule insertion)', sha256(restored.join('\n')));
       check(ls.filter((l) => l === SKILL_HEADING_LINES[0]).length === 1 && !ls.includes('# project-setup v2'), 'the new heading appears once and the old heading is gone');
     });
     await step('plan 3.6 and 5.9: README.md has the exact seven-line opening with a separate security paragraph, the overview after it, the release-builder inventory row after the installer row, the exact Test first paragraph and fence, the retained sections unchanged and the exact "Local candidate release" section last', async () => {
       const readme = text('README.md');
       if (readme === null) return;
+      // C16 (plan C16-14): the exact C16 README amendments are reversed into a historical view; the pinned overview, hook section and retained sections are compared on it, the opening and the last section on the current text.
+      const rev = reverseForFile(readme, 'README.md');
+      check(rev.text !== null, 'the C16 README amendments RM4b, RM4a, RM3, RM2 and RM1 each stand exactly once at their anchors and reverse', rev.failed);
+      const hist = rev.text === null ? readme : rev.text;
+      check(eq(hist.split('\n').slice(0, 7), RC2_README_OPENING_LINES), 'reversed, the opening seven lines are the historical rc.2 opening', hist.split('\n').slice(0, 8));
       const ls = readme.split('\n');
       check(eq(ls.slice(0, 7), README_OPENING_LINES), 'the complete resulting opening seven lines are exact', ls.slice(0, 8));
       check(ls[7] === '' && ls[8] === 'Single source for the shared Claude Code + Codex `project-setup` skill. Edit here, never in installed copies.', 'a blank line then the post-C8 overview follow the opening', ls.slice(7, 9));
       check(ls[5].startsWith('Secret-path controls are tool-level') && ls[4] === '' && !ls[2].includes('Secret-path'), 'the security paragraph is separate from the release paragraph and keeps its wording');
-      const top = readme.slice(0, readme.indexOf('## Claude raw-Git hook'));
+      const top = hist.slice(0, hist.indexOf('## Claude raw-Git hook'));
       const topLines = top.split('\n');
       const rowAt = topLines.findIndex((l) => l.startsWith('install/release.mjs'));
       check(rowAt > 0 && topLines[rowAt - 1].startsWith('install/install.mjs ') && squash(topLines[rowAt]) === squash(README_INVENTORY_ROW_LINES[0]), 'the release-builder row follows the installer row immediately', { rowAt, prev: rowAt > 0 ? topLines[rowAt - 1] : null, row: topLines[rowAt] });
       const rest = topLines.slice(7).filter((l, i) => !(i + 7 === rowAt));
       check(sha256(squash(rest.join('\n'))) === PINS.readmeTopRest, 'everything else in the overview and inventory is the pinned text (the C8 rows plus the deliberate C12 data/ line correction)', sha256(squash(rest.join('\n'))));
       const secs = readme.split(/^(?=## )/m).filter((s) => s.startsWith('## '));
+      const histSecs = hist.split(/^(?=## )/m).filter((s) => s.startsWith('## '));
       const heads = secs.map((s) => s.split('\n')[0]);
       check(eq(heads, [...Object.keys(PINS.readmeSections), '## Local candidate release']), 'the section list is the retained sections in order followed by "## Local candidate release"', heads);
-      for (const s of secs) {
+      for (const s of histSecs) {
         const h = s.split('\n')[0];
         if (h === '## Test first (no installation, no real config touched)') {
           const inserted = squash(lines(README_TEST_FIRST_LINES));
@@ -2600,8 +2785,10 @@ async function documentation(context) {
         } else if (PINS.readmeSections[h] !== undefined) check(sha256(squash(s)) === PINS.readmeSections[h], `${h}: the retained section is unchanged (C8 trusted-checkout, launcher, hook text and C10 doctor paragraph stay)`);
       }
       const last = secs[secs.length - 1];
-      check(last.startsWith('## Local candidate release') && squash(last) === squash(lines(README_RELEASE_SECTION_LINES)), 'the appended "Local candidate release" section is exact (whitespace normalized) and last', last && squash(last).slice(0, 160));
-      check(last && last.includes('```text\nnode install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>\n```') && readme.endsWith('\n') && !readme.endsWith('\n\n'), 'the section ends with the exact later-build command fence and the file ends with one LF');
+      check(last.startsWith('## Local candidate release') && squash(last) === squash(lines(README_RELEASE_SECTION_LINES)), 'the appended "Local candidate release" section is exact (whitespace normalized, both tags rc.3) and last', last && squash(last).slice(0, 160));
+      const histLast = histSecs[histSecs.length - 1];
+      check(histLast !== undefined && histLast.startsWith('## Local candidate release') && squash(histLast) === squash(lines(RC2_README_RELEASE_SECTION_LINES)), 'reversed, the section is the preserved rc.2 text (both tags rc.2): only the two tag occurrences changed', histLast && squash(histLast).slice(0, 160));
+      check(last && last.includes('```text\nnode install/release.mjs --tag project-setup-v3.0.0-rc.3 --out <unused-directory>\n```') && readme.endsWith('\n') && !readme.endsWith('\n\n'), 'the section ends with the exact later-build command fence and the file ends with one LF');
     });
     await step('plan 5.9: tests/live/LIVE-ACCEPTANCE.md ends with "## Candidate 3.0.0-rc.1 evidence" carrying the exact status text, after the earlier procedures and without marking any pending host measurement as passed', async () => {
       const live = text('tests/live/LIVE-ACCEPTANCE.md');
@@ -2613,13 +2800,13 @@ async function documentation(context) {
       check(sec !== null && squash(sec) === squash(lines(LIVE_SECTION_LINES)), 'its text is exactly the plan paragraphs after whitespace normalization', sec && squash(sec).slice(0, 200));
       check(live.includes('### C5 review-diff procedure (host evidence pending)') && ls.includes('## 2. Stop conditions'), 'the C5 and C8 procedures and the stop conditions are retained (their own checks keep their text)');
     });
-    await step('plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 33 without duplicates (C15 appends 32-33) and evaluation 20 is exactly the plan object', async () => {
+    await step('plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 36 without duplicates (C15 appends 32-33, C16 appends 34-36) and evaluation 20 is exactly the plan object', async () => {
       let file = null;
       try { file = JSON.parse(readText(skillPath(context, 'evals/evals.json'))); } catch { file = null; }
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array');
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 33 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 33 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 33, 'IDs 1 through 33 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 36 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(file.evals.map((e) => e && e.id)).size === 36, 'IDs 1 through 36 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)', file.evals.map((e) => e && e.id));
       check(eq(file.evals[19], EVAL_20), 'evaluation 20 equals the plan object exactly (an expectation, not proof that an agent followed it)', file.evals[19]);
     });
     await step('plan 3.6 and 3.7: the working-tree release builder exists with the pinned public surface; nothing in the documentation claims publication or a real tag', async () => {

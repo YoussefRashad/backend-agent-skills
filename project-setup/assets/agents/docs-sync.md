@@ -13,7 +13,8 @@ stop and report the mismatch.
 
 1. Work on an explicit diff only: a commit range, a merged PR, or `<base>...HEAD`. If none is given, ask.
 2. List changes with `node .ai/tools/git-safe.mjs diff <range> --name-status`; read diffs only through
-   `node .ai/tools/git-safe.mjs diff|log|show …` (excludes `.ai/security-paths.json` paths, no shell quoting).
+   `node .ai/tools/git-safe.mjs diff|log|show …`
+   (excludes `.ai/security-paths.json` paths; quote arguments for the invoking shell).
    When a review-diff result is the input: Consume review-diff stdout or an artifact supplied by the orchestrator.
    Reviewers do not use `--out`, redirect stdout to a file, or create review artifacts.
    Docs-sync follows the same rule.
@@ -74,7 +75,10 @@ affect unchanged, even when it does not name the producing path.
   CI/CD, tool permissions, hooks, `.claude/settings*.json`, `.codex/*`, `.ai/agents/*`, `.ai/tools/*`,
   `.ai/security-paths.json`, or `.ai/manifest.json`.
 - Read repository content only with the local file tools and `git-safe.mjs`. If a read or
-  command fails or is denied, stop and report it. Never use an MCP server, connector, browser
+  command fails or is denied, stop and report it, except for the bounded
+  GIT_SAFE_ARGUMENT/GIT_SAFE_PATTERN correction defined below, which applies only when
+  git-safe rejected the invocation and
+  emitted no repository content. Never use an MCP server, connector, browser
   or remote service to read repository files or history, and never send repository content
   to one.
 - Do not retry a failed or denied read through another tool, change the sandbox, request full
@@ -122,6 +126,57 @@ many bytes is allowed. Larger results are refused without partial output. Narrow
 use grep with a more selective pattern or select a smaller file. A refused result is not a
 completed review. After narrowing, record the reviewed subset and the scope still unreviewed.
 A refused or narrowed read never establishes that every affected doc was checked.
+
+### Git-safe file reads
+
+cat accepts exactly one path per call. You MUST confirm an uncertain path with ls before
+cat, because cat of a missing path returns GIT_SAFE_GIT and stops the task.
+grep uses extended regular expressions (ERE): a|b alternates, and \( or [(] matches a literal
+opening parenthesis. To match a literal |, use \|.
+An empty pattern matches every line; a leading - remains pattern text.
+
+\d is not a digit class; use [0-9]. \s, \w and \b are GNU extensions, not portable ERE.
+Prefer [[:space:]] for whitespace and [[:alnum:]_] for word characters; spell out intended
+boundaries instead of assuming \b. The GNU extensions worked on Git 2.53 on Windows;
+macOS/Linux regex engines remain unverified. \( and \| are POSIX-defined ERE escapes.
+
+For literal searches, backslash-escape these metacharacters:
+. [ ] ( ) { } * + ? ^ $ | \
+A bracket expression such as [(] is another way to match a literal metacharacter.
+Unmatched grouping or repetition syntax, such as transfer( or a{2, and a leading * can
+make a pattern invalid. You MUST choose the intended ERE and quote shell arguments when
+needed, so shell parsing or BRE assumptions do not silently change the search.
+No match is an empty success, not proof that every affected document was checked.
+
+### Correcting rejected git-safe arguments
+
+When git-safe itself returns GIT_SAFE_ARGUMENT or GIT_SAFE_PATTERN without repository
+content, you MUST correct your invocation to the printed grammar and documented ERE syntax
+and retry through the same git-safe helper and subcommand. Preserve the intended revision,
+paths and read scope. This prevents your own rejected invocation from ending the task before
+the intended content is examined. If the intended correction is unclear, you MUST stop and
+report it rather than guess a different scope.
+
+This includes review-diff's parse-time GIT_SAFE_ARGUMENT errors. A correction MUST NOT add
+--out, redirect output, create an artifact or widen paths; correcting usage grants no new
+write permission or read scope.
+
+You MUST use at most two correction rounds for one rejected logical invocation. For a
+multi-path cat, one corrected round consists of one cat call per original path. Splitting
+paths does not reset the budget. You MUST stop immediately on any non-whitelisted failure,
+and MUST stop and report incomplete work if the correction budget is exhausted. This
+prevents retry loops and partial completion from being reported as a complete review.
+
+Only GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN qualify. You MUST stop on GIT_SAFE_SECRET,
+POLICY_*, GIT_SAFE_POLICY_IO, GIT_SAFE_REVISION, GIT_SAFE_RECORD, GIT_SAFE_LIMIT,
+GIT_SAFE_ARG_LIMIT, GIT_SAFE_GIT, GIT_SAFE_INPUT, GIT_SAFE_COMMAND, GIT_SAFE_VERSION,
+GIT_SAFE_REPOSITORY, GIT_SAFE_INTERNAL, any other error, a denied read or a sandbox error.
+GIT_SAFE_GIT never authorizes a syntax correction, even if you suspect an invalid pattern.
+This preserves the stop rule when content access or its protection cannot be established.
+
+You MUST NOT retry through raw Git, another helper, another tool, a connector, changed
+permissions or a changed sandbox. A corrected invocation is not a fallback read and grants
+no new access. You MUST report any scope left unread; a successful subset is not completion.
 
 ## Output
 

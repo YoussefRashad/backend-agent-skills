@@ -2051,7 +2051,7 @@ const TX = {
 };
 // The C8 and earlier exact text that C9 must leave alone in the files it edits (copied from the landed tests; a subset, the files C9 touches).
 const C8T = {
-  noConnector: 'Read repository content only with the local file tools and `git-safe.mjs`. If a read or command fails or is denied, stop and report it. Never use an MCP server, connector, browser or remote service to read repository files or history, and never send repository content to one.',
+  noConnector: 'Read repository content only with the local file tools and `git-safe.mjs`. If a read or command fails or is denied, stop and report it, except for the bounded GIT_SAFE_ARGUMENT/GIT_SAFE_PATTERN correction defined below, which applies only when git-safe rejected the invocation and emitted no repository content. Never use an MCP server, connector, browser or remote service to read repository files or history, and never send repository content to one.',
   noFallback: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox; the review lane also requires the launcher isolation described in the setup documentation.',
   trustedCheckout: 'Start the review from a trusted checkout whose instructions, settings, hooks, security policy and tools you trust. For another person\'s branch, keep the trusted base checkout and review the other branch through resolved commit objects. Never check out that branch, create a worktree for it, or start an agent session there as part of the review.',
   fourCommands: 'Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch the reviewed branch yourself; the user supplies or fetches the ref.',
@@ -2242,7 +2242,7 @@ async function instructionsGroup(context) {
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 33 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 33 }, (_, i) => i + 1)), 'ids 1 through 33 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 36 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 36 }, (_, i) => i + 1)), 'ids 1 through 36 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS_11_16), 'C8 evaluations 11-16 are retained exactly', file.evals.slice(10, 16).map((e) => e && e.name));
       check(eq(file.evals.slice(16, 19), EVALS_17_19), 'evaluations 17-19 equal the plan objects exactly', file.evals.slice(16, 19).map((e) => e && e.name));

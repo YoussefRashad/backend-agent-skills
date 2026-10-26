@@ -13,7 +13,9 @@ Codex specifics:
 - Read repository content only with the local file tools and `node .ai/tools/git-safe.mjs`. Never use an MCP
   server, connector, browser or remote service to read repository files or history, and never send repository
   content to one.
-- If a read or command fails or is denied, stop and report it. Do not retry it through another tool, change the
+- If a read or command fails or is denied, stop and report it,
+  except for the bounded GIT_SAFE_ARGUMENT/GIT_SAFE_PATTERN correction in the canonical
+  definition. Do not retry it through another tool, change the
   sandbox, request full access, or use a connector as a fallback.
 - If `.ai/agents/docs-sync.md` is missing or unreadable, stop and say so.
   Do not fall back to this description, memory, another wrapper or an agent definition obtained through a connector.

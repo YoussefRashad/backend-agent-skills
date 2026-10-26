@@ -267,7 +267,7 @@ const PROJECT_NAME = 'fixture-wallet-api';
 // The quoted instruction paragraphs of plan 3.1-3.10 and the addendum, written out here (plan 3.1: compared after replacing every run of whitespace with one space).
 // The whole-result paragraphs use literal <paths> and <k>, never HTML entity bytes.
 const TEXT = {
-  noConnector: 'Read repository content only with the local file tools and `git-safe.mjs`. If a read or command fails or is denied, stop and report it. Never use an MCP server, connector, browser or remote service to read repository files or history, and never send repository content to one.',
+  noConnector: 'Read repository content only with the local file tools and `git-safe.mjs`. If a read or command fails or is denied, stop and report it, except for the bounded GIT_SAFE_ARGUMENT/GIT_SAFE_PATTERN correction defined below, which applies only when git-safe rejected the invocation and emitted no repository content. Never use an MCP server, connector, browser or remote service to read repository files or history, and never send repository content to one.',
   noFallback: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox; the review lane also requires the launcher isolation described in the setup documentation.',
   // C12-11 (plan docs/plans/2026-10-21-project-setup-v3-rc1-c12.md): the docs-sync agent has its own two paragraphs (no launcher claim; refs are not fetched at all). The reviewer paragraphs above are unchanged.
   noFallbackDocs: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox.',
@@ -790,6 +790,36 @@ async function agentsGroup(context) {
         check(firstSub >= 0 && bulletsBefore > 0, 'docs-sync: Bounded reads follows the Rules bullets', { firstSub, bulletsBefore });
       }
     });
+    await step('C16 (plan C16-9, C16-15): the stop-rule bullet names exactly the two-code correction whitelist (GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN), the correction subsection follows Bounded reads in both agents (docs-sync: after the Git-safe file reads subsection) and lists exactly that whitelist, Project rules still directly precedes Bounded reads, and the adjacent no-fallback paragraph stays exact', async () => {
+      const codesOf = (t) => [...new Set(String(t).match(/GIT_SAFE_[A-Z_]+/g) || [])].sort();
+      for (const [name, doc, secMatch, noFallback, order] of [
+        ['reviewer', reviewer, SEC.reviewer4, TEXT.noFallback, ['### Bounded reads', '### Correcting rejected git-safe arguments', '## 5. Output']],
+        ['docs-sync', docsync, SEC.docsRules, TEXT.noFallbackDocs, ['### Bounded reads', '### Git-safe file reads', '### Correcting rejected git-safe arguments', '## Output']],
+      ]) {
+        if (doc === null) continue;
+        const heads = headingLines(doc);
+        const at = order.map((h) => heads.indexOf(h));
+        check(at.every((i) => i >= 0) && at.every((i, k) => k === 0 || i === at[k - 1] + 1), `${name}: the headings ${order.join(', ')} follow one another directly`, heads);
+        const sec = needSection(check, doc, secMatch, `${name} rules section`);
+        if (sec !== null) {
+          const m = squash(sec).indexOf(squash(TEXT.noConnector));
+          check(m >= 0 && squash(sec).includes(squash(`${TEXT.noConnector} - ${noFallback}`)), `${name}: the stop-rule bullet is directly followed by the unchanged no-fallback bullet`);
+        }
+        const sub = needSection(check, doc, '### Correcting rejected git-safe arguments', `${name} correction subsection`);
+        if (sub !== null) {
+          check(has(sub, 'Only GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN qualify.'), `${name}: the subsection states that only GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN qualify`);
+          check(has(sub, 'You MUST use at most two correction rounds for one rejected logical invocation.'), `${name}: the subsection states the two-round budget`);
+        }
+      }
+      check(eq(codesOf(TEXT.noConnector), ['GIT_SAFE_ARGUMENT', 'GIT_SAFE_PATTERN']), 'the expected bullet text names exactly the two whitelist codes', codesOf(TEXT.noConnector));
+      for (const [name, doc, secMatch] of [['reviewer', reviewer, SEC.reviewer4], ['docs-sync', docsync, SEC.docsRules]]) {
+        const sec = doc === null ? null : sectionOf(doc, secMatch);
+        if (sec === null) continue;
+        const bullet = squash(sec).split('- Read repository content only with the local file tools')[1] || '';
+        const first = bullet.split(' - ')[0];
+        check(eq(codesOf(first), ['GIT_SAFE_ARGUMENT', 'GIT_SAFE_PATTERN']), `${name}: the installed stop-rule bullet names exactly GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN`, codesOf(first));
+      }
+    });
     await step('the header comment keeps its first line and carries the new managed-file line instead of the obsolete v2 text', async () => {
       for (const [name, doc, snap] of [['reviewer', reviewer, snapBytes(context, 'agents/reviewer.md')], ['docs-sync', docsync, snapBytes(context, 'agents/docs-sync.md')]]) {
         if (doc === null) continue;
@@ -914,7 +944,7 @@ async function wrappersGroup(context) {
 const C6_README = [
   'The Claude raw-Git hook is a guardrail, not a sandbox. It blocks the documented raw-history commands and standalone patch arguments while permitting ordinary orchestrator commands and the seven git-safe commands. A separate raw-Git command after git-safe is still checked. Setup draft review uses apply.mjs diff; git diff --no-index has no exemption.',
   'Known gaps include sh -c, aliases, scripts that spawn Git and node -e. PowerShell gaps include indirect or computed invocation, dynamically constructed command names, script blocks and encoded commands. Backtick handling does not make this a complete shell parser.',
-  `The installed candidate is ${HOOK_COMMAND}. Host portability is TO VERIFY. Direct Node self-tests do not establish host launch, matcher, input-envelope or exit-handling behavior.`,
+  `The installed candidate is ${HOOK_COMMAND}. Measured on 2026-10-24/25 on Windows 11 with Claude Code 2.1.310: root-started sessions applied the hook, its Bash|PowerShell matcher and deny rules, including after changing directory within the project. Project paths with spaces and non-ASCII characters worked. Exit 0 permitted, exit 2 blocked with its explanation, and exit 1 continued with a warning visible to the user, not the model. A session started in src/wallet did not load the root hook or deny rules. With Node missing, the hook failed open and the model saw no warning. macOS and Linux remain TO VERIFY. Direct Node self-tests do not establish host loading or enforcement. See references/claude.md for the itemized measurements and the separate 2026-10-25 instruction-loading probes.`,
   'The hook executes project code and therefore depends on the trusted-checkout boundary.',
 ];
 const C6_CASE = 'Bash case statements are not parsed: a command containing one is reported as unparseable and allowed with the malformed-input warning.';
@@ -1203,7 +1233,7 @@ async function migrationGroup(context) {
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
       // C9 (plan 4.3): the whole-inventory expectation moves from 16 to 19 entries (C9 appends 17-19); C8's own six objects are still compared exactly.
-      check(file.evals.length === 33 && eq(file.evals.map((e) => e.id), Array.from({ length: 33 }, (_, i) => i + 1)), 'ids 1 through 33 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 36 && eq(file.evals.map((e) => e.id), Array.from({ length: 36 }, (_, i) => i + 1)), 'ids 1 through 36 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS), 'evaluations 11-16 equal the plan objects exactly', file.evals.slice(10, 16).map((e) => e && e.name));
     });

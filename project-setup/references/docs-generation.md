@@ -25,10 +25,27 @@ Use only where there is evidence of local rules (money flows, auth, PII, generat
 - Codex loads `AGENTS.md` files from the project root down to the directory it was started in.
 - Claude, while a root `CLAUDE.md` exists, ignores nested `AGENTS.md` by default but loads a nested `CLAUDE.md`
   when it works on a file in that directory.
+  Launch location also matters. On Claude Code 2.1.310, Windows 11, the 2026-10-25 headless
+  probes P1/P2 loaded root CLAUDE.md below the root but did not expand root AGENTS.md.
+  A nested pair loaded when present; P2 also loaded root CLAUDE.md without a nested pair.
+  Imports resolving outside the start directory did not load, including @../AGENTS.md.
+  These are model self-reports; interactive TUI import behavior remains unverified.
 - Neither guarantees the file is loaded for every task, so the root `local-instructions` block lists each path
   with an explicit "read before changing files under …" instruction.
 
 Never move the critical rules into nested files only; the root keeps the short version.
+
+Setup MUST render the root-start rule from the root Claude template, including on update when
+application code is unchanged. This keeps the refusal instruction in the text observed to load
+during a subdirectory launch. Setup MUST preserve the sibling @AGENTS.md imports and user text
+outside managed blocks, so the update does not discard local rules.
+
+An existing root CLAUDE.md MUST receive the updated managed claude block through the normal
+reviewed draft and ownership workflow. A missing or user-removed instruction file MUST NOT be
+silently recreated; resolve its disposition first. Kept old root instructions MUST be reported
+as an incomplete update. The nested CLAUDE.md template and its ownership remain unchanged.
+A relative import of the root AGENTS.md is not part of this change and MUST NOT be presented
+as a replacement for starting Claude Code at the root.
 
 ## Project-local security tooling (fully managed, always installed)
 

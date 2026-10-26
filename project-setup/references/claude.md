@@ -4,6 +4,15 @@ Facts below were checked against the Claude Code docs when this reference was wr
 version-dependent: record the version from `detect.mjs` in the report, and verify at runtime rather than trusting
 this file.
 
+Claude Code sessions MUST start at the target repository root. Starting in a subdirectory
+can omit the root hook, deny rules and shared critical instructions. If started below the
+root, stop and restart there before reading files or running Git or project tools; cd inside
+the existing session does not repair its launch configuration.
+
+You MUST commit the installed setup before starting worktree sessions, so each new worktree
+can contain its own root instructions and settings. A worktree created before that commit
+may lack its own CLAUDE.md and be refused under the outer checkout's loaded root rule.
+
 ## Instruction loading
 
 - Claude reads `CLAUDE.md`. Since v2.1.277 it reads `AGENTS.md` directly **only** when no `CLAUDE.md`,
@@ -15,10 +24,19 @@ this file.
   committed symlink out as a plain text file unless `core.symlinks` is on.
 - `@path` imports are expanded at launch (relative to the importing file, up to four hops). They organise but do
   not reduce context cost. Imports resolving outside the project trigger a one-time approval dialog.
+  The relative-import description is not a guarantee that an import expands during a
+  subdirectory launch. In the 2026-10-25 headless P2 probe, imports resolving outside the
+  start directory did not load, including @../AGENTS.md. Interactive TUI behavior is
+  unverified. Do not rely on a parent import to restore root critical rules below the root.
 - Block-level HTML comments are stripped before `CLAUDE.md` content enters context, so managed-block markers
   cost nothing there. They remain visible when a file is opened directly.
 - Nested `CLAUDE.md` files load on demand when Claude works with a file in that directory. Nested `AGENTS.md`
   files are ignored while a root `CLAUDE.md` exists (default mode), hence the pair rule.
+  Launch location also matters. Probe P1 on 2026-10-25, Claude Code 2.1.310 on Windows 11,
+  reported root CLAUDE.md and imported root AGENTS.md at a root start. At a src/wallet start
+  it reported root CLAUDE.md and the nested pair, but not root AGENTS.md contents.
+  P2 loaded root CLAUDE.md below the root even without a nested pair.
+  These are model self-reports, not a host API.
 - The "Project instructions" mode (`instructionFiles`) is honoured only in user or managed settings; the skill
   reports it (detect) and never sets it.
 
@@ -154,6 +172,9 @@ through `node .ai/tools/git-safe.mjs` instead, without executing the blocked pre
 allow-list raw `git diff`, including `--name-only`, or disable the hook to load the skill. Keep
 host behavior TO VERIFY; this guidance does not establish that a particular host loads the hook.
 
+For that built-in-preamble observation, TO VERIFY refers to preamble portability.
+The separately measured raw-Git hook results below do not verify every built-in skill.
+
 ### When the hook is added
 
 Insertion is conditional: the merge ensures the entry only when the reviewed guard (`guard-raw-git.mjs` and its core
@@ -189,19 +210,50 @@ A failed case prints `FAIL` on its line and the real totals, exit 1. `validate.m
 nonempty stderr, empty stdout, or any stdout other than the exact transcript above, even when the process exits 0.
 The self-test proves direct hook behavior only: not that settings reference the hook, and not that Claude runs it.
 
-### Host behavior: TO VERIFY
+### Host behavior: measured scope and remaining checks
 
-Direct Node tests establish none of these; each is TO VERIFY on a real Claude Code host:
+Measurements dated 2026-10-24/25 used the published rc.2 bytes on Windows 11 Pro 10.0.26100,
+Claude Code 2.1.310 and Node v24.14.1, without a Claude OS sandbox. Direct Node tests are
+separate evidence and do not establish any host result.
 
-- that exit 0, 2 and 1 produce permit, deny with the explanation, and continue with the warning;
-- the PowerShell tool name spelling and its `tool_input.command` field;
-- the `Bash|PowerShell` matcher regex semantics;
-- the expansion and quoting of `$CLAUDE_PROJECT_DIR`, including a value with backslash separators inside Git Bash
-  double quotes;
-- launches from the project root and from a subdirectory, and project paths with spaces or non-ASCII characters;
-- the behavior when Node is missing.
+| Item | Observation |
+|---|---|
+| Exit 0 | PASS: git status ran without a guard message or permission prompt. |
+| Exit 2 | PASS: raw git log was blocked with the fixed explanation. |
+| Exit 1 / R51 | PASS: execution continued; the warning reached the user's transcript, not the model. |
+| PowerShell input | PASS: the tool name was PowerShell and the command reached the hook. |
+| Bash\|PowerShell matcher | PASS for both measured tools. |
+| CLAUDE_PROJECT_DIR / R83-f | PASS: expansion and quoting inside Git Bash double quotes worked with backslash separators, spaces and non-ASCII paths. |
+| Root start, then cd | PASS: the hook and deny rules remained active within the project. |
+| Subdirectory start / R83-e | FAIL: no hook events; raw git log ran and the protected-path Read was not denied. |
+| Node missing | FAIL OPEN: hook exit 127 did not block Git; the model saw no warning. |
+| macOS / Linux | TO VERIFY; no portability claim follows from the Windows measurements. |
 
-The hook executes project code, so it depends on the trusted-checkout boundary like every other project tool.
+Claude runs these Windows hooks through Git Bash. The hook ran before the host's own command
+parser in the measured malformed-command case.
+
+Secret-path measurements passed for the file tool and recognized shell reads, including case,
+depth and late-file variants. A subprocess read all six canaries. The root-anchor parity row
+was not run. These results do not establish an OS security boundary.
+
+A5 passed for the measured Claude reviewer wrapper: the parent echo MCP control succeeded,
+and the subagent received an unavailable-tool error. This does not establish other hosts'
+tool inventories.
+
+Probes P1/P2 on 2026-10-25 reported that root CLAUDE.md loads below the root but its root
+AGENTS.md import did not expand. A nested pair loaded when present; P2 also loaded root
+CLAUDE.md without one. P2's headless parent import @../AGENTS.md did not load.
+These are strong self-report observations, not proof. Interactive import behavior is
+unverified. The launch rule is present only in the root Claude template.
+
+C16's released subdirectory refusal remains TO VERIFY on rc.3. It is an instruction
+mitigation, weaker than host enforcement. Root-started regressions must also be re-measured.
+The nearest loaded rule at or above the original start directory governs the comparison,
+so a worktree nested under another checkout is judged against its own rule.
+A start above or outside the target root can load that rule only after an initial read.
+That comparison does not refuse such a start even after the target rule loads.
+Missing launch context alone does not establish a subdirectory start or verified controls.
+The hook executes project code and depends on the trusted-checkout boundary.
 
 ## Subagent wrappers
 
@@ -230,6 +282,8 @@ Install this version next to v1 only after v1 is retired: start a new session, c
 Phase 0 on a test repo. Rollback: undo the override (or re-enable) and `install.mjs rollback`.
 
 ## Load verification (Claude session)
+
+Perform these checks from a root-started session.
 
 - `/context` (or `/memory`): `CLAUDE.md` listed and `AGENTS.md` included via the import.
 - `/agents`: `reviewer` and `docs-sync` present; ask the reviewer to state its first rule from `.ai/agents/reviewer.md`.
