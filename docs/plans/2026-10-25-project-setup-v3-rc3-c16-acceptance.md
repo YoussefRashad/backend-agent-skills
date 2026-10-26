@@ -332,6 +332,35 @@ chose (2026-10-26) to open the PR and fix them on the same branch before merge:
   value stands in for milliseconds, and the probe children are counted inside R42's 373, with no
   rerun. The P3 details are to be supplemented from the retained transcripts.
 
+**RV1 and RV2 fix run (2026-10-26).** A fresh tests lane changed only `tests/c16.test.mjs`: the
+rc.1 upgrade scenario now installs the authentic rc.1 root template (411 bytes, SHA-256
+`2762eadf...`, from `8b9b4772...`, hash-checked before use) and its rc.1 manifest block hash; the
+TODO values are bound to the designated run-date line, the accept-rc1 command line and the single
+headroom sentence above, with in-memory negative controls. It reports 21 of 23 mutants caught,
+the two survivors equivalent, and an unchanged 470 launches. The orchestrator then ran, serially
+on the same host and versions:
+
+```text
+Date: 2026-10-26, 02:23:26 to 02:50:43 host clock
+git diff 9b34e2a | sha256sum (before and after)                3593431eef0358c94061e338aba5b837ce72f5fdddf1e98ed96750105d70ce43
+  node project-setup/tests/run-component-tests.mjs --component C16    exit 0  8 PASS / 0 FAIL / 0 SKIP   41 s
+  node project-setup/tests/run-component-tests.mjs --component C14    exit 0  8 PASS / 0 FAIL / 0 SKIP   52 s
+  node project-setup/tests/accept-rc1.mjs                             exit 0  99 PASS / 0 FAIL / 1 SKIP (R13d)  1540 s
+  npm run check                                                       exit 0
+accept-rc1 EVIDENCE: <tmp>\ps-accept-rc1-ysc2kU
+```
+
+That full run took **1540 s, above the maintainer's 1,500-second revisit threshold** (260 s or
+14.4% headroom). No other lane, review or test process was running. Per C16-18 the timeout and
+coverage are unchanged and the threshold is flagged to the maintainer. The TODO headroom entry
+stays bound to the run of record above (1318 s); its fixed form has no field for a second run.
+
+**Review pass 2 (2026-10-26).** The Codex review lane, in the same session at effort xhigh
+(read-only, isolated, no MCP calls), reviewed the RV1/RV2 test diff, the RV3 supplement and this
+paragraph's predecessor. It reported "No findings": RV1 and RV2 closed, RV3 closed under the
+recorded maintainer disposition, no frozen literal, pin, digest, count, descriptor id or title
+changed, and the dead-term removal keeps the assertion's meaning.
+
 **RV3 status (2026-10-26).** Supplemented on the branch after the review: "P3 detail
 (supplemented for C16-RV3)" above, and C4's additional execution work. The milliseconds and the
 separate probe count stand under the maintainer disposition. RV1 and RV2 go to a fresh tests lane.

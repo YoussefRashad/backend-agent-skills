@@ -1673,8 +1673,10 @@ function sharedBase(context) {
 // Plan C16-4, C16-9, C16-13, C16-15, C16-16 item 6 and C16-22: an installed rc.1 or rc.2 project takes the C16 instructions through the normal reviewed managed transaction (real prepare, diff, commit, rollback, validate): the root CLAUDE.md claude block (user text outside
 // the blocks kept), both canonical agents, both Codex wrappers and the complete seven-file runtime unit (core and hooks-selftest changed, five members byte-identical) are delivered; the nested Claude template, its import and ownership and both Claude wrappers are unchanged; project extensions
 // keep their bytes and merged records; every edited canonical, runtime or wrapper file needs its own exact path approval; a kept or removed required file is an explicitly incomplete update (never silently restored); a changed prepared input is refused as drift; a no-op rerun is a zero diff;
-// rollback restores unchanged outputs and a later edit keeps exit 6 with its backup. The baselines are the pinned pre-C16 bytes (rc.2: tests/fixtures/c16-prechange.json; rc.1: the pinned rc.1 agents of tests/fixtures/c13-rc1-agents.json; PLAN-GAP: no fixture pins the rc.1 wrappers, template or runtime
-// unit, so the rc.1 manifest takes the pre-C16 bytes for them) and the expectation is rendered independently (the pre-C16 bytes plus the frozen amendments).
+// rollback restores unchanged outputs and a later edit keeps exit 6 with its backup. The baselines are the pinned pre-C16 bytes (rc.2: tests/fixtures/c16-prechange.json; rc.1: the pinned rc.1 agents of tests/fixtures/c13-rc1-agents.json and the authentic rc.1 root template, the literal RC1_ROOT_TEMPLATE_B64 below (the bytes of project-setup/assets/templates/CLAUDE.md at the pinned rc.1 source commit 8b9b4772, hash-checked against RC1_ROOT_TEMPLATE_SHA before use);
+// PLAN-GAP: no fixture pins the rc.1 wrappers or runtime unit, so the rc.1 manifest takes the pre-C16 bytes for those) and the expectation is rendered independently (the pre-C16 bytes plus the frozen amendments).
+const RC1_ROOT_TEMPLATE_SHA = '2762eadfda90518f841b455ed0e37676b17fcdd7be260bab039a663c8a0c7ab8';
+const RC1_ROOT_TEMPLATE_B64 = 'QEFHRU5UUy5tZAoKPCEtLSBwcm9qZWN0LXNldHVwOmJlZ2luIGlkPWNsYXVkZSAtLT4KIyMgQ2xhdWRlIENvZGUKCi0gU2hhcmVkIHJ1bGVzIGxpdmUgaW4gQUdFTlRTLm1kIChpbXBvcnRlZCBhYm92ZSkuIFB1dCBvbmx5IENsYXVkZS1zcGVjaWZpYyBub3RlcyBoZXJlLgotIFN1YmFnZW50czogYHJldmlld2VyYCwgYGRvY3Mtc3luY2AgaW4gYC5jbGF1ZGUvYWdlbnRzL2A7IGJvdGggbG9hZCB0aGVpciBjYW5vbmljYWwgZGVmaW5pdGlvbiBmcm9tIGAuYWkvYWdlbnRzL2AuCi0gU2VjcmV0IHBhdGhzIGFyZSBlbmZvcmNlZCBieSBgcGVybWlzc2lvbnMuZGVueWAgaW4gYC5jbGF1ZGUvc2V0dGluZ3MuanNvbmA7IHRyZWF0IGEgZGVuaWFsIGFzIGZpbmFsLgo8IS0tIHByb2plY3Qtc2V0dXA6ZW5kIGlkPWNsYXVkZSAtLT4K';
 const USER_TAIL = '\n## Local notes\n\n- Run the ledger checks before changing money code.\n';
 const DOCS_RULES_TEXT = '# project documentation rules\n\n- Every new endpoint gets an entry in docs/api-conventions.md.\n';
 const REVIEW_RULES_TEXT = '# project review rules\n\n- Check the ledger invariants first.\n';
@@ -1708,6 +1710,10 @@ async function update(context) {
     const oldClaude = old['assets/templates/CLAUDE.md'] + USER_TAIL;
     const newClaude = current('assets/templates/CLAUDE.md') + USER_TAIL;
     const expClaude = expected['assets/templates/CLAUDE.md'] + USER_TAIL;
+    // The authentic rc.1 root template: hash-checked before any use (a wrong literal stops the descriptor).
+    const rc1Template = Buffer.from(RC1_ROOT_TEMPLATE_B64, 'base64');
+    if (sha(rc1Template) !== RC1_ROOT_TEMPLATE_SHA) { check(false, 'the pinned rc.1 root template literal hashes to the rc.1 source commit digest', sha(rc1Template)); return; }
+    const rc1Claude = rc1Template.toString('utf8') + USER_TAIL;
     const oldBlocks = blocks.blockHashes(oldClaude).hashes; const newBlocks = blocks.blockHashes(newClaude).hashes; const expBlocks = blocks.blockHashes(expClaude).hashes;
     const TARGETS = {
       [I_REVIEWER]: { old: renderAgent(old['assets/agents/reviewer.md']), cur: renderAgent(current('assets/agents/reviewer.md')), exp: renderAgent(expected['assets/agents/reviewer.md']) },
@@ -1812,8 +1818,14 @@ async function update(context) {
           check(readText(projectOf(root, DS)) === DOCS_RULES_TEXT && readText(projectOf(root, RV)) === REVIEW_RULES_TEXT && eq(m.files[DS], { ownership: 'merged' }) && eq(m.files[RV], { ownership: 'merged' }), 'both optional project extensions keep their bytes and their merged records');
         });
       });
-      await step('rc.1 installation (manifest skillVersion 3.0.0-rc.1, the pinned rc.1 agents): the same update with the same exact result and the same approvals; the rc.1 hashes come from the installed manifest', async () => {
-        await scenario('rc.1', project('rc1', { version: '3.0.0-rc.1', agents: { reviewer: rc1['assets/agents/reviewer.md'], docsync: rc1['assets/agents/docs-sync.md'] } }));
+      await step('rc.1 installation (manifest skillVersion 3.0.0-rc.1, the pinned rc.1 agents and the authentic rc.1 root CLAUDE.md template): the same update with the same exact result and the same approvals; the rc.1 hashes, including the claude block hash of the rc.1 root template, come from the installed manifest', async () => {
+        const root = project('rc1', { version: '3.0.0-rc.1', claude: rc1Claude, agents: { reviewer: rc1['assets/agents/reviewer.md'], docsync: rc1['assets/agents/docs-sync.md'] } });
+        const rc1Blocks = blocks.blockHashes(rc1Claude).hashes;
+        const m0 = readManifestOf(root);
+        check(sha(Buffer.from(readText(projectOf(root, I_CLAUDE)).slice(0, -USER_TAIL.length), 'utf8')) === RC1_ROOT_TEMPLATE_SHA && readText(projectOf(root, I_CLAUDE)).endsWith(USER_TAIL), 'the installed rc.1 root CLAUDE.md is the authentic rc.1 template (SHA-256 2762eadf...) plus the user text');
+        check(m0 && m0.skillVersion === '3.0.0-rc.1' && eq(m0.files[I_CLAUDE], { ownership: 'blocks', blocks: rc1Blocks }) && eq(Object.keys(rc1Blocks), ['claude']) && rc1Blocks.claude !== oldBlocks.claude && rc1Blocks.claude !== newBlocks.claude, 'the rc.1 manifest records the claude block hash of the rc.1 template, which differs from both the pre-C16 rc.2 and the C16 block hashes', { rc1: rc1Blocks, rec: m0 && m0.files[I_CLAUDE] });
+        check(rc1Claude !== oldClaude && !rc1Claude.includes('built-in review preamble') && oldClaude.includes('built-in review preamble'), 'the rc.1 root template genuinely differs from the pre-C16 rc.2 template (it lacks the rc.2 built-in-review bullet)');
+        await scenario('rc.1', root);
       });
       await step('the unit is staged whole: a plan that stages only the two changed runtime members is refused (the complete reviewed runtime unit is required) and writes nothing; the five unchanged members cannot be left out', async () => {
         const root = project('partial');
@@ -1978,6 +1990,44 @@ const MODEL_SHA = {
 const SECTIONS = ['Changes', 'Compatibility and rollback', 'Verification', 'Pending host measurements', 'Limitations', 'Provenance and release artifacts'];
 const NOTES_HEX_RE = /(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])/i;
 const ACCEPTANCE_REL = 'docs/plans/2026-10-25-project-setup-v3-rc3-c16-acceptance.md';
+// Plan C16-13: the TODO measurement values are bound to the designated measurement lines of the acceptance record, never to loose substrings: the run date (the first line of the fenced block under "## The run"), the one accept-rc1 command line of that block (its elapsed seconds) and the one
+// "Full acceptance took" sentence under "## Acceptance headroom" (elapsed, remaining = 1800 - elapsed and percent = ((1800 - elapsed) / 1800 * 100).toFixed(1)). Returns { ok, problems, derived }; each problem starts with a stable tag.
+function acceptanceEvidence(record, values) {
+  const problems = []; const derived = {};
+  const lines = LF(record).split('\n');
+  const sectionOf = (h) => { const i = lines.findIndex((l) => l === h); if (i < 0) return null; let j = i + 1; while (j < lines.length && !/^## /.test(lines[j])) j++; return lines.slice(i + 1, j); };
+  const run = sectionOf('## The run'); const head = sectionOf('## Acceptance headroom');
+  if (run === null) problems.push('run-section: the "## The run" section is missing');
+  if (head === null) problems.push('headroom-section: the "## Acceptance headroom" section is missing');
+  let block = null;
+  if (run !== null) {
+    const a = run.indexOf('```text'); const b = a < 0 ? -1 : run.indexOf('```', a + 1);
+    if (a < 0 || b < 0) problems.push('run-block: the fenced text block under "## The run" is missing'); else block = run.slice(a + 1, b);
+  }
+  let runSeconds = null;
+  if (block !== null) {
+    const dm = /^Date: (\d{4}-\d{2}-\d{2}), \d{2}:\d{2}:\d{2} to \d{2}:\d{2}:\d{2} host clock$/.exec(block[0] || '');
+    if (dm === null || block.filter((l) => l.startsWith('Date:')).length !== 1) problems.push('run-date: the first line of the run block is not the one run-date line'); else derived.date = dm[1];
+    const cmds = block.filter((l) => l.includes('accept-rc1.mjs'));
+    const cm = cmds.length === 1 ? /^\s*node project-setup\/tests\/accept-rc1\.mjs\s+exit 0\s+ACCEPT-RC1 PASS full\s+(\d+) s\s*$/.exec(cmds[0]) : null;
+    if (cm === null) problems.push(`accept-line: the run block does not hold exactly one accept-rc1 command line (found ${cmds.length})`); else runSeconds = Number(cm[1]);
+  }
+  const SENT = /^Full acceptance took (\d+) s against the unchanged 1,800,000 ms timeout: (\d+) s or (\d+\.\d)% headroom\.$/;
+  const sentLines = lines.filter((l) => l.includes('Full acceptance took'));
+  const inSection = head === null ? [] : head.filter((l) => l.includes('Full acceptance took'));
+  const sm = sentLines.length === 1 && inSection.length === 1 ? SENT.exec(sentLines[0]) : null;
+  if (sm === null) problems.push(`sentence: the record does not hold exactly one well-formed headroom sentence, under "## Acceptance headroom" (found ${sentLines.length}, ${inSection.length} in the section)`);
+  else {
+    const elapsed = Number(sm[1]); const remaining = Number(sm[2]);
+    if (runSeconds !== null && elapsed !== runSeconds) problems.push(`sentence-vs-run: the sentence says ${elapsed} s but the accept-rc1 line says ${runSeconds} s`);
+    if (remaining !== 1800 - elapsed || sm[3] !== ((1800 - elapsed) / 1800 * 100).toFixed(1)) problems.push('sentence-arithmetic: the remaining seconds or the percentage do not follow from the elapsed seconds');
+    derived.elapsedSeconds = elapsed; derived.remainingSeconds = remaining; derived.headroomPercent = sm[3];
+  }
+  for (const k of ['date', 'elapsedSeconds', 'remainingSeconds', 'headroomPercent']) {
+    if (derived[k] === undefined || values[k] !== derived[k]) problems.push(`todo-${k}: the TODO value ${JSON.stringify(values[k])} is not the recorded measurement ${JSON.stringify(derived[k])}`);
+  }
+  return { ok: problems.length === 0, problems, derived };
+}
 // The root TODO.md through the whole normalization sequence of addendum C16-F1: C16's three amendments reversed (hash 28b4fd4f...), then H8D85 (hash 6676d1c9...). Returns { ok, state, text, why }.
 function normalizeTodo(text) {
   const r = reverseTodoC16(text);
@@ -2100,7 +2150,27 @@ async function release(context) {
       check(n.ok && (n.state === 'pre' || n.state === 'post'), 'the headroom entry is in one accepted state', n.state);
       if (n.state === 'post') {
         const acc = readText(rootPath(context, ACCEPTANCE_REL));
-        check(acc !== null && acc.includes(String(n.values.elapsedSeconds)) && acc.includes(n.values.date) && acc.includes(String(n.values.headroomPercent)), 'the post-acceptance values match the retained acceptance record', n.values);
+        const ev = acc === null ? null : acceptanceEvidence(acc, n.values);
+        check(ev !== null && ev.ok, 'the post-acceptance values equal the run date, the accept-rc1 line and the one headroom sentence of the retained acceptance record', ev === null ? 'record unreadable' : { problems: ev.problems, values: n.values });
+        if (acc !== null && ev !== null && ev.ok) {
+          // Negative controls on in-memory copies of the record (the record is never written).
+          const v = n.values;
+          const tag = (r, t) => !r.ok && r.problems.some((p) => p.startsWith(t + ':'));
+          const SENTENCE = `Full acceptance took ${v.elapsedSeconds} s against the unchanged 1,800,000 ms timeout: ${v.remainingSeconds} s or ${v.headroomPercent}% headroom.`;
+          const RUNLINE = acc.split('\n').find((l) => l.includes('accept-rc1.mjs'));
+          check(acc.split(SENTENCE).length === 2 && RUNLINE !== undefined, 'the control inputs are located exactly once in the record');
+          const changed = acc.replace(SENTENCE, 'Full acceptance took 1200 s against the unchanged 1,800,000 ms timeout: 600 s or 33.3% headroom.');
+          check(changed.includes(String(v.elapsedSeconds)) && changed.includes(v.headroomPercent) && tag(acceptanceEvidence(changed, v), 'todo-elapsedSeconds') && tag(acceptanceEvidence(changed, v), 'sentence-vs-run'), 'control: a changed headroom sentence is refused although the old numbers still occur elsewhere in the record');
+          check(tag(acceptanceEvidence(acc + '\n' + SENTENCE.replace(String(v.elapsedSeconds), '1200') + '\n', v), 'sentence'), 'control: a second, conflicting headroom sentence is refused');
+          check(tag(acceptanceEvidence(acc.replace(SENTENCE, SENTENCE + '\n' + SENTENCE), v), 'sentence'), 'control: a duplicated identical headroom sentence is refused (exactly one)');
+          check(tag(acceptanceEvidence(acc.replace(RUNLINE, RUNLINE.replace(' ' + v.elapsedSeconds + ' s', ' ' + (v.elapsedSeconds + 1) + ' s')), v), 'sentence-vs-run'), 'control: a sentence that disagrees with the accept-rc1 line is refused');
+          check(tag(acceptanceEvidence(acc.replace(RUNLINE, RUNLINE + '\n' + RUNLINE), v), 'accept-line') && tag(acceptanceEvidence(acc.replace(RUNLINE, ''), v), 'accept-line'), 'control: two accept-rc1 lines or none in the run block are refused');
+          check(tag(acceptanceEvidence(acc.replace('Date: ' + v.date + ',', 'Date: 2026-10-24,'), v), 'todo-date') && tag(acceptanceEvidence(acc, { ...v, date: '2026-10-24' }), 'todo-date'), 'control: a run date that differs from the TODO date is refused in both directions');
+          check(tag(acceptanceEvidence(acc.replace(SENTENCE + '\n', ''), v), 'sentence'), 'control: a missing headroom sentence is refused');
+          check(tag(acceptanceEvidence(acc.replace(SENTENCE + '\n', '') + '\n## Elsewhere\n\n' + SENTENCE + '\n', v), 'sentence'), 'control: a headroom sentence outside the "## Acceptance headroom" section is refused');
+          check(tag(acceptanceEvidence(acc.replace(': ' + v.remainingSeconds + ' s or', ': ' + (v.remainingSeconds + 1) + ' s or'), { ...v, remainingSeconds: v.remainingSeconds + 1 }), 'sentence-arithmetic'), 'control: a sentence whose remaining seconds break the arithmetic is refused even when the TODO repeats it');
+          check(tag(acceptanceEvidence(acc, { ...v, headroomPercent: '99.9' }), 'todo-headroomPercent') && tag(acceptanceEvidence(acc, { ...v, remainingSeconds: v.remainingSeconds + 1 }), 'todo-remainingSeconds') && tag(acceptanceEvidence(acc, { ...v, elapsedSeconds: v.elapsedSeconds + 1 }), 'todo-elapsedSeconds'), 'control: each altered TODO value is refused against the record');
+        }
       }
       const t = LF(todo);
       check(COUNT(t, T(C16_BLOCKS.TODO_BLOCKER)) === 1 && t.indexOf('### project-setup final 3.0.0 requires rc.3 host re-measurement') > t.indexOf('### Nest 12 is not supported') && t.indexOf('### project-setup final 3.0.0 requires rc.3 host re-measurement') < t.indexOf(NEEDS_TODO_HEADING) && t.includes(`\n\n${T(C16_BLOCKS.TODO_BLOCKER)}\n${NEEDS_TODO_HEADING}\n`), 'the blocking item stands once after the complete Nest 12 subsection with one blank line before and after it, before "## Needs manual review"');
@@ -2444,7 +2514,7 @@ async function contracts(context) {
         const model = modelOf(fx, rel);
         if (model === null) { check(false, `${rel}: the model exists`); continue; }
         const first = H.reverseOne(model, AM16[pair[1]]); const swapped = H.reverseOne(model, AM16[pair[0]]);
-        check(first !== null && (rel !== 'README.md' ? true : true) && (rel === 'README.md' || swapped === null), `${rel}: an adjacent amendment is verified only after the later one is reversed (the reversal order matters)`, { later: first !== null, earlier: swapped !== null });
+        check(first !== null && (rel ==='README.md' || swapped === null), `${rel}: an adjacent amendment is verified only after the later one is reversed (the reversal order matters)`, { later: first !== null, earlier: swapped !== null });
       }
       const todoHead = preText(fx, '@root/TODO.md');
       check(todoHead !== null && H.applyTodoC16Pre(todoHead) !== null && H.reverseTodoC16(H.applyTodoC16Pre(todoHead) || '').text === todoHead, 'the TODO forward and reverse directions agree on the inspected HEAD');
