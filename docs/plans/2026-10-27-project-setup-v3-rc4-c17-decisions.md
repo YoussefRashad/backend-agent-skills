@@ -162,3 +162,13 @@ helpers/c16-amendments.mjs:994:  RM4a: Object.freeze({ file: 'README.md', before
 helpers/c16-amendments.mjs:995:  RM4b: Object.freeze({ file: 'README.md', before: '', old: 'node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unus
 helpers/c16-amendments.mjs:998:  V: Object.freeze({ file: 'VERSION', before: '', old: '3.0.0-rc.2\n', neu: '3.0.0-rc.3\n', after: '' }),
 ```
+
+## Tests-lane plan gaps (taken by the orchestrator, 2026-11-01)
+
+The tests lane (Claude Sonnet) wrote the C17 tests from the frozen plan and reported eight plan
+gaps. Two need a recorded reading; the other six are within the plan's wording.
+
+| ID | Gap | Decision | Basis |
+|---|---|---|---|
+| I17-1 | C17-F7 names root README lines 47, 57 and 93 as the only current-candidate tokens. Line 57 is blank; the notes reference is line 58, and line 242 (the tree line) also names the current candidate | Lines 47, 58, 93 and 242 move to rc.4; nothing else in the root README changes besides 89-90 | F7's intent is "only the current-candidate tokens". C16 (5d54c6e) moved the same four tokens; the line numbers in F7 were taken before C16's three inserted lines were counted. Leaving 242 at rc.3 would make the README contradict itself |
+| I17-2 | C17 launches about 242 counted child processes against the Q5 figure of 180 (33-39 s, under the 90 s budget) | Accepted; recorded in the acceptance record | Q5: overruns are recorded, coverage is not dropped |
