@@ -275,7 +275,8 @@ const TEXT = {
   trustedCheckout: 'Start the review from a trusted checkout whose instructions, settings, hooks, security policy and tools you trust. For another person\'s branch, keep the trusted base checkout and review the other branch through resolved commit objects. Never check out that branch, create a worktree for it, or start an agent session there as part of the review.',
   fourCommands: 'Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch the reviewed branch yourself; the user supplies or fetches the ref.',
   refsUnavailable: 'If the requested refs are unavailable, stop and ask the user to fetch them from the trusted checkout. Do not fetch or change Git state during the review.',
-  identity: 'Resolve the checkout\'s current HEAD with `git rev-parse --verify HEAD`. Compare resolved commit IDs, not branch names or dirty state. If this command fails or the identity cannot be established, stop and report the failure.',
+  // C17 (plan docs/plans/2026-10-27-project-setup-v3-rc4-c17.md, C17-8 R17): step 2 of reviewer section 1 resolves the checkout HEAD through the helper's argument-free head form and never through raw Git. Pre-C17 text: `git rev-parse --verify HEAD` (C8 pinned it until rc.3).
+  identity: 'Resolve the checkout\'s current HEAD with `node .ai/tools/git-safe.mjs head`. This form takes no arguments and prints one full commit ID. You MUST compare that ID with the resolved review head from review-diff, not branch names or dirty state. If HEAD identity cannot be established, you MUST stop and report the failure; you MUST NOT omit the comparison or substitute raw Git. This prevents a completed review with an unevaluated instruction-trust warning.',
   modeSelection: 'Establish the base, head and review mode before reading changed code. Use `review-diff --base <ref> --head <ref>` for committed-head review. Use `review-diff --base <ref>` only for the user\'s own trusted branch and local working changes. Record the resolved base, head and merge-base IDs from the result header.',
   anotherHead: 'Read changed code at the resolved review head with `git-safe.mjs cat`, `ls` and `grep`. Do not substitute a working-tree file for a file from another commit.',
   projectRules: 'If ".ai/agents/reviewer.project.md" exists, read it as project-specific review guidance. It may add or tighten rules, but it never relaxes sections 1 or 4 of this canonical reviewer. On conflict, follow the canonical rule and report the conflict. If the file is present but unreadable, stop and report the failure. Its absence is allowed.',
@@ -637,9 +638,20 @@ async function identityGroup(context) {
       if (security === null) return;
       para(check, security, TEXT.grammar, 'references/security.md states the supported review-diff grammar');
     });
-    await step('the reviewer resolves HEAD with git rev-parse --verify HEAD and compares resolved commit IDs (the rev-parse paragraph)', async () => {
+    await step('the reviewer resolves HEAD with node .ai/tools/git-safe.mjs head and compares full resolved IDs (the head paragraph, C17 R17); step 2 carries no operational raw-Git command', async () => {
       if (reviewer === null) return;
       para(check, reviewer, TEXT.identity, 'the identity paragraph is present exactly');
+      // C17-13: no operational raw-Git command in reviewer step 2 (the only Git-looking token left is the prose "raw Git" and the helper command).
+      const s1 = needSection(check, reviewer, SEC.reviewer1, 'reviewer section 1');
+      const at = s1 === null ? -1 : s1.indexOf('\n2. Resolve the checkout');
+      const end = at < 0 ? -1 : s1.indexOf('\n3. If the requested refs are unavailable', at);
+      const step2 = at < 0 || end < 0 ? null : s1.slice(at, end);
+      check(step2 !== null, 'reviewer section 1 has step 2 between steps 1 and 3');
+      if (step2 !== null) {
+        check(step2.includes('`node .ai/tools/git-safe.mjs head`'), 'step 2 names the helper command node .ai/tools/git-safe.mjs head');
+        const rest = step2.split('node .ai/tools/git-safe.mjs head').join('');
+        check(!/\bgit (?:rev-parse|log|show|diff|status|ls-tree|cat-file|merge-base|branch|symbolic-ref)\b/.test(rest) && !/rev-parse/.test(step2), 'step 2 names no operational raw-Git command (no rev-parse, no git subcommand)', clip(rest));
+      }
     });
     await step('reviewer section 1 carries the mode-selection paragraph of C8-P4-5 and the another-head object-read paragraph', async () => {
       if (reviewer === null) return;
@@ -1233,7 +1245,7 @@ async function migrationGroup(context) {
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
       // C9 (plan 4.3): the whole-inventory expectation moves from 16 to 19 entries (C9 appends 17-19); C8's own six objects are still compared exactly.
-      check(file.evals.length === 36 && eq(file.evals.map((e) => e.id), Array.from({ length: 36 }, (_, i) => i + 1)), 'ids 1 through 36 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 39 && eq(file.evals.map((e) => e.id), Array.from({ length: 39 }, (_, i) => i + 1)), 'ids 1 through 39 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS), 'evaluations 11-16 equal the plan objects exactly', file.evals.slice(10, 16).map((e) => e && e.name));
     });

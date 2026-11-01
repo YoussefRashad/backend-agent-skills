@@ -29,7 +29,20 @@ import { isDeepStrictEqual } from 'node:util';
 import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
 import { AM15, C15_BLOCKS, FORWARD_ORDER, REVERSAL_ORDER, amendmentOnce, applyOne, applySteps, reverseForFile, reverseOne, reverseSteps } from './helpers/c15-amendments.mjs';
 // C16 (plan C16-14, C16-15): every historical comparison of this file first reverses the exact C16 amendments of the file (verified, once, at their anchors) and then runs its existing C15 reversal; the current-bytes assertions stay on the actual current text.
-import { AMENDED_FILES16, C16_BLOCKS, applyForFile as applyC16, reverseForFile as reverseC16 } from './helpers/c16-amendments.mjs';
+import { AMENDED_FILES16, C16_BLOCKS, applyForFile as applyC16, reverseForFile as reverseC16Only } from './helpers/c16-amendments.mjs';
+import { C17_BLOCKS, REVERSAL_ORDER17, applyForFile as applyC17, reverseEvalsC17, reverseForFile as reverseC17File } from './helpers/c17-amendments.mjs';
+
+// C17 (plan C17-12/C17-13): the historical view of an earlier component's file is the pre-C17 view first (the exact C17 amendments of that file, when it has any, are verified once at their anchors and reversed), then the C16 view
+// (the exact C16 amendments reversed by the unchanged C16 helper). { text, failed } like the helpers; a file only C17 amends has no C16 amendment and its C17-reversed text is its C16 view as well.
+function reverseC16(text, rel, opts = {}) {
+  let s = text;
+  if (Object.prototype.hasOwnProperty.call(REVERSAL_ORDER17, rel)) {
+    const r17 = reverseC17File(s, rel);
+    if (r17.text === null) return { text: null, failed: `C17 ${r17.failed}` };
+    s = r17.text;
+  }
+  return reverseC16Only(s, rel, opts);
+}
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -369,46 +382,46 @@ const F_EVAL_LINES = [
 const F_AMENDED_C13 = [
   "const AMENDED_LITERALS = [",
   "  ['tests/c11b.test.mjs', [",
-  "    \"const CANDIDATE_VERSION = '3.0.0-rc.3';\", 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);', 'const RC2_CHANGELOG_ENTRY_LINES = [', 'const RC2_RELEASE_NOTES_LINES = [', 'const RC2_README_RELEASE_SECTION_LINES = [', 'const CURRENT_ROLLBACK_TEXT =',",
-  "    '\"# project-setup 3.0.0-rc.2\",', '\"RELEASE-NOTES-3.0.0-rc.2.md\",', 'node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>', \"'# project-setup 3.0.0-rc.3', '', 'Fixture notes without any object identifier.'\",",
-  "    'const ROLLBACK_TEXT = \\'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', \"const WORLD_TAG = 'c11b-fixture-rc1';\", \"['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0-rc.3', '3.0.0', '4.2.1-rc.12']\", 'file.evals.length === 36',",
+  "    \"const CANDIDATE_VERSION = '3.0.0-rc.4';\", 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);', 'const RC2_CHANGELOG_ENTRY_LINES = [', 'const RC2_RELEASE_NOTES_LINES = [', 'const RC2_README_RELEASE_SECTION_LINES = [', 'const CURRENT_ROLLBACK_TEXT =',",
+  "    '\"# project-setup 3.0.0-rc.2\",', '\"RELEASE-NOTES-3.0.0-rc.2.md\",', 'node install/release.mjs --tag project-setup-v3.0.0-rc.2 --out <unused-directory>', \"'# project-setup 3.0.0-rc.4', '', 'Fixture notes without any object identifier.'\",",
+  "    'const ROLLBACK_TEXT = \\'Roll back project state with the rc.1 tooling before reverting the installed skill.', 'Candidate 3.0.0-rc.1 evidence', \"const WORLD_TAG = 'c11b-fixture-rc1';\", \"['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0-rc.3', '3.0.0-rc.4', '3.0.0', '4.2.1-rc.12']\", 'file.evals.length === 39',",
   "  ], [",
-  "    \"const CANDIDATE_VERSION = '3.0.0-rc.2';\", \"const CANDIDATE_VERSION = '3.0.0-rc.1';\", 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33',",
+  "    \"const CANDIDATE_VERSION = '3.0.0-rc.3';\", \"const CANDIDATE_VERSION = '3.0.0-rc.2';\", \"const CANDIDATE_VERSION = '3.0.0-rc.1';\", \"'# project-setup 3.0.0-rc.3', '', 'Fixture notes without any object identifier.'\", \"['3.0.0-rc.1', '3.0.0-rc.2', '3.0.0-rc.3', '3.0.0', '4.2.1-rc.12']\", 'file.evals.length === 36', 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33',",
   "  ]],",
-  "  ['tests/c8.test.mjs', ['file.evals.length === 36', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33', \"rollback1: 'Roll back project state with the rc.1 tooling\"]],",
-  "  ['tests/c9.test.mjs', ['file.evals.length === 36'], ['file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33']],",
-  "  ['tests/c12.test.mjs', [\"'3.0.0-rc.3\\\\n'\", \"REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16'\", 'file.evals.length === 36'], [\"'3.0.0-rc.2\\\\n'\", \"v.toString('latin1') === '3.0.0-rc.1\\\\n'\", 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33']],",
+  "  ['tests/c8.test.mjs', ['file.evals.length === 39', `rollback1: '${CURRENT_ROLLBACK_TEXT}',`], ['file.evals.length === 36', 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33', \"rollback1: 'Roll back project state with the rc.1 tooling\"]],",
+  "  ['tests/c9.test.mjs', ['file.evals.length === 39'], ['file.evals.length === 36', 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33']],",
+  "  ['tests/c12.test.mjs', [\"'3.0.0-rc.4\\\\n'\", \"REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16', 'C17'\", 'file.evals.length === 39'], [\"'3.0.0-rc.3\\\\n'\", \"'C15', 'C16']\", 'file.evals.length === 36', \"'3.0.0-rc.2\\\\n'\", \"v.toString('latin1') === '3.0.0-rc.1\\\\n'\", 'file.evals.length === 21', 'file.evals.length === 26', 'file.evals.length === 31', 'file.evals.length === 33']],",
   "];",
 ];
 
 const F_AMENDED_C14 = [
   "const AMENDED_LITERALS = [",
-  "  ['tests/c8.test.mjs', ['file.evals.length === 36', 'Array.from({ length: 36 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
-  "  ['tests/c9.test.mjs', ['file.evals.length === 36', 'Array.from({ length: 36 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
-  "  ['tests/c11b.test.mjs', ['file.evals.length === 36', 'Array.from({ length: 36 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36', 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
-  "  ['tests/c12.test.mjs', ['file.evals.length === 36', 'Array.from({ length: 36 }', \"REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16'\", 'C14 appends 27-31, C15 appends 32-33, C16 appends 34-36'], ['file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
-  "  ['tests/c13.test.mjs', ['file.evals.length === 36', \"[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15', 'C16']\", '36 evaluations', 'slice(21, 26)', \"const C11B_PIN_VALUES = {\", \"from './helpers/prose-check.mjs'\"], ['26 evaluations', 'Array.from({ length: 26 }', \"[...REGISTRY_ORDER_BEFORE, 'C13']\", '31 evaluations', 'Array.from({ length: 31 }', \"[...REGISTRY_ORDER_BEFORE, 'C13', 'C14']\"]],",
+  "  ['tests/c8.test.mjs', ['file.evals.length === 39', 'Array.from({ length: 39 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39'], ['file.evals.length === 36', 'Array.from({ length: 36 }', 'file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
+  "  ['tests/c9.test.mjs', ['file.evals.length === 39', 'Array.from({ length: 39 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39'], ['file.evals.length === 36', 'Array.from({ length: 36 }', 'file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
+  "  ['tests/c11b.test.mjs', ['file.evals.length === 39', 'Array.from({ length: 39 }', 'C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39', 'const RC1_CHANGELOG_ENTRY_LINES = [', 'const RC1_RELEASE_NOTES_LINES = [', 'const RC1_RELEASE_NOTES_TEXT = lines(RC1_RELEASE_NOTES_LINES);'], ['file.evals.length === 36', 'Array.from({ length: 36 }', 'file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
+  "  ['tests/c12.test.mjs', ['file.evals.length === 39', 'Array.from({ length: 39 }', \"REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16', 'C17'\", 'C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39'], ['file.evals.length === 36', 'Array.from({ length: 36 }', \"'C15', 'C16']\", 'file.evals.length === 26', 'Array.from({ length: 26 }', 'file.evals.length === 21', 'file.evals.length === 31', 'Array.from({ length: 31 }', 'file.evals.length === 33', 'Array.from({ length: 33 }']],",
+  "  ['tests/c13.test.mjs', ['file.evals.length === 39', \"[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15', 'C16', 'C17']\", '39 evaluations', 'slice(21, 26)', \"const C11B_PIN_VALUES = {\", \"from './helpers/prose-check.mjs'\"], [\"[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15', 'C16']\", '36 evaluations', '26 evaluations', 'Array.from({ length: 26 }', \"[...REGISTRY_ORDER_BEFORE, 'C13']\", '31 evaluations', 'Array.from({ length: 31 }', \"[...REGISTRY_ORDER_BEFORE, 'C13', 'C14']\"]],",
   "];",
 ];
 
 // plan C15-10, the five G12 replacements: [file, kind, exact HEAD string, exact new string] (each string includes its quotes, as written in the source line).
 const G12 = [
-  ["tests/c8.test.mjs", "check", "'ids 1 through 31 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'ids 1 through 36 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)'"],
-  ["tests/c9.test.mjs", "check", "'ids 1 through 31 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'ids 1 through 36 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)'"],
-  ["tests/c11b.test.mjs", "check", "'IDs 1 through 31 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'IDs 1 through 36 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)'"],
-  ["tests/c12.test.mjs", "title", "'plan C12-13 as amended by C13-15 and C14-19: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 31 without duplicates (C13 appends 22-26, C14 appends 27-31)'", "'plan C12-13 as amended by C13-15 and C14-19: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 36 without duplicates (C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)'"],
-  ["tests/c12.test.mjs", "check", "'ids 1 through 31 in order without duplicates'", "'ids 1 through 36 in order without duplicates'"],
+  ["tests/c8.test.mjs", "check", "'ids 1 through 31 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'ids 1 through 39 in order (C8 appended 11-16, C9 appends 17-19, C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)'"],
+  ["tests/c9.test.mjs", "check", "'ids 1 through 31 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'ids 1 through 39 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)'"],
+  ["tests/c11b.test.mjs", "check", "'IDs 1 through 31 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31)'", "'IDs 1 through 39 in order without duplicates (C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)'"],
+  ["tests/c12.test.mjs", "title", "'plan C12-13 as amended by C13-15 and C14-19: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 31 without duplicates (C13 appends 22-26, C14 appends 27-31)'", "'plan C12-13 as amended by C13-15 and C14-19: evaluation 21 is exactly the plan object, evaluations 1-20 are unchanged, ids run 1 to 39 without duplicates (C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)'"],
+  ["tests/c12.test.mjs", "check", "'ids 1 through 31 in order without duplicates'", "'ids 1 through 39 in order without duplicates'"],
 ];
 
 // plan C15-10, the seven G13 diagnostic strings: [file, exact HEAD string, exact new string].
 const G13 = [
-  ["tests/c11b.test.mjs", "'plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 31 without duplicates and evaluation 20 is exactly the plan object'", "'plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 36 without duplicates (C15 appends 32-33, C16 appends 34-36) and evaluation 20 is exactly the plan object'"],
-  ["tests/c13.test.mjs", "'plan C13-15, I13-1 and C14-17: evals/evals.json holds 31 ordered unique evaluations (C14 appends 27-31 and asserts them), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order'", "'plan C13-15, I13-1 and C14-17: evals/evals.json holds 36 ordered unique evaluations (C14 appends 27-31 and asserts them; C15 appends 32-33; C16 appends 34-36), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order'"],
-  ["tests/c13.test.mjs", "'ids 1 through 31 in order without duplicates (C14 appends 27-31)'", "'ids 1 through 36 in order without duplicates (C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)'"],
-  ["tests/c13.test.mjs", "'both registries list the earlier components unchanged (C12 included), then C13 and then C14 (C14 appends to the registry tail)'", "'both registries list the earlier components unchanged (C12 included), then C13, C14, C15 and C16 (C16 is the appended tail)'"],
-  ["tests/c14.test.mjs", "'both registries list the earlier components unchanged (C13 included) and then C14 as the appended tail'", "'both registries list the earlier components unchanged (C13 included) and then C14, C15 and C16 (C16 is the appended tail)'"],
-  ["tests/c14.test.mjs", "'plan C14-17 and C14-19: evals/evals.json holds exactly 31 ordered unique evaluations; 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order'", "'plan C14-17 and C14-19: evals/evals.json holds exactly 36 ordered unique evaluations (C15 appends 32-33; C16 appends 34-36); 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order'"],
-  ["tests/c14.test.mjs", "'exactly ids 1 through 31 in order without duplicates (an earlier or a larger count is wrong)'", "'exactly ids 1 through 36 in order without duplicates (an earlier or a larger count is wrong)'"],
+  ["tests/c11b.test.mjs", "'plan 5.9, C12-13, C13-15 and C14-19: evals/evals.json holds evaluations 1 to 31 without duplicates and evaluation 20 is exactly the plan object'", "'plan 5.9, C12-13, C13-15, C14-19 and C17-16: evals/evals.json holds evaluations 1 to 39 without duplicates (C15 appends 32-33, C16 appends 34-36, C17 appends 37-39) and evaluation 20 is exactly the plan object'"],
+  ["tests/c13.test.mjs", "'plan C13-15, I13-1 and C14-17: evals/evals.json holds 31 ordered unique evaluations (C14 appends 27-31 and asserts them), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order'", "'plan C13-15, I13-1 and C14-17: evals/evals.json holds 39 ordered unique evaluations (C14 appends 27-31 and asserts them; C15 appends 32-33; C16 appends 34-36; C17 appends 37-39), 1-20 and 21 are unchanged, 22-26 are exactly the plan objects (evaluation 22 with the two I13-1 controls, evaluation 24 with only its C14 delivery sentence changed) with their keys in plan order'"],
+  ["tests/c13.test.mjs", "'ids 1 through 31 in order without duplicates (C14 appends 27-31)'", "'ids 1 through 39 in order without duplicates (C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)'"],
+  ["tests/c13.test.mjs", "'both registries list the earlier components unchanged (C12 included), then C13 and then C14 (C14 appends to the registry tail)'", "'both registries list the earlier components unchanged (C12 included), then C13, C14, C15, C16 and C17 (C17 is the appended tail)'"],
+  ["tests/c14.test.mjs", "'both registries list the earlier components unchanged (C13 included) and then C14 as the appended tail'", "'both registries list the earlier components unchanged (C13 included) and then C14, C15, C16 and C17 (C17 is the appended tail)'"],
+  ["tests/c14.test.mjs", "'plan C14-17 and C14-19: evals/evals.json holds exactly 31 ordered unique evaluations; 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order'", "'plan C14-17 and C14-19: evals/evals.json holds exactly 39 ordered unique evaluations (C15 appends 32-33; C16 appends 34-36; C17 appends 37-39); 1-20, 21, 22, 23, 25 and 26 are unchanged (digests of the committed C13 expectations); 24 differs only in its final delivery sentence; 27-31 are exactly the plan objects with their keys in plan order'"],
+  ["tests/c14.test.mjs", "'exactly ids 1 through 31 in order without duplicates (an earlier or a larger count is wrong)'", "'exactly ids 1 through 39 in order without duplicates (an earlier or a larger count is wrong)'"],
 ];
 
 // ============================================================ text engine ====
@@ -1250,8 +1263,10 @@ async function update(context) {
     const expReviewerC15 = applyOne(fxReviewer.toString('utf8'), AM15.R15); const expDocsC15 = applyOne(fxDocs.toString('utf8'), AM15.D15);
     if (expReviewerC15 === null || expDocsC15 === null) { check(false, 'the pre-change agents take R15 and D15 exactly once at their anchors (the independent expectation)'); return; }
     // C16 (plan C16-14/C16-15): the delivered agents are the C15 text plus the exact C16 amendments, applied by the helper to the C15 model.
-    const expReviewerRaw = applyC16(expReviewerC15, REVIEWER_REL); const expDocsRaw = applyC16(expDocsC15, DOCS_REL);
-    if (expReviewerRaw === null || expDocsRaw === null) { check(false, 'the C15 model of each agent takes the exact C16 amendments once at their anchors (the independent expectation of the current agents)'); return; }
+    const expReviewerC16 = applyC16(expReviewerC15, REVIEWER_REL); const expDocsRaw = applyC16(expDocsC15, DOCS_REL);
+    // C17 (plan C17-8, R17): the reviewer the update delivers also carries the exact C17 amendment (docs-sync has none), applied by the helper to the C16 model.
+    const expReviewerRaw = expReviewerC16 === null ? null : applyC17(expReviewerC16, REVIEWER_REL);
+    if (expReviewerRaw === null || expDocsRaw === null) { check(false, 'the C15 model of each agent takes the exact C16 amendments (and the reviewer the exact C17 amendment R17) once at their anchors (the independent expectation of the current agents)'); return; }
     const expReviewer = renderAgent(expReviewerRaw); const expDocsync = renderAgent(expDocsRaw); // the independent expectation
     const versionFile = (readText(skillPath(context, 'VERSION')) || '').trim();
     const preVersionBytes = c16PreVersion(context); const preVersion = preVersionBytes === null ? null : preVersionBytes.toString('latin1').trim();
@@ -1525,10 +1540,13 @@ async function release(context) {
         check(nb.text !== null && sha(Buffer.from(nb.text, 'utf8')) === PRE_C15[NOTES_REL], `${label}: reversing N15c, N15b and N15a in the notes array gives the pinned pre-C15 notes`, nb.failed);
         check(C15_BLOCKS.L15.every((l) => clLines.includes(l)) && C15_BLOCKS.N15a.every((l) => notesLines.includes(l)) && notesLines.includes(C15_BLOCKS.N15b.neu[0]) && notesLines.includes(C15_BLOCKS.N15c.neu[0]) && !notesLines.includes(C15_BLOCKS.N15b.old[0]) && !notesLines.includes(C15_BLOCKS.N15c.old[0]), `${label}: the arrays gain L15 and N15a to N15c and no longer carry the replaced sentences`);
       }
-      // C16: C11b's current arrays are the exact rc.3 entry and notes of the plan (independently copied into c16-amendments.mjs); the rc.2 history above is preserved under the RC2_* names.
+      // C17: C11b's current arrays are the exact rc.4 entry and notes of the plan (independently copied into c17-amendments.mjs); the rc.3 text (C16's, in c16-amendments.mjs) and the rc.2 history above are preserved under the RC3_* and RC2_* names.
       const curCl = arrayOf(c11b, 'CHANGELOG_ENTRY_LINES'); const curNotes = arrayOf(c11b, 'RELEASE_NOTES_LINES');
-      check(curCl !== null && `${curCl.join('\n')}\n` === `${T(C16_BLOCKS.CHANGELOG_ENTRY)}\n`, 'tests/c11b.test.mjs CHANGELOG_ENTRY_LINES is exactly the plan\'s rc.3 changelog entry plus its separating blank line');
-      check(curNotes !== null && `${curNotes.join('\n')}\n` === T(C16_BLOCKS.RELEASE_NOTES), 'tests/c11b.test.mjs RELEASE_NOTES_LINES is exactly the plan\'s rc.3 release notes');
+      check(curCl !== null && `${curCl.join('\n')}\n` === `${T(C17_BLOCKS.CHANGELOG_ENTRY)}\n`, 'tests/c11b.test.mjs CHANGELOG_ENTRY_LINES is exactly the plan\'s rc.4 changelog entry plus its separating blank line');
+      check(curNotes !== null && `${curNotes.join('\n')}\n` === T(C17_BLOCKS.RELEASE_NOTES), 'tests/c11b.test.mjs RELEASE_NOTES_LINES is exactly the plan\'s rc.4 release notes');
+      const rc3Cl = arrayOf(c11b, 'RC3_CHANGELOG_ENTRY_LINES'); const rc3Notes = arrayOf(c11b, 'RC3_RELEASE_NOTES_LINES');
+      check(rc3Cl !== null && `${rc3Cl.join('\n')}\n` === `${T(C16_BLOCKS.CHANGELOG_ENTRY)}\n`, 'tests/c11b.test.mjs RC3_CHANGELOG_ENTRY_LINES is exactly the preserved rc.3 changelog entry plus its separating blank line (C16)');
+      check(rc3Notes !== null && `${rc3Notes.join('\n')}\n` === T(C16_BLOCKS.RELEASE_NOTES), 'tests/c11b.test.mjs RC3_RELEASE_NOTES_LINES is exactly the preserved rc.3 release notes (C16)');
       check(!(arrayOf(c11b, 'RC1_CHANGELOG_ENTRY_LINES') || []).join('\n').includes('C15') && !(arrayOf(c11b, 'RC1_RELEASE_NOTES_LINES') || []).join('\n').includes('C15'), 'C11b\'s historical RC1 arrays do not move');
       const pre14 = (name, suffix) => { const a = arrayOf(c14, name); return a === null ? null : sha(Buffer.from(`${a.join('\n')}${suffix}`, 'utf8')); };
       check(pre14('F_CHANGELOG_ENTRY_PRE_C14', '\n\n') === PRE_C14_CHANGELOG_ENTRY_SHA && pre14('F_RELEASE_NOTES_PRE_C14', '\n') === PRE_C14_NOTES_SHA, 'C14\'s historical pre-C14 changelog and notes arrays keep their digests (F_CHANGELOG_ENTRY_PRE_C14, F_RELEASE_NOTES_PRE_C14 do not move)');
@@ -1676,7 +1694,7 @@ async function contracts(context) {
       check(Array.isArray(impls) && Object.isFrozen(impls) && impls.length === C15_IMPLEMENTATIONS.length && impls.every((x, i) => x === C15_IMPLEMENTATIONS[i]), 'COMPONENT_IMPLEMENTATIONS.C15 holds exactly the C15_IMPLEMENTATIONS objects in order (identity preserved)', impls && impls.length);
       check(Object.isFrozen(C15_IMPLEMENTATIONS) && eq(C15_IMPLEMENTATIONS.map((x) => x.id), EXPECTED_DESCRIPTORS.map((d) => d.id)) && C15_IMPLEMENTATIONS.length === 6 && C15_IMPLEMENTATIONS.every((x) => typeof x.run === 'function' && Object.isFrozen(x)), 'C15_IMPLEMENTATIONS is a frozen array of the six IDs with callable run functions and frozen descriptors');
       const keysA = Object.keys(rc.COMPONENT_ASSERTIONS || {}); const keysI = Object.keys(rc.COMPONENT_IMPLEMENTATIONS || {});
-      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C15', 'C16']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C15', 'C16']), 'both registries list the earlier components unchanged (C14 included), then C15 directly after C14 and C16 as the appended tail (plan C16-18)', { keysA, keysI });
+      check(eq(keysA, [...REGISTRY_ORDER_BEFORE, 'C15', 'C16', 'C17']) && eq(keysI, [...REGISTRY_ORDER_BEFORE, 'C15', 'C16', 'C17']), 'both registries list the earlier components unchanged (C14 included), then C15 directly after C14, C16 and C17 as the appended tail (plan C16-18, C17-17)', { keysA, keysI });
       check(eq(Object.keys(rc).sort(), ['BASELINE_CASE_IDS', 'COMPONENT_ASSERTIONS', 'COMPONENT_IMPLEMENTATIONS', 'RC1_CASE_IDS', 'REQUIRED_CASE_IDS', 'registerRc1Cases', 'runComponentAssertions', 'selectSuiteCases']), 'rc1-cases.mjs keeps exactly its eight exports', Object.keys(rc).sort());
       check(eq(rc.COMPONENT_ASSERTIONS.C14.map((d) => d.id), ['A5-templates/C14/docs-sync', 'A5-templates/C14/ownership', 'A5-templates/C14/adopt', 'A5-templates/C14/external-review', 'V2/C14/update', 'V2/C14/path-boundaries', 'RC1/C14/release', 'V2/C14/contracts']), 'the eight C14 descriptor IDs are unchanged');
       const src = text('tests/rc1-cases.mjs') || '';
@@ -1725,13 +1743,20 @@ async function contracts(context) {
       }
       check(COUNT(runner, 'registerRc1Cases(test, { getComponent });') === 1, 'the complete cases are still registered once');
     });
-    await step('plan C15-9, C15-13 and C16-14/C16-17: evals/evals.json holds exactly 36 ordered unique evaluations (C16 appends 34-36); the 1-31 prefix keeps its JSON digest 1f7a9dda... and the 1-33 prefix its C16 digest ef2f32bd...; evaluation 33 differs from the pre-C16 line only by its delimiter comma; 32 and 33 are exactly the plan objects with their keys in plan order and carry the required negative controls', async () => {
-      const raw = readText(skillPath(context, 'evals/evals.json'));
-      const file = readJson(skillPath(context, 'evals/evals.json'));
-      check(file !== null && file.skill_name === 'project-setup' && Array.isArray(file.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
-      if (!file || !Array.isArray(file.evals) || raw === null) return;
+    await step('plan C15-9, C15-13 and C16-14/C16-17: evals/evals.json holds exactly 39 ordered unique evaluations (C16 appends 34-36, C17 appends 37-39); the 1-31 prefix keeps its JSON digest 1f7a9dda... and the 1-33 prefix its C16 digest ef2f32bd...; evaluation 33 differs from the pre-C16 line only by its delimiter comma; 32 and 33 are exactly the plan objects with their keys in plan order and carry the required negative controls', async () => {
+      const rawNow = readText(skillPath(context, 'evals/evals.json'));
+      const fileNow = readJson(skillPath(context, 'evals/evals.json'));
+      check(fileNow !== null && fileNow.skill_name === 'project-setup' && Array.isArray(fileNow.evals), 'evals/evals.json is readable and keeps skill_name project-setup');
+      if (!fileNow || !Array.isArray(fileNow.evals) || rawNow === null) return;
+      const idsNow = fileNow.evals.map((e) => e && e.id);
+      check(fileNow.evals.length === 39 && eq(idsNow, Array.from({ length: 39 }, (_, i) => i + 1)) && new Set(idsNow).size === 39, 'exactly ids 1 through 39 in order without duplicates (an earlier or a larger count is wrong; C15 appended 32-33, C16 appended 34-36, C17 appends 37-39)', idsNow);
+      // C17-13: the C15 and C16 frame, digests and plan lines below are historical claims about the file before C17; they are checked on the exact C17-reversed view (evaluations 37-39 and the delimiter comma of 36 removed).
+      const raw = reverseEvalsC17(rawNow);
+      check(raw !== null, 'the C17 evaluation additions (37-39 and the delimiter comma of 36) stand exactly at the end of the file and reverse');
+      if (raw === null) return;
+      const file = JSON.parse(raw);
       const ids = file.evals.map((e) => e && e.id);
-      check(file.evals.length === 36 && eq(ids, Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(ids).size === 36, 'exactly ids 1 through 36 in order without duplicates (an earlier or a larger count is wrong; C15 appended 32-33, C16 appends 34-36)', ids);
+      check(file.evals.length === 36 && eq(ids, Array.from({ length: 36 }, (_, i) => i + 1)), 'on the C17-reversed view the file holds exactly ids 1 through 36 (the C16 inventory)', ids);
       check(file.evals.length >= 33 && sha(Buffer.from(JSON.stringify(file.evals.slice(0, 33)), 'utf8')) === EVAL_PREFIX_33_SHA, 'the JSON serialization of evaluations 1-33 is unchanged (digest ef2f32bd... of plan C16-14, no final LF): evaluations 32 and 33 keep their objects');
       check(sha(Buffer.from(raw.split('\n').slice(0, 35).join('\n') + '\n', 'utf8')) === EVAL_RAW_LINES_1_35_SHA, 'original lines 1-35 are byte-identical to the pre-C16 file, including the LF after line 35 (digest 8059a41c... of plan C16-14)');
       check(file.evals.length >= 31 && sha(Buffer.from(JSON.stringify(file.evals.slice(0, 31)), 'utf8')) === EVAL_PREFIX_SHA, 'the JSON serialization of evaluations 1-31 is unchanged (digest 1f7a9dda... of plan C15-9; a JSON digest, not the raw file digest)');
@@ -1785,21 +1810,21 @@ async function contracts(context) {
       check(COUNT(c14, F_AMENDED_C14.join('\n')) === 1, 'tests/c14.test.mjs carries the plan\'s exact AMENDED_LITERALS declaration once');
       const c11b = text('tests/c11b.test.mjs') || ''; const c12 = text('tests/c12.test.mjs') || ''; const c8 = text('tests/c8.test.mjs') || ''; const c9 = text('tests/c9.test.mjs') || '';
       for (const [rel, t] of [['tests/c8.test.mjs', c8], ['tests/c9.test.mjs', c9], ['tests/c11b.test.mjs', c11b], ['tests/c12.test.mjs', c12]]) {
-        check(t.includes('file.evals.length === 36') && t.includes('Array.from({ length: 36 }') && !t.includes('file.evals.length === 33') && !t.includes('Array.from({ length: 33 }') && !t.includes('file.evals.length === 31') && !t.includes('Array.from({ length: 31 }'), `${rel}: the current evaluation total and generated IDs are 36 (C16 appends 34-36)`);
+        check(t.includes('file.evals.length === 39') && t.includes('Array.from({ length: 39 }') && !t.includes('file.evals.length === 33') && !t.includes('Array.from({ length: 33 }') && !t.includes('file.evals.length === 31') && !t.includes('Array.from({ length: 31 }'), `${rel}: the current evaluation total and generated IDs are 39 (C17 appends 37-39)`);
       }
-      check(c11b.includes('new Set(file.evals.map((e) => e && e.id)).size === 36') && c12.includes('new Set(file.evals.map((e) => e && e.id)).size === 36') && c13.includes('new Set(ids).size === 36') && c14.includes('new Set(ids).size === 36'), 'the unique-ID counts are 36 in C11b, C12, C13 and C14');
+      check(c11b.includes('new Set(file.evals.map((e) => e && e.id)).size === 39') && c12.includes('new Set(file.evals.map((e) => e && e.id)).size === 39') && c13.includes('new Set(ids).size === 39') && c14.includes('new Set(ids).size === 39'), 'the unique-ID counts are 39 in C11b, C12, C13 and C14');
       const idsA = 'file.evals.map((e) => e && e.id)';
       for (const [rel, expr] of [
-        ['tests/c8.test.mjs', 'check(file.evals.length === 36 && eq(file.evals.map((e) => e.id), Array.from({ length: 36 }, (_, i) => i + 1)), '],
-        ['tests/c9.test.mjs', `check(file.evals.length === 36 && eq(${idsA}, Array.from({ length: 36 }, (_, i) => i + 1)), `],
-        ['tests/c11b.test.mjs', `check(file.evals.length === 36 && eq(${idsA}, Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(${idsA}).size === 36, `],
-        ['tests/c12.test.mjs', `check(file.evals.length === 36 && eq(${idsA}, Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(${idsA}).size === 36, `],
-        ['tests/c13.test.mjs', 'check(file.evals.length === 36 && eq(ids, Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(ids).size === 36, '],
-        ['tests/c14.test.mjs', 'check(file.evals.length === 36 && eq(ids, Array.from({ length: 36 }, (_, i) => i + 1)) && new Set(ids).size === 36, '],
-      ]) check(COUNT(text(rel) || '', expr) === 1, `${rel}: the evaluation assertion expects the total, the ordered IDs and (where it had one) the unique count to be 36, exactly once`);
-      for (const [rel, list] of [['tests/c12.test.mjs', "'C12', 'C13', 'C14', 'C15', 'C16'"], ['tests/c13.test.mjs', "'C13', 'C14', 'C15', 'C16'"], ['tests/c14.test.mjs', "'C14', 'C15', 'C16'"]]) {
+        ['tests/c8.test.mjs', 'check(file.evals.length === 39 && eq(file.evals.map((e) => e.id), Array.from({ length: 39 }, (_, i) => i + 1)), '],
+        ['tests/c9.test.mjs', `check(file.evals.length === 39 && eq(${idsA}, Array.from({ length: 39 }, (_, i) => i + 1)), `],
+        ['tests/c11b.test.mjs', `check(file.evals.length === 39 && eq(${idsA}, Array.from({ length: 39 }, (_, i) => i + 1)) && new Set(${idsA}).size === 39, `],
+        ['tests/c12.test.mjs', `check(file.evals.length === 39 && eq(${idsA}, Array.from({ length: 39 }, (_, i) => i + 1)) && new Set(${idsA}).size === 39, `],
+        ['tests/c13.test.mjs', 'check(file.evals.length === 39 && eq(ids, Array.from({ length: 39 }, (_, i) => i + 1)) && new Set(ids).size === 39, '],
+        ['tests/c14.test.mjs', 'check(file.evals.length === 39 && eq(ids, Array.from({ length: 39 }, (_, i) => i + 1)) && new Set(ids).size === 39, '],
+      ]) check(COUNT(text(rel) || '', expr) === 1, `${rel}: the evaluation assertion expects the total, the ordered IDs and (where it had one) the unique count to be 39, exactly once`);
+      for (const [rel, list] of [['tests/c12.test.mjs', "'C12', 'C13', 'C14', 'C15', 'C16', 'C17'"], ['tests/c13.test.mjs', "'C13', 'C14', 'C15', 'C16', 'C17'"], ['tests/c14.test.mjs', "'C14', 'C15', 'C16', 'C17'"]]) {
         const lit = `check(eq(keysA, [...REGISTRY_ORDER_BEFORE, ${list}]) && eq(keysI, [...REGISTRY_ORDER_BEFORE, ${list}]), `;
-        check(COUNT(text(rel) || '', lit) === 1, `${rel}: both registry arrays gain C15 after C14 and C16 as the appended tail in the registry comparison`);
+        check(COUNT(text(rel) || '', lit) === 1, `${rel}: both registry arrays gain C15 after C14, then C16 and C17 as the appended tail in the registry comparison`);
       }
       check(c14.includes('slice(26, 31)') && !/slice\(26\)/.test(c14) && c13.includes('slice(21, 26)'), 'C14 compares exactly evaluations 27-31 (slice(26, 31)) and C13 keeps slice(21, 26)');
       for (const [rel, t, snippets] of [
@@ -1807,8 +1832,8 @@ async function contracts(context) {
         ['tests/c14.test.mjs', c14, ["reverseC15(noC16, ['D15'])", "reverseC15(reviewerNoC16, ['R15'])", "reverseC15(cl, ['L15'])", "reverseC15(notes, ['N15c', 'N15b', 'N15a'])", 'let running = historicalNotes;', 'reverseIds(historicalNotes, [...NOTES_IDS].reverse())', "applyC15(fwd, ['N15a', 'N15b', 'N15c'])", 'applyC15(applyOne(', 'amendmentOnce(noL15.text, AM.L)']],
       ]) for (const s of snippets) check(t.includes(s), `${rel} verifies and reverses the C15 amendment before its historical comparison: ${s}`);
       check(c14.includes('the canonical reviewer is unchanged after reversing exact C15 amendment R15'), 'C14\'s reviewer comparison says it holds after reversing exact C15 amendment R15');
-      check(c13.includes("[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15', 'C16']") && c12.includes("REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16'") && c14.includes("[...REGISTRY_ORDER_BEFORE, 'C14', 'C15', 'C16']"), 'the earlier tests expect the registry tail C16 after C15');
-      check(c13.includes('36 evaluations') && !c13.includes('33 evaluations') && !c13.includes('31 evaluations'), 'C13\'s current inventory description says 36 evaluations (its historical range descriptions stay)');
+      check(c13.includes("[...REGISTRY_ORDER_BEFORE, 'C13', 'C14', 'C15', 'C16', 'C17']") && c12.includes("REGISTRY_ORDER_BEFORE, 'C12', 'C13', 'C14', 'C15', 'C16', 'C17'") && c14.includes("[...REGISTRY_ORDER_BEFORE, 'C14', 'C15', 'C16', 'C17']"), 'the earlier tests expect the registry tail C16 and C17 after C15');
+      check(c13.includes('39 evaluations') && !c13.includes('33 evaluations') && !c13.includes('31 evaluations'), 'C13\'s current inventory description says 39 evaluations (its historical range descriptions stay)');
     });
     await step('plan C15-3: the amendment helper is test-only and pure (no import, file access, process launch, output or registration), exports exactly its documented names, is imported by C13, C14 and C15 from the same module, and neither earlier component keeps its own copy of the C15 text; C13 keeps exactly six proveFenceRules call sites', async () => {
       const helperPath = skillPath(context, 'tests/helpers/c15-amendments.mjs');

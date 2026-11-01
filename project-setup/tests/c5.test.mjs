@@ -211,7 +211,8 @@ const REVIEW_EXPORTS = ['REVIEW_FORM', 'defaultReviewArtifactPath', 'parseReview
 const CORE_EXPORTS = ['MAX_GIT_ARG_UNITS', 'MAX_OUTPUT_BYTES', 'NARROWING_GUIDANCE', 'SUPPORTED_FORMS', 'createGitSession', 'executeGitSafe', 'main', 'parseGitSafeArgs', 'sanitizeGitEnvironment'];
 const REVIEW_FORM = 'review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]';
 const COMMANDS = ['diff', 'log', 'show', 'cat', 'ls', 'grep'];
-const COMMANDS_TEXT = 'diff, log, show, cat, ls, grep, review-diff';
+// C17-6: the command-list detail of both modules now names the head form (the same text in the C4 core and in review-diff).
+const COMMANDS_TEXT = 'diff, log, show, cat, ls, grep, head, review-diff';
 const NULL_DEVICE = WIN ? 'NUL' : '/dev/null';
 const prefixOf = (nullDevice = NULL_DEVICE) => [
   '--no-pager',
@@ -227,6 +228,7 @@ const argvUnits = (argv) => argv.reduce((sum, a) => sum + 2 * a.length + 3, 0);
 const E = {
   INPUT: 'GIT_SAFE_INPUT: invalid Git helper input',
   COMMAND: `GIT_SAFE_COMMAND: supported commands: ${COMMANDS_TEXT}`,
+  OWNERSHIP: "GIT_SAFE_OWNERSHIP: Git refused dubious repository ownership; ask the user to add only the trusted checkout's absolute path to the effective global or system safe.directory. Example: git config --global --add safe.directory \"<trusted-checkout-path>\". No result was emitted.",
   ARGUMENT: `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${REVIEW_FORM}`,
   VERSION: 'GIT_SAFE_VERSION: Git 2.31 or later is required',
   REPOSITORY: 'GIT_SAFE_REPOSITORY: not inside a Git repository',
@@ -1271,6 +1273,7 @@ const SUPPORTED_FORMS = {
   cat: 'cat <commit> -- <path>',
   ls: 'ls <commit> [-- <paths>]',
   grep: 'grep <commit> <pattern> [-- <paths>]',
+  head: 'head', // C17-6: the additional argument-free identity form
 };
 const DOC_TEXT = [
   'The sanctioned review interface is:',
@@ -2553,7 +2556,7 @@ async function argumentsGroup(context) {
       await withScratch(context, 'imp', async (dir) => { checkImportSafe(check, REVIEW_REL, context, dir, assetUrl(context, REVIEW_REL), REVIEW_EXPORTS); });
       check(rv.REVIEW_FORM === REVIEW_FORM && typeof rv.parseReviewArgs === 'function' && typeof rv.defaultReviewArtifactPath === 'function' && typeof rv.reviewMain === 'function', 'REVIEW_FORM is the pinned string and the three functions exist', rv.REVIEW_FORM);
       check(eq(sorted(Object.keys(core)), sorted(CORE_EXPORTS)), 'C5 adds no export to the C4 core (the nine exports remain)', Object.keys(core));
-      check(Object.isFrozen(core.SUPPORTED_FORMS) && eq(sorted(Object.keys(core.SUPPORTED_FORMS)), sorted(COMMANDS)) && eq({ ...core.SUPPORTED_FORMS }, SUPPORTED_FORMS), 'the six-command maps are unchanged', core.SUPPORTED_FORMS);
+      check(Object.isFrozen(core.SUPPORTED_FORMS) && eq(sorted(Object.keys(core.SUPPORTED_FORMS)), sorted([...COMMANDS, 'head'])) && eq({ ...core.SUPPORTED_FORMS }, SUPPORTED_FORMS), 'the supported forms are the six content commands plus the head form (C17-6); the six content strings are unchanged', core.SUPPORTED_FORMS);
       check(eq(sorted(Object.keys(core.NARROWING_GUIDANCE)), sorted(COMMANDS)) && core.NARROWING_GUIDANCE.show === 'Narrow with -- <paths>.', 'the narrowing guidance keeps its six entries', core.NARROWING_GUIDANCE);
       for (const argv of [[], ['status'], ['review-diff', '--base', 'x'], ['DIFF', 'a..b'], ['--version']]) await expectErr(check, `C4's parser with ${show(argv)}`, () => core.parseGitSafeArgs(argv), E.COMMAND);
       for (const argv of [['status'], [], [''], ['diff', 'a..b']]) await expectErr(check, `parseReviewArgs(${show(argv)})`, () => rv.parseReviewArgs(argv), E.COMMAND);
@@ -2771,6 +2774,25 @@ async function failuresGroup(context) {
         const r = await go('local', { world: { root: out } });
         expectRes(check, `root output: ${label}`, r.s.r, failRes(E.REPOSITORY));
       }
+    });
+    await step('GIT_SAFE_OWNERSHIP reaches the review-diff CLI unchanged (C17-7): a consistent positive root classification gives exit 2, empty stdout and exactly the fixed line in both modes and with --out, before any header, patch, policy read, file read or artifact; an inconsistent positive result is the generic Git failure and a false flag the generic repository line; no path or Git text is disclosed', async () => {
+      const own = (over = {}) => ({ status: 128, signal: null, error: null, stdout: EMPTY, overflow: false, dubiousOwnership: true, ...over });
+      for (const mode of ['committed', 'local']) {
+        const r = await go(mode, { world: { handle: (k) => (k === 'root' ? { __raw: own() } : undefined) } });
+        expectRes(check, `ownership (${mode})`, r.s.r, failRes(E.OWNERSHIP));
+        check(r.s.reads.length === 0 && r.fake.calls.length === 2 && r.s.seam.count() === 0 && eq(r.fake.kinds(), ['version', 'root']), `ownership (${mode}): no policy read, no file operation and no Git call after the root lookup`, { reads: r.s.reads.length, kinds: r.fake.kinds(), fsOps: r.s.seam.count() });
+        check(!r.s.r.stderr.includes(r.fake.paths.root) && !/fatal:|dubious ownership in repository/.test(r.s.r.stderr), `ownership (${mode}): no repository path and no Git text`);
+        const falseFlag = await go(mode, { world: { handle: (k) => (k === 'root' ? { __raw: own({ dubiousOwnership: false }) } : undefined) } });
+        expectRes(check, `a false flag at status 128 (${mode})`, falseFlag.s.r, failRes(E.REPOSITORY));
+        const inconsistent = await go(mode, { world: { handle: (k) => (k === 'root' ? { __raw: own({ status: 1 }) } : undefined) } });
+        expectRes(check, `a positive flag with status 1 (${mode})`, inconsistent.s.r, failRes(E.GIT));
+        const withStdout = await go(mode, { world: { handle: (k) => (k === 'root' ? { __raw: own({ stdout: Buffer.from('x') }) } : undefined) } });
+        expectRes(check, `a positive flag with a nonempty stdout (${mode})`, withStdout.s.r, failRes(E.GIT));
+      }
+      const sw = seamWorld(context, { world: world({ handle: (k) => (k === 'root' ? { __raw: own() } : undefined) }), files: { 'u.txt': 'u\n' } });
+      const withOut = await seamReview(rv, context, [...ARGV_L, '--out', '.ai/.run/review/own.diff'], { fake: sw.fake, seam: sw.seam });
+      expectRes(check, 'ownership with --out', withOut.r, failRes(E.OWNERSHIP));
+      check(sw.seam.count() === 0 && withOut.reads.length === 0 && eq(sw.fake.kinds(), ['version', 'root']), 'ownership with --out: no artifact path was touched, nothing was read and no Git call followed', { fsOps: sw.seam.count(), kinds: sw.fake.kinds() });
     });
     await step('revisions: a missing or non-commit base or head is REVISION and stops there; malformed resolution output is a record failure', async () => {
       for (const mode of ['committed', 'local']) {

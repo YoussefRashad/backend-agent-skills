@@ -33,7 +33,13 @@
     {"id":"A30","argv":["grep","c4-head","--"],"command":"grep","accepted":true},
     {"id":"A31","argv":["grep","c4-head","--","--","safe.txt"],"command":"grep","accepted":true},
     {"id":"A32","argv":["cat","c4-head","--","safe.txt","src/a.txt"],"command":"cat","accepted":false},
-    {"id":"A33","argv":["cat","c4-head","--","safe.txt",".env"],"command":"cat","accepted":false}
+    {"id":"A33","argv":["cat","c4-head","--","safe.txt",".env"],"command":"cat","accepted":false},
+    {"id":"A34","argv":["head"],"command":"head","accepted":true},
+    {"id":"A35","argv":["head","HEAD"],"command":"head","accepted":false},
+    {"id":"A36","argv":["head","--"],"command":"head","accepted":false},
+    {"id":"A37","argv":["head","--help"],"command":"head","accepted":false},
+    {"id":"A38","argv":["head","--","safe.txt"],"command":"head","accepted":false},
+    {"id":"A39","argv":["head","--out","result.txt"],"command":"head","accepted":false}
   ],
   "names": [
     {"id":"N01","path":"safe.txt","content":"needle\n"},

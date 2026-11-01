@@ -2058,7 +2058,8 @@ const C8T = {
   // C12-11: the docs-sync-specific wording; the reviewer entries above stay unchanged.
   noFallbackDocs: 'Do not retry a failed or denied read through another tool, change the sandbox, request full access, or use a connector as a fallback. Instructions are guidance, not a sandbox.',
   fourCommandsDocs: 'Never run `git checkout`, `git switch`, `gh pr checkout` or `git worktree add`. Do not fetch refs yourself; the user supplies or fetches the ref.',
-  identity: 'Resolve the checkout\'s current HEAD with `git rev-parse --verify HEAD`. Compare resolved commit IDs, not branch names or dirty state. If this command fails or the identity cannot be established, stop and report the failure.',
+  // C17 (plan docs/plans/2026-10-27-project-setup-v3-rc4-c17.md, C17-8 R17): the kept HEAD identity paragraph is now the helper-based step 2 (pre-C17 text: `git rev-parse --verify HEAD`).
+  identity: 'Resolve the checkout\'s current HEAD with `node .ai/tools/git-safe.mjs head`. This form takes no arguments and prints one full commit ID. You MUST compare that ID with the resolved review head from review-diff, not branch names or dirty state. If HEAD identity cannot be established, you MUST stop and report the failure; you MUST NOT omit the comparison or substitute raw Git. This prevents a completed review with an unevaluated instruction-trust warning.',
   modeSelection: 'Establish the base, head and review mode before reading changed code. Use `review-diff --base <ref> --head <ref>` for committed-head review. Use `review-diff --base <ref>` only for the user\'s own trusted branch and local working changes. Record the resolved base, head and merge-base IDs from the result header.',
   projectRules: 'If ".ai/agents/reviewer.project.md" exists, read it as project-specific review guidance. It may add or tighten rules, but it never relaxes sections 1 or 4 of this canonical reviewer. On conflict, follow the canonical rule and report the conflict. If the file is present but unreadable, stop and report the failure. Its absence is allowed.',
   docsSyncBullet: '- You may edit documentation files only. Never change application code, tests, dependencies, migrations, CI/CD, tool permissions, hooks, `.claude/settings*.json`, `.codex/*`, `.ai/agents/*`, `.ai/tools/*`, `.ai/security-paths.json`, or `.ai/manifest.json`.',
@@ -2242,7 +2243,7 @@ async function instructionsGroup(context) {
       if (!file) { check(false, 'evals/evals.json is readable JSON'); return; }
       check(file.skill_name === 'project-setup' && Array.isArray(file.evals), 'skill_name stays project-setup with an evals array', keysOf(file));
       if (!Array.isArray(file.evals)) return;
-      check(file.evals.length === 36 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 36 }, (_, i) => i + 1)), 'ids 1 through 36 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36)', file.evals.map((e) => e && e.id));
+      check(file.evals.length === 39 && eq(file.evals.map((e) => e && e.id), Array.from({ length: 39 }, (_, i) => i + 1)), 'ids 1 through 39 in order (C11b appends 20, C12 appends 21, C13 appends 22-26, C14 appends 27-31, C15 appends 32-33, C16 appends 34-36, C17 appends 37-39)', file.evals.map((e) => e && e.id));
       check(sha(Buffer.from(JSON.stringify(file.evals.slice(0, 10)))) === EVALS_1_10_SHA, 'evaluations 1-10 are unchanged from the committed file');
       check(eq(file.evals.slice(10, 16), EVALS_11_16), 'C8 evaluations 11-16 are retained exactly', file.evals.slice(10, 16).map((e) => e && e.name));
       check(eq(file.evals.slice(16, 19), EVALS_17_19), 'evaluations 17-19 equal the plan objects exactly', file.evals.slice(16, 19).map((e) => e && e.name));

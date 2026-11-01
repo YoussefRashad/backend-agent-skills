@@ -23,6 +23,7 @@ import { C13_IMPLEMENTATIONS } from './c13.test.mjs';
 import { C14_IMPLEMENTATIONS } from './c14.test.mjs';
 import { C15_IMPLEMENTATIONS } from './c15.test.mjs';
 import { C16_IMPLEMENTATIONS } from './c16.test.mjs';
+import { C17_IMPLEMENTATIONS } from './c17.test.mjs';
 import { RC1_CASE_DESCRIPTORS, CASE_REQUIREMENTS, composeCaseOutcome } from './helpers/rc1-integration.mjs';
 
 const deepFreeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) deepFreeze(x); Object.freeze(v); } return v; };
@@ -306,6 +307,17 @@ export const COMPONENT_ASSERTIONS = deepFreeze({
     { id: 'RC1/C16/release', name: 'rc.3 release text preserves prior candidates and payload membership' },
     { id: 'V2/C16/contracts', name: 'C16 registration evaluations and historical preservation are exact' },
   ],
+  // C17 plan (docs/plans/2026-10-27-project-setup-v3-rc4-c17.md) section C17-14, in its exact order. These are sub-assertions: no complete numbered case is composed from them and the 40-case table is unchanged.
+  C17: [
+    { id: 'R76/C17/head', name: 'checkout HEAD identity is strict bounded and read only' },
+    { id: 'R76/C17/ownership', name: 'ownership diagnostics preserve configuration isolation and stop semantics' },
+    { id: 'R90/C17/instructions', name: 'reviewer HEAD routing preserves conditional warnings and failure stops' },
+    { id: 'A5-templates/C17/host-docs', name: 'living host notes distinguish measured defects from pending rc.4 results' },
+    { id: 'V2/C17/update', name: 'rc.1 rc.2 and rc.3 updates deliver the compatible unit with recovery' },
+    { id: 'RC1/C17/release', name: 'rc.4 bookkeeping preserves historical candidates and payload membership' },
+    { id: 'V2/C17/preservation', name: 'exact amendments preserve C16 and earlier historical boundaries' },
+    { id: 'V2/C17/contracts', name: 'C17 registration evaluations and import safety are exact' },
+  ],
 });
 // The tests-lane descriptors themselves (same objects, same run functions), in a frozen list of our own.
 export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
@@ -326,6 +338,7 @@ export const COMPONENT_IMPLEMENTATIONS = Object.freeze({
   C14: Object.freeze([...C14_IMPLEMENTATIONS]),
   C15: Object.freeze([...C15_IMPLEMENTATIONS]),
   C16: Object.freeze([...C16_IMPLEMENTATIONS]),
+  C17: Object.freeze([...C17_IMPLEMENTATIONS]),
 });
 
 // ------------------------------------------------------------ selection ----
