@@ -172,3 +172,32 @@ gaps. Two need a recorded reading; the other six are within the plan's wording.
 |---|---|---|---|
 | I17-1 | C17-F7 names root README lines 47, 57 and 93 as the only current-candidate tokens. Line 57 is blank; the notes reference is line 58, and line 242 (the tree line) also names the current candidate | Lines 47, 58, 93 and 242 move to rc.4; nothing else in the root README changes besides 89-90 | F7's intent is "only the current-candidate tokens". C16 (5d54c6e) moved the same four tokens; the line numbers in F7 were taken before C16's three inserted lines were counted. Leaving 242 at rc.3 would make the README contradict itself |
 | I17-2 | C17 launches about 242 counted child processes against the Q5 figure of 180 (33-39 s, under the 90 s budget) | Accepted; recorded in the acceptance record | Q5: overruns are recorded, coverage is not dropped |
+
+## Acceptance headroom disposition (maintainer, 2026-11-01)
+
+| ID | Question | Decision |
+|---|---|---|
+| I17-3 | The first full accept-rc1 run took 1746 s against the 1,800,000 ms timeout, above the 1,500-second revisit threshold | The maintainer chose to record it and continue: rc.4 keeps the timeout and coverage unchanged, accept-rc1 is rerun once in isolation after review to see whether the time was host load, and raising the timeout or splitting the suite is separate work after rc.4 |
+
+## Review round 1 dispositions (orchestrator, 2026-11-01)
+
+The Codex review lane (read-only, thread 01a1985d-177e-7273-b610-37002e0ab751) returned two
+BLOCKING and two NON-BLOCKING findings, and one uncovered C17-20 row.
+
+| ID | Finding | Decision |
+|---|---|---|
+| I17-4 | C17-RV1 (BLOCKING): c13, c14 and c16 historical core checks substitute the whole pre-C17 core fixture for the current file, which C17-5 forbids; C17-12 and the C17-20 "Historical C16 pins" row require exact C17 reversal | Adopted. The core's C17 hunks were not frozen before implementation, so the tests lane now pins them as exact amendments (old block, new block, anchor) taken from the implemented bytes, reverses them from the current core to the pre-C17 core (SHA-256 ad1c51db...), and runs the unchanged historical comparisons on that view. Controls: an unrelated current-core edit and a modified C17 hunk both fail. Precedent: I12-1 moved pins to implemented bytes after implementation |
+| I17-5 | C17-RV2 (BLOCKING): the acceptance record uses whole-second wall-clock times and no retained stream hashes; C17-18 asks for externally measured monotonic milliseconds and hashes of retained streams | Adopted. The orchestrator reruns the C17-17 gates through a wrapper that measures each command with a monotonic millisecond clock, retains stdout and stderr per command, and records their SHA-256; this rerun is also the isolated accept-rc1 rerun of I17-3 |
+| I17-6 | C17-RV3 (NON-BLOCKING): the whitespace-collapsed F9 comparison also tolerates a changed quoted prefix (a doubled space) | Adopted. Tolerance stays for the wrapped F9 prose only; the quoted "fatal: detected dubious ownership in repository at " prefix and the paragraph boundaries compare exactly, with a doubled-space negative control |
+| I17-7 | C17-RV4 (NON-BLOCKING): no clean rollback with full restoration is asserted for the authentic rc.1 baseline | Adopted. Add a clean rc.1 rollback with baseline and manifest restoration, keeping the later-edit conflict case |
+| I17-8 | Uncovered C17-20 row "HEAD moving between separate calls" | Adopted as a text check: the reviewer and security text make no atomic or snapshot claim across separate helper calls, and the existing trusted-checkout assumption stands |
+
+## Review round 2 dispositions (orchestrator, 2026-11-02)
+
+Review pass 2 (same thread, effort high, a maintainer choice for speed on this normal-class task)
+closed C17-RV1, C17-RV3 and C17-RV4 and the I17-8 row, and returned one BLOCKING finding that
+keeps C17-RV2 open.
+
+| ID | Finding | Decision |
+|---|---|---|
+| I17-9 | C17-RV5 (BLOCKING): the acceptance record gives stdout and stderr hashes and a `gates.json` hash but not where the retained streams and `gates.json` are, so C17-18's "Evidence paths and hashes for results and retained streams" is not met | Adopted without a rerun: the record now names the evidence directory and the per-command file mapping. The orchestrator recomputed all 42 stream hashes from the retained files against `gates.json` (no mismatch) |
