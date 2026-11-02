@@ -51,7 +51,7 @@ Read diffs, history and committed files only through `node .ai/tools/git-safe.mj
 installation: `node <SKILL_DIR>/assets/tools/git-safe.mjs`, which needs `.ai/security-paths.json`). The installed
 reader belongs to one reviewed unit of seven files: `security-policy.mjs`, `git-safe-core.mjs`,
 `guard-raw-git-core.mjs`, `review-diff.mjs`, `git-safe.mjs`, `guard-raw-git.mjs` and `hooks-selftest.mjs`. The
-reader accepts exactly these six object forms and the review form:
+reader accepts these six object forms, the checkout-identity form and the review form:
 
 ```text
 diff <A>..<B>|<A>...<B> [--stat|--name-status|--name-only] [-- <paths>]
@@ -60,8 +60,18 @@ show <commit> [--stat|--name-status] [-- <paths>]
 cat <commit> -- <path>
 ls <commit> [-- <paths>]
 grep <commit> <pattern> [-- <paths>]
+head
 review-diff --base <ref> [--head <ref>] [--out <file>] [-- <paths>...]
 ```
+
+head takes no arguments and prints the checkout's resolved HEAD commit ID plus one LF.
+It accepts attached or detached HEAD and stops on an unborn or unresolvable HEAD.
+It uses the same repository and installed-policy checks as the content commands, but
+performs no tree inventory or file-content read.
+
+Reviewers MUST obtain checkout HEAD through node .ai/tools/git-safe.mjs head and compare
+full resolved IDs. If identity cannot be established, they MUST stop without omitting
+the comparison or using raw Git. This prevents silent omission of the equal-head warning.
 
 - Every other option or form is refused: worktree and index diffs (`diff <rev>`, `--cached`; the local working
   state is reviewed only through `review-diff` below), formatting and
@@ -118,6 +128,21 @@ The reader supports policy schemas 1 and 2 and refuses unknown schemas.
 Git 2.31 or later is required. The reader preserves the user's global and system configuration
 sources, including safe.directory, while removing environment-injected keys and overriding
 the execution and output settings used by these commands.
+
+During repository-root discovery, an English Git diagnostic beginning exactly with
+"fatal: detected dubious ownership in repository at " produces GIT_SAFE_OWNERSHIP when
+Git exits 128 with empty stdout. The helper retains only the classification, never the
+path or diagnostic text, and emits no repository content.
+
+Localized diagnostics, preceding warnings and other root failures keep the existing
+GIT_SAFE_REPOSITORY result. Older Git releases word this refusal differently or do not
+perform the check; their failures also keep GIT_SAFE_REPOSITORY. Neither result permits
+fallback access or an automatic configuration change. See references/codex.md for the
+effective global or system safe.directory prerequisite and the exact-path command.
+
+GIT_SAFE_OWNERSHIP is not an argument or pattern rejection. Agents MUST stop on it to
+preserve the trust boundary; the bounded correction whitelist remains exactly
+GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN.
 
 ### Review diffs (`review-diff`)
 

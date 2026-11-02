@@ -1,7 +1,7 @@
-# project-setup 3.0.0-rc.3 - skill source
+# project-setup 3.0.0-rc.4 - skill source
 
-**Release candidate 3.0.0-rc.3.** See RELEASE-NOTES-3.0.0-rc.3.md for compatibility,
-acceptance requirements and the remaining R83-e and A3/L10 host measurements.
+**Release candidate 3.0.0-rc.4.** See RELEASE-NOTES-3.0.0-rc.4.md for compatibility,
+acceptance requirements and the remaining reviewer HEAD and Git ownership host measurements.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -72,6 +72,70 @@ frozen blocked list can still print history or file content, including `annotate
 `diff-index`, `diff-files`, `difftool`, `fast-export`, `bundle` and `notes`. Patch-producing
 options other than `-p` and `--patch`, including `-U<n>`, `--unified` and `--patch-with-stat`,
 are also gaps. The blocked list remains unchanged; it is a guardrail, not an allowlist.
+
+## Git ownership in the Codex Windows sandbox
+
+The elevated Windows sandbox can run Git as a separate Windows user. git-safe removes
+environment-injected Git configuration, including Codex's injected safe.directory entry.
+A checkout that Git considers differently owned therefore needs an effective global or
+system safe.directory grant.
+
+For a checkout you trust, the user can add its exact absolute path:
+
+```powershell
+git config --global --add safe.directory 'C:/path/to/trusted-checkout'
+```
+
+Replace the example with the trusted checkout's path. When GIT_CONFIG_GLOBAL is set,
+--global writes that selected file; otherwise it writes the invoking user's global config.
+GIT_CONFIG_GLOBAL requires Git 2.32 or later. Use the path exactly as git rev-parse
+--show-toplevel prints it when you run it yourself, with forward slashes.
+The grant must be in configuration used by the sandbox's Git process. An administrator
+can instead supply a system entry.
+
+You SHOULD grant only the exact trusted checkout, because safe.directory = * disables
+the ownership check for every repository. Adding an exact entry beside an existing *
+does not narrow the wildcard grant.
+
+Setup and review agents MUST NOT write global or system Git configuration or preserve
+injected configuration to bypass this refusal. They MUST stop and report
+GIT_SAFE_OWNERSHIP so a failed trust check cannot become an automatic access grant.
+After the user resolves the prerequisite, start a new review attempt.
+
+An unrecognized ownership diagnostic can still appear as GIT_SAFE_REPOSITORY. That code
+does not prove that the directory lacks a Git repository. See references/security.md
+for the diagnostic's deliberately narrow recognition rule.
+
+## rc.3 host observations dated 2026-10-26/27
+
+These measurements used published rc.3 on Windows 11 Pro 10.0.26100, Node v24.14.1 and
+codex-cli 0.163.0 with the elevated Windows sandbox. Claude Code was 2.1.310 for headless
+runs and 2.1.311 for TUI runs. The version change is a separate measurement scope.
+
+R83-e closed as PASS by instruction. Root host settings still did not load for a
+subdirectory start; the refusal is model compliance, not host enforcement. Both Codex
+L10 reviews completed. Change-1 reported the lost update, and the equal-head warning
+was present for change-1 and absent for change-2.
+
+Two of five Claude reviewer runs routed the raw HEAD command through git-safe, which
+did not support it. L08 change-2 headless and TUI P3 h returned GIT_SAFE_COMMAND, skipped
+the HEAD comparison and ended partial. The raw-Git hook permitted the original command;
+the failure was ambiguous routing, not a hook denial.
+
+The first Codex review failed root discovery with GIT_SAFE_REPOSITORY. The sandbox used
+a separate Windows user, and git-safe stripped the injected safe.directory configuration.
+An exact fixture entry in the isolated global config allowed both later reviews.
+A global safe.directory = * is broader than the checkout-specific grant.
+
+C17 adds git-safe head and an actionable ownership diagnostic. These are intended fixes,
+not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.
+
+Headless P3 h also produced a false launch refusal until the parent supplied its original
+root-start context. This did not reproduce in the TUI, where the brief supplied that
+context. L16 and its residuals remain unchanged.
+
+Source: docs/plans/2026-10-26-project-setup-v3-rc3-host-measurements.md (PR #6).
+Static tests do not establish these host observations.
 
 ## Trusted-checkout reviews
 
@@ -168,7 +232,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.0.0-rc.3 in the distribution repository.
+requires or creates project-setup-v3.0.0-rc.4 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -177,5 +241,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.0.0-rc.3 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.0.0-rc.4 --out <unused-directory>
 ```

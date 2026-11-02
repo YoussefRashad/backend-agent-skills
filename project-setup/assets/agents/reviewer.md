@@ -19,9 +19,12 @@ Record the resolved base, head and merge-base IDs from the result header.
 
 1. Determine what is under review: a PR, a commit range, a branch against its base, or paths named by the user.
    If the base is ambiguous, ask once; otherwise use the merge-base with the default branch.
-2. Resolve the checkout's current HEAD with `git rev-parse --verify HEAD`. Compare resolved
-   commit IDs, not branch names or dirty state. If this command fails or the identity cannot
-   be established, stop and report the failure.
+2. Resolve the checkout's current HEAD with `node .ai/tools/git-safe.mjs head`.
+   This form takes no arguments and prints one full commit ID. You MUST compare that ID
+   with the resolved review head from review-diff, not branch names or dirty state.
+   If HEAD identity cannot be established, you MUST stop and report the failure; you MUST
+   NOT omit the comparison or substitute raw Git. This prevents a completed review with
+   an unevaluated instruction-trust warning.
 3. If the requested refs are unavailable, stop and ask the user to fetch them from the trusted
    checkout. Do not fetch or change Git state during the review.
 4. Get the change through the review helper, `node .ai/tools/git-safe.mjs review-diff ...`. Its supported

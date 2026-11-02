@@ -24,7 +24,7 @@ import { matchesPolicyPath, parseSecurityPolicy, validateRepoPath } from './secu
 export const MAX_OUTPUT_BYTES = 1048576;
 export const MAX_GIT_ARG_UNITS = 24000;
 const MAX_COUNT = 2147483647;
-const COMMANDS = ['diff', 'log', 'show', 'cat', 'ls', 'grep'];
+const COMMANDS = ['diff', 'log', 'show', 'cat', 'ls', 'grep', 'head'];
 
 // Plan 3.2 and 3.9: exact strings.
 export const SUPPORTED_FORMS = Object.freeze({
@@ -34,6 +34,7 @@ export const SUPPORTED_FORMS = Object.freeze({
   cat: 'cat <commit> -- <path>',
   ls: 'ls <commit> [-- <paths>]',
   grep: 'grep <commit> <pattern> [-- <paths>]',
+  head: 'head',
 });
 export const NARROWING_GUIDANCE = Object.freeze({
   diff: 'Narrow with -- <paths> or a smaller commit range.',
@@ -49,9 +50,10 @@ export const NARROWING_GUIDANCE = Object.freeze({
 // exception or Git output is ever interpolated.
 const DETAIL = {
   GIT_SAFE_INPUT: 'invalid Git helper input',
-  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, review-diff', // C5 plan 2.7 adds review-diff
+  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, head, review-diff', // C5 plan 2.7 adds review-diff
   GIT_SAFE_VERSION: 'Git 2.31 or later is required',
   GIT_SAFE_REPOSITORY: 'not inside a Git repository',
+  GIT_SAFE_OWNERSHIP: "Git refused dubious repository ownership; ask the user to add only the trusted checkout's absolute path to the effective global or system safe.directory. Example: git config --global --add safe.directory \"<trusted-checkout-path>\". No result was emitted.",
   GIT_SAFE_POLICY_IO: 'cannot read .ai/security-paths.json; refusing to run without a valid policy',
   GIT_SAFE_SECRET: 'requested path is protected by the security policy',
   GIT_SAFE_REVISION: 'revision does not resolve to a commit',
@@ -151,7 +153,7 @@ function isSingle(s) {
 }
 // A range splits at the first `..`; a following `.` makes it `...`. Both endpoints must be single revisions, so
 // `a....b`, `A..`, `..B` and `A..B..C` fail. kind: range (diff), any (log), single (show, cat, ls, grep).
-const KIND = { diff: 'range', log: 'any', show: 'single', cat: 'single', ls: 'single', grep: 'single' };
+const KIND = { diff: 'range', log: 'any', show: 'single', cat: 'single', ls: 'single', grep: 'single', head: 'single' };
 function revisionShape(s, kind) {
   if (typeof s !== 'string') return null;
   const i = s.indexOf('..');
@@ -162,8 +164,8 @@ function revisionShape(s, kind) {
   return kind !== 'single' && isSingle(left) && isSingle(right) ? { endpoints: [left, right], op } : null;
 }
 
-const DEFAULT_FORMAT = { diff: 'patch', log: 'medium', show: 'patch', cat: null, ls: 'name-only', grep: null };
-const FORMATS = { diff: ['patch', 'stat', 'name-status', 'name-only'], log: ['medium', 'oneline'], show: ['patch', 'stat', 'name-status'], cat: [null], ls: ['name-only'], grep: [null] };
+const DEFAULT_FORMAT = { diff: 'patch', log: 'medium', show: 'patch', cat: null, ls: 'name-only', grep: null, head: null };
+const FORMATS = { diff: ['patch', 'stat', 'name-status', 'name-only'], log: ['medium', 'oneline'], show: ['patch', 'stat', 'name-status'], cat: [null], ls: ['name-only'], grep: [null], head: [null] };
 const SUMMARY = { diff: { '--stat': 'stat', '--name-status': 'name-status', '--name-only': 'name-only' }, show: { '--stat': 'stat', '--name-status': 'name-status' } };
 const countOf = (v) => (/^(?:0|[1-9][0-9]{0,9})$/.test(v) && Number(v) <= MAX_COUNT ? Number(v) : null);
 // Selectors pass C1 path validation unchanged and are deduplicated in first-occurrence order.
@@ -184,6 +186,11 @@ export function parseGitSafeArgs(argv) {
   if (!COMMANDS.includes(sub)) throw gsError('GIT_SAFE_COMMAND');
   const bad = () => argError(sub);
   const rest = argv.slice(1);
+  // C17-6: the checkout-identity form takes no argument at all; it is not a revision resolver.
+  if (sub === 'head') {
+    if (rest.length !== 0) throw bad();
+    return { subcommand: 'head', revisions: ['HEAD'], paths: [], format: null, patch: false, maxCount: null, pattern: null };
+  }
   const out = { subcommand: sub, revisions: null, paths: [], format: DEFAULT_FORMAT[sub], patch: sub === 'diff' || sub === 'show', maxCount: null, pattern: null };
   const positional = [];
   if (KIND[sub] === 'single' && sub !== 'show') {
@@ -224,6 +231,11 @@ const REQUEST_KEYS = ['subcommand', 'revisions', 'paths', 'format', 'patch', 'ma
 function validRequest(r) {
   if (!isPlain(r) || Object.keys(r).sort().join('\u0000') !== REQUEST_KEYS) return false;
   const { subcommand: sub, revisions, paths, format, patch, maxCount, pattern } = r;
+  // C17-6: head accepts exactly the one parsed combination and never another revision.
+  if (sub === 'head') {
+    return denseStrings(revisions) && revisions.length === 1 && revisions[0] === 'HEAD' && denseStrings(paths) && paths.length === 0
+      && format === null && patch === false && maxCount === null && pattern === null;
+  }
   if (!COMMANDS.includes(sub) || !denseStrings(revisions) || revisions.length !== 1 || revisionShape(revisions[0], KIND[sub]) === null) return false;
   if (!denseStrings(paths) || new Set(paths).size !== paths.length || !paths.every(validPath) || (sub === 'cat' && paths.length !== 1)) return false;
   if (!FORMATS[sub].includes(format) || typeof patch !== 'boolean') return false;
@@ -245,13 +257,15 @@ function prefixFor(nullDevice) {
 /**
  * Plan 2.5 and 3.8: the production executor. Always `git`, no shell, hidden window, stdin closed. Output is buffered,
  * never streamed; a bounded call that sees byte limit+1 stops the child and reports overflow without the bytes. Git
- * stderr is drained and dropped.
+ * stderr is drained and dropped, except for one classification (C17-7): whether it began exactly with the English
+ * dubious-ownership refusal. Only the match position and a match/mismatch state are kept, never the bytes or the path.
  */
+const OWNERSHIP_PREFIX = Buffer.from('fatal: detected dubious ownership in repository at ', 'ascii');
 function executeGit({ argv, cwd, env, limit }) {
   return new Promise((resolve) => {
     let settled = false;
     const done = (r) => { if (!settled) { settled = true; resolve(r); } };
-    const failed = (e) => done({ status: null, signal: null, error: String((e && e.code) || 'ESPAWN'), stdout: Buffer.alloc(0), overflow: false });
+    const failed = (e) => done({ status: null, signal: null, error: String((e && e.code) || 'ESPAWN'), stdout: Buffer.alloc(0), overflow: false, dubiousOwnership: false });
     let child;
     try { child = spawn('git', argv, { cwd, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { failed(e); return; }
     const chunks = [];
@@ -263,21 +277,42 @@ function executeGit({ argv, cwd, env, limit }) {
       if (limit !== null && size > limit) { overflow = true; chunks.length = 0; child.kill(); return; }
       chunks.push(c);
     });
-    child.stderr.on('data', () => {});
+    // Incremental prefix comparison: verdict 0 = still matching at byte seen, 1 = complete match, 2 = mismatch (stop inspecting).
+    let seen = 0;
+    let verdict = 0;
+    child.stderr.on('data', (c) => {
+      if (verdict !== 0) return;
+      for (let i = 0; i < c.length; i++) {
+        if (c[i] !== OWNERSHIP_PREFIX[seen]) { verdict = 2; return; }
+        seen += 1;
+        if (seen === OWNERSHIP_PREFIX.length) { verdict = 1; return; }
+      }
+    });
     child.on('error', failed);
     child.on('close', (code, signal) => {
-      if (overflow) done({ status: null, signal: null, error: null, stdout: Buffer.alloc(0), overflow: true });
-      else if (signal) done({ status: null, signal: String(signal), error: null, stdout: Buffer.alloc(0), overflow: false });
-      else done({ status: code, signal: null, error: null, stdout: Buffer.concat(chunks), overflow: false });
+      if (overflow) done({ status: null, signal: null, error: null, stdout: Buffer.alloc(0), overflow: true, dubiousOwnership: false });
+      else if (signal) done({ status: null, signal: String(signal), error: null, stdout: Buffer.alloc(0), overflow: false, dubiousOwnership: false });
+      else {
+        const stdout = Buffer.concat(chunks);
+        done({ status: code, signal: null, error: null, stdout, overflow: false, dubiousOwnership: verdict === 1 && code === 128 && stdout.length === 0 });
+      }
     });
   });
 }
 
 const RESULT_KEYS = 'error\u0000overflow\u0000signal\u0000status\u0000stdout';
-// Plan 2.5 executor seam: exact keys, types and combinations; overflow only for a bounded call.
+const RESULT_KEYS_FLAG = 'dubiousOwnership\u0000error\u0000overflow\u0000signal\u0000status\u0000stdout';
+// Plan 2.5 executor seam: exact keys, types and combinations; overflow only for a bounded call. C17-7: an optional sixth
+// own boolean, dubiousOwnership; true is valid only for status 128 with empty stdout and no signal, error or overflow.
 function validResult(r, limit) {
-  if (!isPlain(r) || Object.keys(r).sort().join('\u0000') !== RESULT_KEYS) return false;
+  if (!isPlain(r)) return false;
+  const keys = Object.keys(r).sort().join('\u0000');
+  if (keys !== RESULT_KEYS && keys !== RESULT_KEYS_FLAG) return false;
   const { status, signal, error, stdout, overflow } = r;
+  if (keys === RESULT_KEYS_FLAG) {
+    if (typeof r.dubiousOwnership !== 'boolean') return false;
+    if (r.dubiousOwnership && !(status === 128 && Buffer.isBuffer(stdout) && stdout.length === 0 && signal === null && error === null && overflow === false)) return false;
+  }
   if (!(status === null || (Number.isInteger(status) && status >= 0 && status <= 255))) return false;
   if (!(signal === null || (typeof signal === 'string' && signal !== '')) || !(error === null || (typeof error === 'string' && error !== ''))) return false;
   if (!Buffer.isBuffer(stdout) || typeof overflow !== 'boolean' || (signal !== null && error !== null)) return false;
@@ -290,7 +325,8 @@ const LENGTH_ERROR = /^(?:E2BIG|ENAMETOOLONG)\b/;
 /**
  * One executor call (C4-P3-1): the argument bound before any process; a rejection, throw, invalid result, signal or
  * spawn error is GIT_SAFE_GIT, E2BIG/ENAMETOOLONG GIT_SAFE_ARG_LIMIT, overflow or an oversized Buffer GIT_SAFE_LIMIT.
- * Returns { status, stdout }; what a nonzero status means is the caller's stage-specific decision.
+ * Returns { status, stdout, dubiousOwnership }; what a nonzero status means is the caller's stage-specific decision.
+ * The flag is classification only and only root discovery reads it.
  */
 async function call(state, argv, cwd, limit) {
   const full = [...state.prefix, ...argv];
@@ -301,7 +337,7 @@ async function call(state, argv, cwd, limit) {
   if (r.overflow || (limit !== null && r.stdout.length > limit)) throw limitError(null);
   if (r.error !== null) throw gsError(LENGTH_ERROR.test(r.error) ? 'GIT_SAFE_ARG_LIMIT' : 'GIT_SAFE_GIT');
   if (r.signal !== null) throw gsError('GIT_SAFE_GIT');
-  return { status: r.status, stdout: r.stdout };
+  return { status: r.status, stdout: r.stdout, dubiousOwnership: r.dubiousOwnership === true };
 }
 
 // ---------------------------------------------------------------- records ----
@@ -376,7 +412,7 @@ export async function createGitSession(options = {}) {
   const m = VERSION.exec(utf8(v.stdout) || '');
   if (!m || !(Number(m[1]) > 2 || (Number(m[1]) === 2 && Number(m[2]) >= 31))) throw gsError('GIT_SAFE_VERSION');
   const t = await call(state, ['rev-parse', '--show-toplevel'], o.start, null);
-  if (t.status !== 0) throw gsError('GIT_SAFE_REPOSITORY');
+  if (t.status !== 0) throw gsError(t.status === 128 && t.stdout.length === 0 && t.dubiousOwnership ? 'GIT_SAFE_OWNERSHIP' : 'GIT_SAFE_REPOSITORY');
   const raw = utf8(t.stdout);
   const top = raw === null ? null : raw.endsWith('\r\n') ? raw.slice(0, -2) : raw.endsWith('\n') ? raw.slice(0, -1) : null;
   if (!top || /[\r\n]/.test(top) || !path.isAbsolute(top)) throw gsError('GIT_SAFE_REPOSITORY');
@@ -426,6 +462,8 @@ export async function executeGitSafe(request, session) {
   const state = SESSIONS.get(session);
   if (!state) throw inputError();
   const { subcommand: sub, revisions, paths, format, patch, maxCount, pattern } = request;
+  // C17-6: the checkout identity is one commit resolution; no inventory, content read or write follows.
+  if (sub === 'head') return Buffer.from(`${await resolveIn(state, 'HEAD')}\n`, 'ascii');
   const isProtected = (p) => matchesPolicyPath(p, state.policy);
   if (sub === 'cat' && isProtected(paths[0])) throw gsError('GIT_SAFE_SECRET');
 
@@ -508,7 +546,7 @@ export async function executeGitSafe(request, session) {
 /**
  * Plan 2.5 and 3.9: arguments before any session; streams and the exit code are the caller's (git-safe.mjs).
  * C5 plan 2.7: after the container check, review-diff is delegated to the lazily imported review helper, which owns
- * its grammar, dependency keys and result. The six object commands never import it, so they keep working without it;
+ * its grammar, dependency keys and result. The six object commands and head never import it, so they keep working without it;
  * a missing or broken helper is GIT_SAFE_INTERNAL for review-diff only.
  */
 export async function main(argv, dependencies = {}) {

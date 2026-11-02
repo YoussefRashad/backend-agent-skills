@@ -32,7 +32,7 @@ export const REVIEW_FORM = 'review-diff --base <ref> [--head <ref>] [--out <file
 // output is ever interpolated.
 const DETAIL = {
   GIT_SAFE_INPUT: 'invalid Git helper input',
-  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, review-diff',
+  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, head, review-diff',
   GIT_SAFE_ARGUMENT: `unsupported arguments; supported: ${REVIEW_FORM}`,
   GIT_SAFE_SECRET: 'requested path is protected by the security policy',
   GIT_SAFE_RECORD: 'invalid Git metadata; no result was emitted',

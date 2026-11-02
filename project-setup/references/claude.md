@@ -246,8 +246,8 @@ CLAUDE.md without one. P2's headless parent import @../AGENTS.md did not load.
 These are strong self-report observations, not proof. Interactive import behavior is
 unverified. The launch rule is present only in the root Claude template.
 
-C16's released subdirectory refusal remains TO VERIFY on rc.3. It is an instruction
-mitigation, weaker than host enforcement. Root-started regressions must also be re-measured.
+The rc.3 measurements closed R83-e as PASS by instruction, weaker than host enforcement.
+The rc.4 reviewer measurements remain pending; see the dated rc.3 observations below.
 The nearest loaded rule at or above the original start directory governs the comparison,
 so a worktree nested under another checkout is judged against its own rule.
 A start above or outside the target root can load that rule only after an initial read.
@@ -255,11 +255,48 @@ That comparison does not refuse such a start even after the target rule loads.
 Missing launch context alone does not establish a subdirectory start or verified controls.
 The hook executes project code and depends on the trusted-checkout boundary.
 
+## rc.3 host observations dated 2026-10-26/27
+
+These measurements used published rc.3 on Windows 11 Pro 10.0.26100, Node v24.14.1 and
+codex-cli 0.163.0 with the elevated Windows sandbox. Claude Code was 2.1.310 for headless
+runs and 2.1.311 for TUI runs. The version change is a separate measurement scope.
+
+R83-e closed as PASS by instruction. Root host settings still did not load for a
+subdirectory start; the refusal is model compliance, not host enforcement. Both Codex
+L10 reviews completed. Change-1 reported the lost update, and the equal-head warning
+was present for change-1 and absent for change-2.
+
+Two of five Claude reviewer runs routed the raw HEAD command through git-safe, which
+did not support it. L08 change-2 headless and TUI P3 h returned GIT_SAFE_COMMAND, skipped
+the HEAD comparison and ended partial. The raw-Git hook permitted the original command;
+the failure was ambiguous routing, not a hook denial.
+
+The first Codex review failed root discovery with GIT_SAFE_REPOSITORY. The sandbox used
+a separate Windows user, and git-safe stripped the injected safe.directory configuration.
+An exact fixture entry in the isolated global config allowed both later reviews.
+A global safe.directory = * is broader than the checkout-specific grant.
+
+C17 adds git-safe head and an actionable ownership diagnostic. These are intended fixes,
+not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.
+
+Headless P3 h also produced a false launch refusal until the parent supplied its original
+root-start context. This did not reproduce in the TUI, where the brief supplied that
+context. L16 and its residuals remain unchanged.
+
+Source: docs/plans/2026-10-26-project-setup-v3-rc3-host-measurements.md (PR #6).
+Static tests do not establish these host observations.
+
 ## Subagent wrappers
 
 `assets/wrappers/claude-*.md`. No `model:` line (inherit the session model; pinning a model is an environment
 choice, not a project rule). The reviewer has no Edit/Write tools. If the canonical file is missing, the wrapper
 stops instead of improvising.
+
+When delegating after changing directory, you SHOULD include the supplied original session
+directory, the repository root and the current directory in the brief. This prevents a
+reviewer from mistaking a later cd for a subdirectory launch. You MUST NOT invent missing
+launch context; the existing rule treats uncertainty as unknown, not proof of a refusal
+condition or active host controls.
 
 ## Retiring v1
 
