@@ -153,9 +153,74 @@ The 2026-10-25 L10 re-probe corrected the original diagnosis: an absent selector
 silently. The failure came from BRE parsing of an unbalanced \(, and a|b could return an
 empty success because BRE treats the vertical bar literally. C16 changes grep to ERE.
 
-Both L10 ranges must be re-measured after rc.3. Configuration checks, static instruction
-tests and model statements do not establish review completeness or host negative capability.
+Both L10 ranges completed in the rc.3 measurements recorded below. The rc.4 regression
+remains pending. Configuration checks, static instruction tests and model statements do
+not establish review completeness or host negative capability.
 The older 0.160.1 observations above remain historical observations of that configuration.
+
+## rc.3 host observations dated 2026-10-26/27
+
+These measurements used published rc.3 on Windows 11 Pro 10.0.26100, Node v24.14.1 and
+codex-cli 0.163.0 with the elevated Windows sandbox. Claude Code was 2.1.310 for headless
+runs and 2.1.311 for TUI runs. The version change is a separate measurement scope.
+
+R83-e closed as PASS by instruction. Root host settings still did not load for a
+subdirectory start; the refusal is model compliance, not host enforcement. Both Codex
+L10 reviews completed. Change-1 reported the lost update, and the equal-head warning
+was present for change-1 and absent for change-2.
+
+Two of five Claude reviewer runs routed the raw HEAD command through git-safe, which
+did not support it. L08 change-2 headless and TUI P3 h returned GIT_SAFE_COMMAND, skipped
+the HEAD comparison and ended partial. The raw-Git hook permitted the original command;
+the failure was ambiguous routing, not a hook denial.
+
+The first Codex review failed root discovery with GIT_SAFE_REPOSITORY. The sandbox used
+a separate Windows user, and git-safe stripped the injected safe.directory configuration.
+An exact fixture entry in the isolated global config allowed both later reviews.
+A global safe.directory = * is broader than the checkout-specific grant.
+
+C17 adds git-safe head and an actionable ownership diagnostic. These are intended fixes,
+not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.
+
+Headless P3 h also produced a false launch refusal until the parent supplied its original
+root-start context. This did not reproduce in the TUI, where the brief supplied that
+context. L16 and its residuals remain unchanged.
+
+Source: docs/plans/2026-10-26-project-setup-v3-rc3-host-measurements.md (PR #6).
+Static tests do not establish these host observations.
+
+## Git ownership in the Codex Windows sandbox
+
+The elevated Windows sandbox can run Git as a separate Windows user. git-safe removes
+environment-injected Git configuration, including Codex's injected safe.directory entry.
+A checkout that Git considers differently owned therefore needs an effective global or
+system safe.directory grant.
+
+For a checkout you trust, the user can add its exact absolute path:
+
+```powershell
+git config --global --add safe.directory 'C:/path/to/trusted-checkout'
+```
+
+Replace the example with the trusted checkout's path. When GIT_CONFIG_GLOBAL is set,
+--global writes that selected file; otherwise it writes the invoking user's global config.
+GIT_CONFIG_GLOBAL requires Git 2.32 or later. Use the path exactly as git rev-parse
+--show-toplevel prints it when you run it yourself, with forward slashes.
+The grant must be in configuration used by the sandbox's Git process. An administrator
+can instead supply a system entry.
+
+You SHOULD grant only the exact trusted checkout, because safe.directory = * disables
+the ownership check for every repository. Adding an exact entry beside an existing *
+does not narrow the wildcard grant.
+
+Setup and review agents MUST NOT write global or system Git configuration or preserve
+injected configuration to bypass this refusal. They MUST stop and report
+GIT_SAFE_OWNERSHIP so a failed trust check cannot become an automatic access grant.
+After the user resolves the prerequisite, start a new review attempt.
+
+An unrecognized ownership diagnostic can still appear as GIT_SAFE_REPOSITORY. That code
+does not prove that the directory lacks a Git repository. See references/security.md
+for the diagnostic's deliberately narrow recognition rule.
 
 ## Load verification (Codex session)
 

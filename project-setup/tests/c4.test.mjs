@@ -214,7 +214,11 @@ const SUPPORTED_FORMS = {
   cat: 'cat <commit> -- <path>',
   ls: 'ls <commit> [-- <paths>]',
   grep: 'grep <commit> <pattern> [-- <paths>]',
+  // C17-6: the argument-free checkout-identity form (the additional identity form, not a content command).
+  head: 'head',
 };
+// C17-6: the six content commands (COMMANDS) keep every content-only matrix; head is the additional identity form.
+const ALL_FORMS = [...COMMANDS, 'head'];
 // C16-8: the two amended argument diagnostics, verbatim from the plan (every other command keeps "supported: <form>").
 const ARGUMENT_GUIDED = {
   cat: 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: cat <commit> -- <path>; one path per call',
@@ -247,12 +251,14 @@ const argvUnits = (argv) => argv.reduce((sum, a) => sum + 2 * a.length + 3, 0);
 const E = {
   INPUT: 'GIT_SAFE_INPUT: invalid Git helper input',
   // C5 plan 2.7 changes this one detail of the frozen C4 contract: the diagnostic now also names review-diff. It is the only C4 message that changes.
-  COMMAND: 'GIT_SAFE_COMMAND: supported commands: diff, log, show, cat, ls, grep, review-diff',
+  COMMAND: 'GIT_SAFE_COMMAND: supported commands: diff, log, show, cat, ls, grep, head, review-diff',
   // C16-8 (plan docs/plans/2026-10-25-project-setup-v3-rc3-c16.md): only cat and grep carry guidance after the supported form; the exact strings are written out, never derived.
   ARGUMENT: (cmd) => (hasOwn(ARGUMENT_GUIDED, cmd) ? ARGUMENT_GUIDED[cmd] : `GIT_SAFE_ARGUMENT: unsupported arguments; supported: ${SUPPORTED_FORMS[cmd]}`),
   PATTERN: 'GIT_SAFE_PATTERN: grep pattern is not a valid extended regular expression (ERE); no result was emitted',
   VERSION: 'GIT_SAFE_VERSION: Git 2.31 or later is required',
   REPOSITORY: 'GIT_SAFE_REPOSITORY: not inside a Git repository',
+  // C17-7: the recognized dubious-ownership refusal at the root-discovery stage (the exact fixed text of the plan).
+  OWNERSHIP: "GIT_SAFE_OWNERSHIP: Git refused dubious repository ownership; ask the user to add only the trusted checkout's absolute path to the effective global or system safe.directory. Example: git config --global --add safe.directory \"<trusted-checkout-path>\". No result was emitted.",
   POLICY_IO: 'GIT_SAFE_POLICY_IO: cannot read .ai/security-paths.json; refusing to run without a valid policy',
   SECRET: 'GIT_SAFE_SECRET: requested path is protected by the security policy',
   REVISION: 'GIT_SAFE_REVISION: revision does not resolve to a commit',
@@ -343,6 +349,8 @@ const ARG_ROWS = [
   ['A30', ['grep', 'c4-head', '--'], true], ['A31', ['grep', 'c4-head', '--', '--', 'safe.txt'], true],
   // C16-15: cat takes exactly one path per call; the second path is a safe path or a path string only (agents never open it).
   ['A32', ['cat', 'c4-head', '--', 'safe.txt', 'src/a.txt'], false], ['A33', ['cat', 'c4-head', '--', 'safe.txt', '.env'], false],
+  // C17-13: the argument-free head form and five refused spellings (the exact rows the plan appends).
+  ['A34', ['head'], true], ['A35', ['head', 'HEAD'], false], ['A36', ['head', '--'], false], ['A37', ['head', '--help'], false], ['A38', ['head', '--', 'safe.txt'], false], ['A39', ['head', '--out', 'result.txt'], false],
 ];
 const NAME_ROWS = [
   ['N01', 'safe.txt'], ['N02', 'MixedCase.txt'], ['N03', 'space name.txt'], ['N04', 'tab\tname.txt'], ['N05', 'line\nname.txt'], ['N06', 'docs/r\u00e9sum\u00e9.txt'],
@@ -369,6 +377,8 @@ const EXPECTED_PARSE = {
   A28: { subcommand: 'show', revisions: ['HEAD~'], paths: [], format: 'patch', patch: true, maxCount: null, pattern: null },
   A30: { subcommand: 'grep', revisions: ['c4-head'], paths: [], format: null, patch: false, maxCount: null, pattern: '--' },
   A31: { subcommand: 'grep', revisions: ['c4-head'], paths: ['safe.txt'], format: null, patch: false, maxCount: null, pattern: '--' },
+  // C17-6: parseGitSafeArgs(['head']) returns exactly this object (the plan's JSON).
+  A34: { subcommand: 'head', revisions: ['HEAD'], paths: [], format: null, patch: false, maxCount: null, pattern: null },
 };
 const PARSE_KEYS = ['subcommand', 'revisions', 'paths', 'format', 'patch', 'maxCount', 'pattern'];
 const DEFAULT_FORMAT = { diff: 'patch', log: 'medium', show: 'patch', cat: null, ls: 'name-only', grep: null };
@@ -382,11 +392,11 @@ function loadFixture(check, context) {
   check(eq(Object.keys(f), ['schema', 'arguments', 'names']) && f.schema === 1, 'the fixture has exactly schema 1, arguments and names, in that order', Object.keys(f));
   const wantArgs = ARG_ROWS.map(([id, argv, accepted]) => ({ id, argv, command: argv[0], accepted }));
   const wantNames = NAME_ROWS.map(([id, p]) => ({ id, path: p, content: 'needle\n' }));
-  check(eq(f.arguments, wantArgs), 'the argument rows are A01-A33 with command equal to argv[0], in the pinned order', f.arguments && f.arguments.map((r) => r.id));
+  check(eq(f.arguments, wantArgs), 'the argument rows are A01-A39 with command equal to argv[0], in the pinned order', f.arguments && f.arguments.map((r) => r.id));
   check(eq(f.names, wantNames), 'the name rows are N01-N09 with content "needle\\n", in the pinned order', f.names && f.names.map((r) => r.id));
   check((f.arguments || []).every((r) => eq(Object.keys(r), ['id', 'argv', 'command', 'accepted'])) && (f.names || []).every((r) => eq(Object.keys(r), ['id', 'path', 'content'])), 'every fixture row has exactly its pinned keys');
   const accepted = (f.arguments || []).filter((r) => r.accepted).map((r) => r.id);
-  check(eq(accepted, [...Array.from({ length: 14 }, (_, i) => `A${String(i + 1).padStart(2, '0')}`), 'A27', 'A28', 'A30', 'A31']), 'the accepted rows are A01-A14, A27-A28 and A30-A31', accepted);
+  check(eq(accepted, [...Array.from({ length: 14 }, (_, i) => `A${String(i + 1).padStart(2, '0')}`), 'A27', 'A28', 'A30', 'A31', 'A34']), 'the accepted rows are A01-A14, A27-A28, A30-A31 and A34', accepted);
   return { args: f.arguments || [], names: f.names || [] };
 }
 
@@ -1714,7 +1724,7 @@ async function argumentsGroup(context) {
     await step('the exact public surface: import safety, the nine exports, constants, frozen maps, and the unconditional thin entrypoint', async () => {
       await withScratch(context, 'imp', async (dir) => { checkImportSafe(check, CORE_REL, context, dir, assetUrl(context, CORE_REL), CORE_EXPORTS); });
       check(core.MAX_OUTPUT_BYTES === MAX_BYTES && core.MAX_GIT_ARG_UNITS === MAX_UNITS, 'MAX_OUTPUT_BYTES is 1048576 and MAX_GIT_ARG_UNITS is 24000', [core.MAX_OUTPUT_BYTES, core.MAX_GIT_ARG_UNITS]);
-      check(Object.isFrozen(core.SUPPORTED_FORMS) && eq(sorted(Object.keys(core.SUPPORTED_FORMS)), sorted(COMMANDS)) && eq({ ...core.SUPPORTED_FORMS }, SUPPORTED_FORMS), 'SUPPORTED_FORMS is frozen with exactly the six pinned strings', core.SUPPORTED_FORMS);
+      check(Object.isFrozen(core.SUPPORTED_FORMS) && eq(sorted(Object.keys(core.SUPPORTED_FORMS)), sorted(ALL_FORMS)) && eq({ ...core.SUPPORTED_FORMS }, SUPPORTED_FORMS), 'SUPPORTED_FORMS is frozen with exactly the six pinned strings plus the head form (C17-6)', core.SUPPORTED_FORMS);
       check(Object.isFrozen(core.NARROWING_GUIDANCE) && eq(sorted(Object.keys(core.NARROWING_GUIDANCE)), sorted(COMMANDS)) && eq({ ...core.NARROWING_GUIDANCE }, NARROWING), 'NARROWING_GUIDANCE is frozen with exactly the six pinned strings', core.NARROWING_GUIDANCE);
       const entry = readText(path.join(context.skillRoot, ...ENTRY_REL.split('/'))) || '';
       // PLAN-GAP: 2.4 shows the entrypoint text but does not say whether comments may be added; the assertions below pin its behavior-bearing statements, not its exact bytes.
@@ -1741,7 +1751,7 @@ async function argumentsGroup(context) {
       }
       check(!rc.REQUIRED_CASE_IDS.some((x) => x.includes('/C4/')) && eq(rc.BASELINE_CASE_IDS.length, 60) && eq(rc.RC1_CASE_IDS.length, 40), 'the complete-case inventories are untouched', { baseline: rc.BASELINE_CASE_IDS.length, rc1: rc.RC1_CASE_IDS.length });
     });
-    await step('the fixture rows A01-A33: accepted rows give the exact result, refused rows the exact usage error; arguments are parsed before any session, call or policy read', async () => {
+    await step('the fixture rows A01-A39: accepted rows give the exact result, refused rows the exact usage error; arguments are parsed before any session, call or policy read', async () => {
       if (!fixture) return;
       const fmts = {};
       for (const row of fixture.args) {
@@ -1789,6 +1799,35 @@ async function argumentsGroup(context) {
         await expectErr(check, 'a direct request with a NUL pattern', () => core.executeGitSafe({ subcommand: 'grep', revisions: ['c4-head'], paths: [], format: null, patch: false, maxCount: null, pattern: 'a\u0000b' }, sess.value), E.INPUT);
         await expectErr(check, 'a direct cat request with two paths', () => core.executeGitSafe({ subcommand: 'cat', revisions: ['c4-head'], paths: ['safe.txt', 'src/a.txt'], format: null, patch: false, maxCount: null, pattern: null }, sess.value), E.INPUT);
       }
+    });
+    await step('C17-6 head grammar: the argument-free form parses to exactly the plan object (a fresh equal object each call), every other spelling (any argument, option, separator, revision, path or output destination) is the exact head diagnostic before any session, and a hand-built head request is revalidated completely: any other revision, path, format, patch flag, count, pattern or key is GIT_SAFE_INPUT before any executor call', async () => {
+      const want = { subcommand: 'head', revisions: ['HEAD'], paths: [], format: null, patch: false, maxCount: null, pattern: null };
+      const a = parse(['head']); const b = parse(['head']);
+      check(eq(a, want) && JSON.stringify(a) === '{"subcommand":"head","revisions":["HEAD"],"paths":[],"format":null,"patch":false,"maxCount":null,"pattern":null}' && a !== b && a.revisions !== b.revisions, 'parseGitSafeArgs(["head"]) is exactly the plan object, key order included, and a new object each call', a);
+      check(E.ARGUMENT('head') === 'GIT_SAFE_ARGUMENT: unsupported arguments; supported: head', 'the head argument diagnostic is exactly the plan text (no guidance suffix)');
+      for (const extra of [['HEAD'], ['--'], ['--help'], ['-h'], ['--', 'safe.txt'], ['--out', 'result.txt'], ['HEAD~1'], ['c4-head'], [''], ['HEAD', '--', 'safe.txt'], ['--no-pager'], ['head']]) {
+        await expectErr(check, `head with ${show(extra)}`, () => parse(['head', ...extra]), E.ARGUMENT('head'));
+        const s = await seamMain(core, context, ['head', ...extra], { world: tableWorld() });
+        expectMain(check, `main head ${show(extra)}`, s.r, failMain(E.ARGUMENT('head')));
+        check(s.fake.calls.length === 0 && s.reads.length === 0, `main head ${show(extra)}: no session, no executor call and no policy read`, { calls: s.fake.calls.length, reads: s.reads.length });
+      }
+      await expectErr(check, 'head with a NUL argument', () => parse(['head', 'a\0b']), E.ARGUMENT('head'));
+      await expectErr(check, 'a head spelling that is not the command (HEAD, Head, head with a space)', () => parse(['HEAD']), E.COMMAND);
+      await expectErr(check, 'Head', () => parse(['Head']), E.COMMAND);
+      await expectErr(check, 'head with a trailing space', () => parse(['head ']), E.COMMAND);
+      const fake = makeFake(context);
+      const sess = await attempt(async () => core.createGitSession({ cwd: fake.paths.start, env: SEAM_ENV, execute: fake.execute, readFile: async () => bytes(jsonText(DEFAULT_POLICY)) }));
+      check(!sess.threw, 'premise: a session over the fake exists');
+      if (sess.threw) return;
+      const before = fake.calls.length;
+      const bad = [
+        ['another revision', { ...want, revisions: ['HEAD~1'] }], ['a branch name', { ...want, revisions: ['main'] }], ['the resolved spelling', { ...want, revisions: ['HEAD^{commit}'] }], ['no revision', { ...want, revisions: [] }], ['two revisions', { ...want, revisions: ['HEAD', 'HEAD'] }],
+        ['a path', { ...want, paths: ['safe.txt'] }], ['the patch format', { ...want, format: 'patch' }], ['the name-only format', { ...want, format: 'name-only' }], ['patch true', { ...want, patch: true }], ['a count', { ...want, maxCount: 0 }], ['a pattern', { ...want, pattern: 'x' }], ['an empty pattern', { ...want, pattern: '' }],
+        ['an extra key', { ...want, extra: true }], ['a missing key', { subcommand: 'head', revisions: ['HEAD'], paths: [], format: null, patch: false, maxCount: null }], ['a sparse revisions array', { ...want, revisions: new Array(1) }], ['revisions as a String object', { ...want, revisions: [new String('HEAD')] }],
+        ['an array instead of the object', ['head']], ['null', null], ['a subcommand with another case', { ...want, subcommand: 'HEAD' }],
+      ];
+      for (const [label, req] of bad) await expectErr(check, `hand-built head request with ${label}`, () => core.executeGitSafe(req, sess.value), E.INPUT);
+      check(fake.calls.length === before, 'no executor call is made for any invalid hand-built head request', { before, after: fake.calls.length });
     });
     await step('every accepted option position, order independence, duplicates, exclusive formats, counts, literal selectors, and the pattern rules', async () => {
       for (const [argv, want] of OK_FORMS) {
@@ -1839,7 +1878,7 @@ async function argumentsGroup(context) {
           await expectErr(check, `${cmd}: NUL at position ${i}`, () => parse(bad), E.ARGUMENT(cmd));
         }
       }
-      for (const cmd of COMMANDS) await expectErr(check, `NUL in the command name ${cmd}`, () => parse([`${cmd}\0`, 'c']), E.COMMAND);
+      for (const cmd of ALL_FORMS) await expectErr(check, `NUL in the command name ${cmd}`, () => parse([`${cmd}\0`, 'c']), E.COMMAND);
     });
     await step('an absent or unknown command is GIT_SAFE_COMMAND; a wrong container or element type is GIT_SAFE_INPUT', async () => {
       for (const argv of [[], [''], ['status'], ['DIFF'], ['diff '], ['ls-tree', 'c'], ['--version'], ['-h'], ['help'], ['rev-parse', 'HEAD'], ['cat-file', 'blob', 'x']]) await expectErr(check, `COMMAND for ${show(argv)}`, () => parse(argv), E.COMMAND);
@@ -2222,22 +2261,101 @@ async function isolation(context) {
     });
     if (!fx) return;
     const proj = installFxReader(context, fx, failures);
-    await step('safe.directory (C4-P3-3): the installed CLI uses the fixture-owned global file selected by GIT_CONFIG_GLOBAL; an empty file gives the exact repository error', async () => {
+    await step('safe.directory (C4-P3-3, C17-13, C17-F3): with LC_ALL=C and the recorded Git version, the installed CLI uses the fixture-owned global file selected by GIT_CONFIG_GLOBAL; an empty file gives exactly GIT_SAFE_OWNERSHIP for the recognized English refusal (exit 2, empty stdout, the fixed line); the wildcard still succeeds; an exact-path entry written with git config --file (the path git rev-parse --show-toplevel prints without the ownership variable) succeeds; a wrong-path entry fails; environment-injected safe.directory entries (the right path, another path, the wildcard, another key) are stripped and grant nothing although Git itself honors them; a directory that is no repository keeps the generic repository error', async () => {
       if (!proj) return;
+      const gitEnv = { ...context.env, LC_ALL: 'C' };
+      const gv = gitRun(context, fx.root, ['--version'], { env: gitEnv });
+      check(gv.code === 0 && /^git version \d+\.\d+/.test(gv.text), `the Git version is recorded: ${gv.text}`, gv.text);
       const allow = path.join(context.tmp, 'c4-safe-directory.gitconfig');
       putFile(allow, '[safe]\n\tdirectory = *\n');
       const empty = path.join(context.tmp, 'c4-safe-directory-empty.gitconfig');
       putFile(empty, '');
-      const base = { ...context.env, GIT_CONFIG_NOSYSTEM: '1', GIT_TEST_ASSUME_DIFFERENT_OWNER: '1' };
+      const base = { ...context.env, GIT_CONFIG_NOSYSTEM: '1', GIT_TEST_ASSUME_DIFFERENT_OWNER: '1', LC_ALL: 'C' };
       const head = rev(fx, 'c4-head');
-      const ok = execNode(context, { cwd: fx.root, script: proj.entry, args: ['cat', head, '--', 'safe.txt'], env: { ...base, GIT_CONFIG_GLOBAL: allow } });
+      const cli = (cfg, extra = {}) => execNode(context, { cwd: fx.root, script: proj.entry, args: ['cat', head, '--', 'safe.txt'], env: { ...base, GIT_CONFIG_GLOBAL: cfg, ...extra } });
+      const ok = cli(allow);
       check(ok.dead === null && ok.code === 0 && ok.stderr === '' && ok.stdout.length > 0, 'with safe.directory = * in the selected file the command succeeds', { code: ok.code, err: ok.stderr.slice(0, 200), out: ok.stdout.slice(0, 60) });
-      const no = execNode(context, { cwd: fx.root, script: proj.entry, args: ['cat', head, '--', 'safe.txt'], env: { ...base, GIT_CONFIG_GLOBAL: empty } });
-      check(no.dead === null && no.code === 2 && no.stdout === '' && no.stderr === stderrLine(E.REPOSITORY), 'control: an empty global file gives exactly git-safe: GIT_SAFE_REPOSITORY (exit 2, empty stdout)', { code: no.code, out: no.stdout.slice(0, 60), err: no.stderr.slice(0, 200) });
+      const no = cli(empty);
+      check(no.dead === null && no.code === 2 && no.stdout === '' && no.stderr === stderrLine(E.OWNERSHIP), 'an empty global file gives exactly git-safe: GIT_SAFE_OWNERSHIP (exit 2, empty stdout, the fixed line with its final LF)', { code: no.code, out: no.stdout.slice(0, 60), err: no.stderr.slice(0, 300) });
+      check(!no.stderr.includes(fx.root) && !no.stderr.includes(fwd(fx.root)) && !/fatal:|dubious ownership in repository/.test(no.stderr), 'the diagnostic carries no repository path and no Git text');
+      // the exact path as Git prints it (never a temp path with a short name or backslashes)
+      const top = gitRun(context, fx.root, ['rev-parse', '--show-toplevel'], { env: { ...context.env, LC_ALL: 'C' } });
+      check(top.code === 0 && top.text.length > 0, 'premise: git prints the checkout top level without the ownership variable', top.text);
+      const exact = path.join(context.tmp, 'c4-safe-directory-exact.gitconfig');
+      const wrong = path.join(context.tmp, 'c4-safe-directory-wrong.gitconfig');
+      const add = (cfg, p) => gitRun(context, fx.root, ['config', '--file', cfg, '--add', 'safe.directory', p], { env: gitEnv });
+      check(add(exact, top.text).code === 0 && add(wrong, `${top.text}-elsewhere`).code === 0, 'premise: the two fixture-owned entries are written with git config --file');
+      const okExact = cli(exact);
+      check(okExact.dead === null && okExact.code === 0 && okExact.stderr === '' && okExact.stdout === 'needle\n', 'an exact-path entry (the string Git prints) lets the command succeed', { code: okExact.code, err: okExact.stderr.slice(0, 200), out: okExact.stdout.slice(0, 60) });
+      const noWrong = cli(wrong);
+      check(noWrong.dead === null && noWrong.code === 2 && noWrong.stdout === '' && noWrong.stderr === stderrLine(E.OWNERSHIP), 'a wrong-path entry grants nothing: exactly the ownership diagnostic', { code: noWrong.code, err: noWrong.stderr.slice(0, 200) });
+      // environment-injected entries: Git honors them, git-safe strips them, so they grant nothing (also with the lowercase variable names that Windows folds)
+      const injected = [
+        ['the right path', { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: top.text }],
+        ['another path', { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: `${top.text}-elsewhere` }],
+        ['the wildcard', { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: '*' }],
+        ['another key', { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false' }],
+        ['two entries, the right path second', { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'safe.directory', GIT_CONFIG_VALUE_1: top.text }],
+        ['GIT_CONFIG_PARAMETERS', { GIT_CONFIG_PARAMETERS: `'safe.directory'='${top.text}'` }],
+      ];
+      for (const [label, extra] of injected) {
+        const direct = gitRun(context, fx.root, ['rev-parse', '--show-toplevel'], { env: { ...base, GIT_CONFIG_GLOBAL: empty, ...extra } });
+        if (label !== 'another key' && label !== 'another path') check(direct.code === 0, `control: Git itself honors the injected entry (${label})`, { code: direct.code, err: direct.err.toString('utf8').slice(0, 120) });
+        const r = cli(empty, extra);
+        check(r.dead === null && r.code === 2 && r.stdout === '' && r.stderr === stderrLine(E.OWNERSHIP), `injected configuration (${label}) is stripped and grants nothing: exactly the ownership diagnostic`, { code: r.code, out: r.stdout.slice(0, 60), err: r.stderr.slice(0, 200) });
+      }
+      // an injected entry never changes the outcome of a file-configured grant either
+      const withBoth = cli(exact, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: `${top.text}-elsewhere` });
+      check(withBoth.dead === null && withBoth.code === 0 && withBoth.stdout === 'needle\n', 'a file-configured exact grant still works beside an injected entry for another path', { code: withBoth.code, err: withBoth.stderr.slice(0, 200) });
+      // generic root errors stay generic: a directory that is no repository (no ownership variable), and an unclassified failure at the seam
+      const nonRepo = scratchDir(context, 'nonrepo');
+      const gen = execNode(context, { cwd: nonRepo, script: proj.entry, args: ['cat', head, '--', 'safe.txt'], env: { ...context.env, LC_ALL: 'C', GIT_CONFIG_GLOBAL: empty, GIT_CEILING_DIRECTORIES: path.dirname(nonRepo) } });
+      check(gen.dead === null && gen.code === 2 && gen.stdout === '' && gen.stderr === stderrLine(E.REPOSITORY), 'control: a directory that is no repository gives exactly GIT_SAFE_REPOSITORY (the generic root error is kept for unclassified failures)', { code: gen.code, err: gen.stderr.slice(0, 200) });
       // the same variables at the seam: the fixture-owned file path and the ownership test variable reach every executor call exactly as given
       const seamEnv = { ...SEAM_ENV, GIT_CONFIG_GLOBAL: allow, GIT_CONFIG_NOSYSTEM: '1', GIT_TEST_ASSUME_DIFFERENT_OWNER: '1' };
       const s = await seamMain(core, context, ['cat', 'c4-head', '--', 'safe.txt'], { env: seamEnv });
       check(s.fake.calls.length === 4 && s.fake.calls.every((c) => c.env.GIT_CONFIG_GLOBAL === allow && c.env.GIT_CONFIG_NOSYSTEM === '1' && c.env.GIT_TEST_ASSUME_DIFFERENT_OWNER === '1'), 'at the seam GIT_CONFIG_GLOBAL is the fixture-owned file on every call and the other two variables are preserved', s.fake.calls.map((c) => c.env.GIT_CONFIG_GLOBAL));
+    });
+    await step('the optional executor flag dubiousOwnership (C17-7, F4) at the seam: the exact five-key result and a sixth false mean no positive diagnosis (GIT_SAFE_REPOSITORY); true needs status 128, empty stdout, null signal, null error and overflow false and then gives exactly GIT_SAFE_OWNERSHIP at the root stage only; a non-boolean value, an unknown key or an inconsistent positive result is the existing GIT_SAFE_GIT mapping; no stderr text appears anywhere', async () => {
+      const EMPTYB = Buffer.alloc(0);
+      const five = (status, over = {}) => ({ status, signal: null, error: null, stdout: EMPTYB, overflow: false, ...over });
+      const run = async (rootResult) => {
+        const s = await seamMain(core, context, ['ls', 'c4-head'], { world: { handle: (kind) => (kind === 'root' ? { __raw: rootResult } : undefined) } });
+        return s;
+      };
+      const expectOutcome = async (label, rootResult, message) => {
+        const s = await run(rootResult);
+        expectMain(check, label, s.r, failMain(message));
+        check(s.fake.calls.length === 2 && s.reads.length === 0, `${label}: only the version and the root were called and no policy was read`, { calls: s.fake.calls.length, reads: s.reads.length });
+        check(!s.r.stderr.includes('SECRET-STDERR') && !s.r.stderr.includes(s.fake.paths.root), `${label}: no stderr text or path is disclosed`);
+      };
+      await expectOutcome('the exact five-key 128 result', five(128), E.REPOSITORY);
+      await expectOutcome('a sixth key false with status 128', five(128, { dubiousOwnership: false }), E.REPOSITORY);
+      await expectOutcome('a sixth key true with status 128, empty stdout, null signal and error, overflow false', five(128, { dubiousOwnership: true }), E.OWNERSHIP);
+      await expectOutcome('false with status 1', five(1, { dubiousOwnership: false }), E.REPOSITORY);
+      await expectOutcome('false with status 128 and a nonempty stdout', five(128, { stdout: Buffer.from('x'), dubiousOwnership: false }), E.REPOSITORY);
+      for (const [label, r] of [
+        ['a string value', five(128, { dubiousOwnership: 'true' })], ['the number one', five(128, { dubiousOwnership: 1 })], ['null', five(128, { dubiousOwnership: null })], ['undefined as an own key', five(128, { dubiousOwnership: undefined })],
+        ['true with status 1', five(1, { dubiousOwnership: true })], ['true with status 0', five(0, { dubiousOwnership: true })], ['true with status 255', five(255, { dubiousOwnership: true })], ['true with a nonempty stdout', five(128, { stdout: Buffer.from('x'), dubiousOwnership: true })],
+        ['true with a signal', { status: null, signal: 'SIGTERM', error: null, stdout: EMPTYB, overflow: false, dubiousOwnership: true }], ['true with a spawn error', { status: null, signal: null, error: 'ENOENT', stdout: EMPTYB, overflow: false, dubiousOwnership: true }],
+        ['true with overflow', { status: null, signal: null, error: null, stdout: EMPTYB, overflow: true, dubiousOwnership: true }], ['an unknown extra key', five(128, { stderr: 'SECRET-STDERR', dubiousOwnership: true })], ['an unknown key beside no flag', five(128, { extra: 1 })],
+        ['the flag with the wrong name', five(128, { dubiousownership: true })], ['a missing required key', { status: 128, signal: null, error: null, stdout: EMPTYB, dubiousOwnership: true }],
+      ]) await expectOutcome(`invalid result: ${label}`, r, E.GIT);
+      // only the root stage acts on a positive flag: every other stage keeps its mapping when the flag is true on a consistent result
+      const stage = async (label, kind, want, world = {}) => {
+        const s = await seamMain(core, context, ['ls', 'c4-head'], { world: { ...world, handle: (k) => (k === kind ? { __raw: five(128, { dubiousOwnership: true }) } : undefined) } });
+        expectMain(check, label, s.r, failMain(want));
+      };
+      await stage('a positive flag at the version stage is the existing version failure', 'version', E.GIT);
+      await stage('a positive flag at revision resolution is the existing revision failure', 'resolve', E.REVISION);
+      await stage('a positive flag at the tree inventory is the existing Git failure', 'invTree', E.GIT);
+      const owned = await run(five(128, { dubiousOwnership: true }));
+      check(owned.fake.calls.map((c) => c.kind).join() === 'version,root', 'the ownership failure stops the session after the root call (no policy read, no later Git call)', owned.fake.calls.map((c) => c.kind));
+      // session.git() results stay exactly { status, stdout }
+      const fake = makeFake(context, { handle: (kind) => (kind === 'content' ? { __raw: five(0, { stdout: Buffer.from('x'), dubiousOwnership: false }) } : undefined) });
+      const session = await core.createGitSession({ cwd: fake.paths.start, env: SEAM_ENV, execute: fake.execute, readFile: async () => bytes(jsonText(DEFAULT_POLICY)) });
+      const g = await session.git(['cat-file', 'blob', 'x']);
+      check(eq(Object.keys(g).sort(), ['status', 'stdout']) && g.status === 0 && sameBuf(g.stdout, Buffer.from('x')), 'public session.git() results are exactly { status, stdout } (the classification never leaks)', Object.keys(g));
     });
     await step('the installed entrypoint executes through a supported alternate path (C4-P3-4): a junction on Windows, a directory symlink elsewhere', async () => {
       if (!proj) return;

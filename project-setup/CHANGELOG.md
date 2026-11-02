@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.0-rc.4
+
+C17 addresses the reviewer HEAD-routing defect and the Codex elevated-sandbox ownership
+failure measured on rc.3. git-safe head resolves checkout HEAD without a raw-Git exception.
+The reviewer still stops when identity cannot be established and evaluates the existing
+equal-head warning.
+
+Git's recognized dubious-ownership refusal now returns GIT_SAFE_OWNERSHIP with a fixed
+remedy. Environment-injected configuration remains stripped. The user supplies any
+trusted-checkout safe.directory grant through effective global or system configuration.
+
+Living references record the 2026-10-26/27 Windows measurements and their version scopes.
+R83-e and A3/L10 passed on rc.3; final 3.0.0 requires the rc.4 host measurements.
+Manifest schema 3, policy schemas, approval and rollback behavior remain unchanged.
+
+See RELEASE-NOTES-3.0.0-rc.4.md. Publication remains a separate authorized action.
+
 ## 3.0.0-rc.3
 
 C16 addresses the R83-e subdirectory-launch failure and the A3/L10 incomplete-review failure.

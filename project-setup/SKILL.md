@@ -3,7 +3,7 @@ name: project-setup
 description: Set up, migrate, or update shared AI-agent scaffolding for a backend repository so Claude Code and Codex work from the same rules - AGENTS.md as the shared source of truth, CLAUDE.md importing it, shared reviewer and docs-sync agents with thin per-tool wrappers, secret-path protection for both tools, and project docs generated from the actual code. Use this whenever the user wants to set up, install, initialize, re-run, upgrade, or migrate project setup, AGENTS.md, CLAUDE.md, agent docs, or reviewer/docs-sync agents in a repo, including repos already configured by the older Claude-only project-setup (v1), repos with hand-written CLAUDE.md or AGENTS.md, and new or empty repos. Treats the codebase as sensitive (fintech-grade), never reads secrets, enforces plan-and-confirm gates, and changes documentation and agent configuration only.
 ---
 
-# project-setup 3.0.0-rc.3
+# project-setup 3.0.0-rc.4
 
 One skill, one source, two tools. Produces a repository layout that Claude Code and Codex both follow:
 
@@ -87,6 +87,39 @@ Missing launch context alone does not establish a subdirectory start or verify h
     --out or widen the intended paths. You MUST NOT extend that exception to a failed or
     denied read or another error code; that would bypass the trusted-read boundary.
 
+## Git ownership in the Codex Windows sandbox
+
+The elevated Windows sandbox can run Git as a separate Windows user. git-safe removes
+environment-injected Git configuration, including Codex's injected safe.directory entry.
+A checkout that Git considers differently owned therefore needs an effective global or
+system safe.directory grant.
+
+For a checkout you trust, the user can add its exact absolute path:
+
+```powershell
+git config --global --add safe.directory 'C:/path/to/trusted-checkout'
+```
+
+Replace the example with the trusted checkout's path. When GIT_CONFIG_GLOBAL is set,
+--global writes that selected file; otherwise it writes the invoking user's global config.
+GIT_CONFIG_GLOBAL requires Git 2.32 or later. Use the path exactly as git rev-parse
+--show-toplevel prints it when you run it yourself, with forward slashes.
+The grant must be in configuration used by the sandbox's Git process. An administrator
+can instead supply a system entry.
+
+You SHOULD grant only the exact trusted checkout, because safe.directory = * disables
+the ownership check for every repository. Adding an exact entry beside an existing *
+does not narrow the wildcard grant.
+
+Setup and review agents MUST NOT write global or system Git configuration or preserve
+injected configuration to bypass this refusal. They MUST stop and report
+GIT_SAFE_OWNERSHIP so a failed trust check cannot become an automatic access grant.
+After the user resolves the prerequisite, start a new review attempt.
+
+An unrecognized ownership diagnostic can still appear as GIT_SAFE_REPOSITORY. That code
+does not prove that the directory lacks a Git repository. See references/security.md
+for the diagnostic's deliberately narrow recognition rule.
+
 ## Scripts
 
 All scripts are zero-dependency Node (>=18) and print JSON. Run them from the repository root as
@@ -107,7 +140,7 @@ All scripts are zero-dependency Node (>=18) and print JSON. Run them from the re
 | `doctor.mjs` | Audit lane configuration and local diagnostics without a model session or sandbox probe |
 | `canary.mjs` | Runtime measurement of secret-read protection per tool layer (no canaries = INCONCLUSIVE, exit 3) |
 | `secret-scan.mjs` | Optional local gitleaks scan, redacted; findings as file:line:rule only |
-| `assets/tools/git-safe.mjs` | Installed into projects with six companion runtime files: bounded diff/log/show/cat/ls/grep and `review-diff` with secret excludes, no shell |
+| `assets/tools/git-safe.mjs` | Installed into projects with six companion runtime files: bounded diff/log/show/cat/ls/grep, checkout head identity and `review-diff` with secret excludes, no shell |
 
 ## Workflow
 

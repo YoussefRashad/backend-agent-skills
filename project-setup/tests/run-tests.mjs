@@ -1027,6 +1027,21 @@ test('R29', 'prepare: files the skill does not own may only gain new blocks; eve
   fs.mkdirSync(c16context.tmp, { recursive: true });
   const rep16 = await runComponentAssertions('C16', c16context);
   check(rep16.ok === true, 'C16 component assertions pass', { errors: rep16.errors, failed: rep16.results.filter((x) => x.status !== 'PASS').map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) })) });
+  // C17 contributes once through R29 without adding complete case records.
+  const c17context = {
+    repository: path.resolve(SKILL, '..'),
+    skillRoot: SKILL,
+    tmp: path.join(TMP, 'c17'),
+    env: { ...ENV }
+  };
+  fs.mkdirSync(c17context.tmp, { recursive: true });
+  const rep17 = await runComponentAssertions('C17', c17context);
+  check(rep17.ok === true, 'C17 component assertions pass', {
+    errors: rep17.errors,
+    failed: rep17.results
+      .filter((x) => x.status !== 'PASS')
+      .map((x) => ({ id: x.id, failures: x.failures.slice(0, 5) }))
+  });
 });
 
 test('R30', 'validate: a user-owned legacy hook is a warning; broken managed permissions are a failure', () => {
