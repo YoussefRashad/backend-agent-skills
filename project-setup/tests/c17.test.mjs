@@ -8,7 +8,10 @@
 // baseline scripts, which C17 does not change. The exact amendment text (R17, RD17, SH17, S17, SO17, RM*, SE*, CX*, CL*, LC17, V17, RR*, PT*
 // and the TODO and evaluation transforms) lives in tests/helpers/c17-amendments.mjs, copied from the plan by a generator script before any
 // implementation existed and never read back from the files under test; a reversal removes exactly one verified amendment at its stated anchor
-// and the result is compared with the pinned pre-C17 bytes (tests/fixtures/c17-prechange.json, 13 entries, plan C17-12).
+// and the result is compared with the pinned pre-C17 bytes (tests/fixtures/c17-prechange.json, 13 entries, plan C17-12). The one exception is the
+// core: the plan freezes its behavior, not its hunks, so its 21 hunks G17a..G17u were pinned after the implementation from the implemented bytes
+// (review round 1, decisions I17-4, I17-6, I17-7 and I17-8), the same way I12-1 moved pins; they are verified forward and backward against the
+// committed pre-C17 core, so no historical check substitutes a fixture for the current file (C17-5).
 //
 // Importing this module runs nothing. Every production module and the registry module (rc1-cases.mjs imports this file, so a static import
 // back would be circular) is imported lazily inside run(context). A missing file, module or export fails one assertion with a diagnostic; it
@@ -327,7 +330,8 @@ function checkAmendedFile(check, context, fx, rel, { expectFinalLf = true } = {}
 }
 // Failure controls for one amendment, built in memory from a model text that carries it exactly once (the real files are never modified): a missing, partial, duplicated, moved, altered, differently spaced or CRLF amendment, and
 // the same amendment looked for in another file, is never verified and never reversed (C17-5: it fails before any historical hashing). `movedBefore` names a text of the model the amendment is moved in front of.
-// A flex amendment (SE4_17, whose F9 wrapping is not frozen) is compared with whitespace collapsed, so the whitespace controls do not apply to it.
+// A flex amendment (SE4_17) tolerates only the line breaks of its F9 prose (I17-6); every other byte of it is exact, so every control below applies to it too
+// (a second copy at the end of the file is the one control its reversal cannot see; i17EvalSecurity covers it).
 function amendmentControls(check, label, model, a, { movedBefore = null, otherFileText = '' } = {}) {
   const base = LF(model);
   check(amendmentOnce(base, a) && reverseOne(base, a) !== null, `${label}: control baseline: the model carries the amendment exactly once at its anchor`);
@@ -339,17 +343,15 @@ function amendmentControls(check, label, model, a, { movedBefore = null, otherFi
   const lastIdx = lines.map((l, i) => [l, i]).filter(([l]) => l !== '').map(([, i]) => i).pop();
   const partial = [...lines.slice(0, lastIdx), ...lines.slice(lastIdx + 1)].join('\n');
   rejected('partial: the last line of the amendment dropped', base.replace(a.neu, () => partial));
-  if (a.flex !== true) rejected('duplicate: a second copy right after the first', base.replace(a.before + a.neu, (m) => m + a.neu));
+  rejected('duplicate: a second copy right after the first', base.replace(a.before + a.neu, (m) => m + a.neu));
   rejected('duplicate: a second copy at the end of the file', base + a.neu);
   rejected('moved: the text away from its anchor', movedBefore !== null && without.includes(movedBefore) ? without.replace(movedBefore, () => a.neu + movedBefore) : `${without}${a.neu}`);
   rejected('altered: one character changed', base.replace(a.neu, () => `${a.neu.slice(0, 3)}${a.neu[3] === 'z' ? 'y' : 'z'}${a.neu.slice(4)}`));
-  if (a.flex !== true) {
-    rejected('altered: a doubled space inside', base.replace(a.neu, () => a.neu.replace(' ', '  ')));
-    rejected('spaced: an extra blank line before the amendment', base.replace(a.before + a.neu, () => `${a.before}\n${a.neu}`));
-    rejected('spaced: an extra blank line after the amendment', base.replace(a.neu + a.after, () => `${a.neu}\n${a.after}`));
-    if (a.neu.includes('\n\n')) rejected('spaced: a blank line inside the amendment doubled', base.replace(a.neu, () => a.neu.replace('\n\n', '\n\n\n')));
-    if (a.before.endsWith('\n\n')) rejected('spaced: the blank line before the amendment removed', base.replace(a.before + a.neu, () => `${a.before.slice(0, -1)}${a.neu}`));
-  }
+  rejected('altered: a doubled space inside', base.replace(a.neu, () => a.neu.replace(' ', '  ')));
+  rejected('spaced: an extra blank line before the amendment', base.replace(a.before + a.neu, () => `${a.before}\n${a.neu}`));
+  rejected('spaced: an extra blank line after the amendment', base.replace(a.neu + a.after, () => `${a.neu}\n${a.after}`));
+  if (a.neu.includes('\n\n')) rejected('spaced: a blank line inside the amendment doubled', base.replace(a.neu, () => a.neu.replace('\n\n', '\n\n\n')));
+  if (a.before.endsWith('\n\n')) rejected('spaced: the blank line before the amendment removed', base.replace(a.before + a.neu, () => `${a.before.slice(0, -1)}${a.neu}`));
   rejected('CRLF: the same text with CRLF line ends', base.replace(/\n/g, '\r\n'));
   rejected('another file: a different file never carries the amendment', otherFileText);
   const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(base, 'utf8')]);
@@ -1212,6 +1214,41 @@ function i17EvalSecurity(raw) {
   // The helper's flex amendment cannot see a second copy elsewhere in the file; the paragraphs of C17-8 item 4 must stand exactly once.
   const flat = squash(t);
   if (COUNT(flat, I17_SE4_PARAS[0]) !== 1 || COUNT(flat, I17_SE4_PARAS[2]) !== 1) f.push('se4-duplicate');
+  // I17-6: the whitespace-collapsed rules above tolerate any spacing, so the quoted prefix and the paragraph boundaries are also compared exactly: the quoted
+  // prefix stands once, byte for byte, inside its quotes, and the three ownership paragraphs are separated by exactly one blank line (the first and the third
+  // stand verbatim, the second starts and ends at the frozen words that surround the F9 prose).
+  if (COUNT(t, `"${C17_LITERALS.OWNERSHIP_PREFIX}"`) !== 1) f.push('se4-prefix');
+  const p1 = C17_BLOCKS.SE4_PLAN.slice(0, 4).join('\n'); const p3 = C17_BLOCKS.SE4_PLAN.slice(10).join('\n');
+  if (COUNT(t, `${p1}\n\nLocalized diagnostics, preceding warnings and other root failures keep the existing\nGIT_SAFE_REPOSITORY result.`) !== 1 || COUNT(t, `exact-path command.\n\n${p3}\n\n`) !== 1) f.push('se4-boundaries');
+  return f;
+}
+// C17-20 row "HEAD moving between separate calls" (decision I17-8): `head` and `review-diff` are two helper calls, and the frozen texts claim nothing about HEAD staying put between them.
+// Only what the frozen texts support is asserted: the step 2 text and the security head text carry no atomic, snapshot or consistency claim, and the pre-C17 trusted-checkout
+// sentences of both documents are still there (the assumption stands). The row's disclosure of observed drift is not asserted: no frozen text carries it.
+const I17_CLAIMS = [
+  [/\batomic(?:ally)?\b/i, 'atomic'],
+  [/\bsnapshots?\b/i, 'snapshot'],
+  [/\bsimultaneous(?:ly)?\b|\bat the same time\b|\bin one step\b/i, 'simultaneous'],
+  [/\bguarantee[sd]?\b|\bis guaranteed\b/i, 'guarantee'],
+  [/\b(?:remains?|stays?) (?:the same|equal|stable|fixed|unchanged)\b|\bcannot (?:move|change|differ)\b|\b(?:does|will) not (?:move|change)\b/i, 'stability'],
+  [/\b(?:throughout|during|for the duration of) (?:the|a|that|this) (?:review|run|session)\b/i, 'duration'],
+  [/\bconsistent (?:view|state|read)\b|\bsame (?:run|session|call|moment|state) as\b/i, 'consistent view'],
+];
+function i17EvalDrift(rev, sec, preRev, preSec) {
+  const f = [];
+  const s2 = i17Step2(LF(rev));
+  const headText = between(LF(sec), '[-- <paths>...]\n```\n\n', '- Every other option or form is refused');
+  if (s2 === null) f.push('step2-missing');
+  if (headText === null) f.push('head-text-missing');
+  for (const [name, text] of [['reviewer step 2', s2], ['security head text', headText]]) {
+    if (text === null) continue;
+    for (const [re, id] of I17_CLAIMS) if (re.test(squash(text))) f.push(`${name}: ${id}`);
+  }
+  for (const [label, now, pre] of [['reviewer', rev, preRev], ['security reference', sec, preSec]]) {
+    const lines = LF(pre).split('\n').filter((l) => /trusted (?:base )?checkout/i.test(l));
+    if (lines.length === 0) f.push(`premise: no trusted-checkout line in the pre-C17 ${label}`);
+    for (const line of lines) if (!LF(now).includes(line)) f.push(`trusted-lost: ${label}`);
+  }
   return f;
 }
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1301,7 +1338,7 @@ async function instructions(context) {
       check(rev.includes(first) && newProseIssues(rev.replace(first, () => 'q'.repeat(100)), preRev).filter((m) => /columns/.test(m)).length === 0 && newProseIssues(rev.replace(first, () => 'q'.repeat(101)), preRev).some((m) => /is 101 columns/.test(m)), 'reviewer: exactly 100 columns passes and 101 fails');
       proveFenceRules(check, 'reviewer R17 prose', { text: rev, baseline: preRev, paragraph: I17_R17_SQ });
     });
-    await step('the installed security reference states the head form: the one-line grammar introduction, the head line immediately before review-diff in the grammar fence, the two head paragraphs directly after the fence, the ownership paragraphs after the global/system configuration paragraph (the F9 older-Git sentence compared with whitespace collapsed because its wrapping is not frozen), GIT_SAFE_OWNERSHIP as a stop condition outside the two-code correction whitelist, and the unchanged existing whitelist bullet', async () => {
+    await step('the installed security reference states the head form: the one-line grammar introduction, the head line immediately before review-diff in the grammar fence, the two head paragraphs directly after the fence, the ownership paragraphs after the global/system configuration paragraph (the F9 older-Git sentence may be wrapped differently, nothing else: the quoted prefix and the paragraph boundaries are exact), GIT_SAFE_OWNERSHIP as a stop condition outside the two-code correction whitelist, and the unchanged existing whitelist bullet', async () => {
       const failed = i17EvalSecurity(sec);
       for (const r of I17_SE_RULES) check(!failed.includes(r.id), `security reference: rule ${r.id} holds`, clip(r.text));
       check(failed.length === 0, 'security reference: no rule or control fails', failed);
@@ -1327,7 +1364,26 @@ async function instructions(context) {
       battery('security reference', sec, I17_SE_RULES, i17EvalSecurity);
       opposites('security reference', sec, I17_SE_OPPOSITES, i17EvalSecurity, I17_SE_RULES);
     });
-    await step('each amendment of the reviewer and the security reference is rejected when missing, partial, duplicated, moved, altered, spaced differently, written with CRLF or found in the wrong file (SE4_17, whose F9 wrapping is not frozen, is exempt from the whitespace controls only)', async () => {
+    await step('C17-20 "HEAD moving between separate calls" (I17-8): step 2 of the reviewer and the head text of the security reference make no atomic, snapshot, simultaneity, guarantee, stability or consistent-view claim across the separate helper calls (the models and the installed text pass; each claim, injected into either text, is found), the one command of step 2 is the single argument-free head call, and the pre-C17 trusted-checkout sentences of both documents are still there (the existing assumption stands)', async () => {
+      check(eq(i17EvalDrift(modelRev, modelSec, preRev, preSec), []), 'the independent models carry no such claim and keep the trusted-checkout sentences', i17EvalDrift(modelRev, modelSec, preRev, preSec));
+      const failed = i17EvalDrift(rev, sec, preRev, preSec);
+      check(failed.length === 0, 'installed: step 2 and the head text of the security reference make no atomic or snapshot claim across separate helper calls, and the trusted-checkout sentences stand', failed);
+      const s2 = i17Step2(rev);
+      check(s2 !== null && s2.includes('Resolve the checkout\'s current HEAD with') && [...s2.matchAll(/`([^`]*)`/g)].map((m) => m[1]).join('|') === 'node .ai/tools/git-safe.mjs head', 'step 2 resolves the current HEAD with exactly one argument-free helper call and names no other call');
+      const headText = between(sec, '[-- <paths>...]\n```\n\n', '- Every other option or form is refused') || '';
+      check(headText.includes('head takes no arguments and prints the checkout\'s resolved HEAD commit ID plus one LF.') && !/review-diff/.test(headText.replace('resolved review head from review-diff', '')), 'the head text describes one resolution that prints one ID and refers to no other call');
+      const claims = [['atomic', 'The two IDs are read atomically.'], ['snapshot', 'Both IDs describe one snapshot of the checkout.'], ['simultaneous', 'HEAD is read at the same time as the diff.'], ['guarantee', 'The comparison is guaranteed to hold for the whole review.'], ['stability', 'HEAD cannot move between the two calls.'], ['stability', 'HEAD remains the same until the report.'], ['duration', 'HEAD is fixed during the review.'], ['consistent view', 'Both calls return a consistent view of the checkout.'], ['consistent view', 'The head call runs in the same session as review-diff.']];
+      for (const [id, claim] of claims) {
+        const inRev = rev.replace('This prevents a completed review with', () => `${claim} This prevents a completed review with`);
+        const inSec = sec.replace('This prevents silent omission of the equal-head warning.', () => `${claim} This prevents silent omission of the equal-head warning.`);
+        check(inRev !== rev && i17EvalDrift(inRev, sec, preRev, preSec).some((x) => x === `reviewer step 2: ${id}`), `control: "${claim}" added to step 2 is found (${id})`, i17EvalDrift(inRev, sec, preRev, preSec));
+        check(inSec !== sec && i17EvalDrift(rev, inSec, preRev, preSec).some((x) => x === `security head text: ${id}`), `control: "${claim}" added to the security head text is found (${id})`, i17EvalDrift(rev, inSec, preRev, preSec));
+      }
+      const trustedRev = LF(preRev).split('\n').find((l) => /trusted (?:base )?checkout/i.test(l)); const trustedSec = LF(preSec).split('\n').find((l) => /trusted (?:base )?checkout/i.test(l));
+      check(trustedRev !== undefined && trustedSec !== undefined && i17EvalDrift(rev.replace(`${trustedRev}\n`, () => ''), sec, preRev, preSec).includes('trusted-lost: reviewer') && i17EvalDrift(rev, sec.replace(`${trustedSec}\n`, () => ''), preRev, preSec).includes('trusted-lost: security reference'), 'control: a reviewer or security reference without its trusted-checkout sentence is found');
+      check(i17EvalDrift(rev.replace(I17_STEP_START, () => '\n2x. Resolve the checkout'), sec, preRev, preSec).includes('step2-missing') && i17EvalDrift(rev, sec.replace('- Every other option or form is refused', () => '- Every other form is refused'), preRev, preSec).includes('head-text-missing'), 'control: a missing step 2 or a missing head text is reported, never read as a pass');
+    });
+    await step('each amendment of the reviewer and the security reference is rejected when missing, partial, duplicated, moved, altered, spaced differently, written with CRLF or found in the wrong file (SE4_17 tolerates only the line breaks of its F9 prose, so every byte control applies to it; its reversal cannot see a second copy elsewhere in the file, which the strict instruction check reports); the quoted ownership prefix and the paragraph boundaries compare exactly (I17-6)', async () => {
       for (const [rel, ids, other] of [[I17_REVIEWER_REL, ['R17'], sec], [I17_SECURITY_REL, ['SE1_17', 'SE2_17', 'SE3_17', 'SE4_17'], rev]]) {
         for (const id of ids) {
           let a = AM17[id];
@@ -1346,13 +1402,55 @@ async function instructions(context) {
           stats.controls += 12;
         }
       }
-      // The flex amendment still rejects a changed word, a dropped sentence and a second copy (the controls above) and accepts a rewrapped but identical paragraph.
+      // I17-6: SE4_17 tolerates a different wrapping of its F9 prose and nothing else. The whitespace-collapsed rules of i17EvalSecurity cannot tell "fatal:  detected" from
+      // "fatal: detected", so the quoted prefix and the paragraph boundaries are compared exactly by the reversal and by the strict instruction check, and each negative
+      // control below is reported by both (the premise of each is that the old collapsed comparison would have accepted it).
       const m = modelThrough(fx, I17_SECURITY_REL, 'SE4_17');
-      const wrapped = C17_BLOCKS.SE4_RENDERED.slice(5, 10).join('\n');
-      const rewrapped = m === null ? null : LF(m).replace(wrapped, () => squash(wrapped));
-      check(rewrapped !== null && amendmentOnce(rewrapped, AM17.SE4_17) && reverseOne(rewrapped, AM17.SE4_17) !== null, 'SE4_17: a different wrapping of the same words is accepted (F9 wrapping is not frozen)');
-      const dropF9 = m === null ? null : LF(m).replace(squash(C17_LITERALS.F9B.join(' ')).split(' ').slice(0, 4).join(' '), () => 'x');
-      check(dropF9 !== null && !amendmentOnce(dropF9, AM17.SE4_17), 'SE4_17: a text that loses a word of the F9 older-Git sentence is rejected');
+      const M = m === null ? null : LF(m);
+      const SE4 = AM17.SE4_17;
+      const RES = 'GIT_SAFE_REPOSITORY result. ';
+      const f9Tail = C17_BLOCKS.SE4_RENDERED.slice(6, 10).join('\n').slice(RES.length);
+      check(M !== null && M.includes(`${RES}${f9Tail}\n\n`) && f9Tail.startsWith('Older Git releases') && f9Tail.endsWith('the exact-path command.') && eq(i17EvalSecurity(M), []), 'SE4_17 controls: the model carries the canonical F9 prose once and satisfies every rule', M === null ? 'no model' : i17EvalSecurity(M));
+      if (M !== null && M.includes(f9Tail)) {
+        const wrapAt = (str, cols) => { const out = []; let line = ''; for (const w of str.split(/\s+/)) { if (line !== '' && `${line} ${w}`.length > cols) { out.push(line); line = w; } else line = line === '' ? w : `${line} ${w}`; } out.push(line); return out.join('\n'); };
+        const accepted = [
+          ['the F9 prose on one line', M.replace(f9Tail, () => f9Tail.replace(/\n/g, ' '))],
+          ['the F9 prose wrapped at 60 columns', M.replace(f9Tail, () => wrapAt(f9Tail, 60))],
+          ['the F9 sentence starting on its own line', M.replace(`${RES}${f9Tail}`, () => `GIT_SAFE_REPOSITORY result.\n${f9Tail}`)],
+          ['the F9 prose wrapped at 100 columns', M.replace(f9Tail, () => wrapAt(f9Tail, 100))],
+        ];
+        for (const [name, x] of accepted) check(amendmentOnce(x, SE4) && reverseOne(x, SE4) !== null && eq(i17EvalSecurity(x), []), `SE4_17: ${name} is accepted (only the wrapping of the F9 prose is free)`, i17EvalSecurity(x));
+        const rejects = (name, x, want, collapsedAccepts = true) => {
+          check(x !== M && !amendmentOnce(x, SE4) && reverseOne(x, SE4) === null, `SE4_17: ${name} is rejected by the reversal`);
+          const got = i17EvalSecurity(x);
+          check(want.every((w) => got.includes(w)), `SE4_17: ${name} is reported by the strict instruction check (${want.join(', ')})`, got);
+          if (collapsedAccepts) check(squash(x) === squash(M), `SE4_17: premise of the control: ${name} would pass a whitespace-collapsed comparison`);
+        };
+        const pre = C17_LITERALS.OWNERSHIP_PREFIX; const quoted = `"${pre}"`;
+        check(M.includes(quoted) && pre === 'fatal: detected dubious ownership in repository at ', 'SE4_17 controls: the quoted prefix is the frozen English text with its trailing space');
+        rejects('a doubled space after "fatal:" (the review finding)', M.replace('"fatal: detected', () => '"fatal:  detected'), ['SE4_17-anchor', 'se4-prefix']);
+        [...pre].forEach((ch, k) => { if (ch === ' ') rejects(`a doubled space at offset ${k} of the quoted prefix`, M.replace(quoted, () => `"${pre.slice(0, k)}  ${pre.slice(k + 1)}"`), ['SE4_17-anchor', 'se4-prefix']); });
+        rejects('a tab inside the quoted prefix', M.replace(quoted, () => quoted.replace('fatal: detected', 'fatal:\tdetected')), ['SE4_17-anchor', 'se4-prefix']);
+        rejects('a line break inside the quoted prefix', M.replace(quoted, () => quoted.replace('fatal: detected', 'fatal:\ndetected')), ['SE4_17-anchor', 'se4-prefix']);
+        rejects('the trailing space of the quoted prefix removed', M.replace(quoted, () => `"${pre.trimEnd()}"`), ['SE4_17-anchor', 'se4-prefix'], false);
+        rejects('a changed capital in the quoted prefix', M.replace(quoted, () => quoted.replace('fatal', 'Fatal')), ['SE4_17-anchor', 'se4-prefix'], false);
+        rejects('the first two paragraphs merged (no blank line)', M.replace('repository content.\n\nLocalized', () => 'repository content.\nLocalized'), ['SE4_17-anchor', 'se4-boundaries']);
+        rejects('an extra blank line between the first two paragraphs', M.replace('repository content.\n\nLocalized', () => 'repository content.\n\n\nLocalized'), ['SE4_17-anchor', 'se4-boundaries']);
+        rejects('the last two paragraphs merged (no blank line)', M.replace('exact-path command.\n\nGIT_SAFE_OWNERSHIP', () => 'exact-path command.\nGIT_SAFE_OWNERSHIP'), ['SE4_17-anchor', 'se4-boundaries']);
+        rejects('an extra blank line between the last two paragraphs', M.replace('exact-path command.\n\nGIT_SAFE_OWNERSHIP', () => 'exact-path command.\n\n\nGIT_SAFE_OWNERSHIP'), ['SE4_17-anchor', 'se4-boundaries']);
+        rejects('a blank line inside the F9 prose (a split paragraph)', M.replace('do not\nperform', () => 'do not\n\nperform'), ['SE4_17-anchor'], false);
+        rejects('the frozen words before the F9 splice re-flowed onto one line', M.replace('keep the existing\nGIT_SAFE_REPOSITORY result.', () => 'keep the existing GIT_SAFE_REPOSITORY result.'), ['SE4_17-anchor', 'se4-boundaries']);
+        rejects('a doubled space inside the F9 prose', M.replace('word this refusal', () => 'word  this refusal'), ['SE4_17-anchor']);
+        rejects('a tab inside the F9 prose', M.replace('word this refusal', () => 'word\tthis refusal'), ['SE4_17-anchor']);
+        // The instruction evaluation normalizes line ends (the byte convention is its own check), so a carriage return is refused by the reversal and by the byte convention.
+        const crVariant = M.replace('do not\nperform', () => 'do not\r\nperform');
+        check(crVariant !== M && !amendmentOnce(crVariant, SE4) && reverseOne(crVariant, SE4) === null && byteConvention(Buffer.from(crVariant, 'utf8')) === 'contains CR', 'SE4_17: a carriage return inside the F9 prose is rejected by the reversal and by the byte convention');
+        rejects('trailing whitespace after the F9 prose', M.replace('exact-path command.\n\n', () => 'exact-path command. \n\n'), ['SE4_17-anchor'], false);
+        rejects('the first paragraph re-flowed', M.replace('beginning exactly with\n', () => 'beginning exactly with '), ['SE4_17-anchor']);
+        rejects('the third paragraph re-flowed', M.replace('Agents MUST stop on it to\npreserve', () => 'Agents MUST stop on it to preserve'), ['SE4_17-anchor']);
+      }
+      const dropF9 = M === null ? null : M.replace(squash(C17_LITERALS.F9B.join(' ')).split(' ').slice(0, 4).join(' '), () => 'x');
+      check(dropF9 !== null && !amendmentOnce(dropF9, SE4), 'SE4_17: a text that loses a word of the F9 older-Git sentence is rejected');
     });
     await step('docs-sync, all four wrappers, the root and nested templates and references/docs-generation.md are byte-identical to their pre-C17 raw SHA-256 pins (neither docs-sync nor any wrapper contains the raw HEAD step); the Codex wrapper exception stays exactly the bounded GIT_SAFE_ARGUMENT/GIT_SAFE_PATTERN correction; none of them names GIT_SAFE_OWNERSHIP or a rev-parse', async () => {
       for (const [rel, digest] of I17_UNCHANGED_PINS) {
@@ -1717,8 +1815,8 @@ async function hostDocs(context) {
 // 8b9b4772, rc.2 release 76d3b226, rc.3 release 7a509902) from tests/fixtures/c17-upgrade-baselines.json (19 members each: the seven runtime files, both canonical agents, the four wrappers,
 // the four root and nested instruction templates, the runtime catalog and VERSION), pinned entry by entry below and cross-checked at run time against the older pinned fixtures
 // (c13-rc1-agents.json, c16-prechange.json, c17-prechange.json). Synthetic project names, placeholder values and manifest metadata are rendered by this test; no production script reads the fixture.
-// The rc.4 expectation is rendered independently: the rc.3 bytes with the frozen R17 and RD17 amendments applied by the helper. PLAN-GAP: the plan freezes git-safe-core.mjs behavior, not its
-// hunks, so the delivered core is compared with the current skill file (and shown to differ from every baseline core, to know `head` and to reject nothing else); every other member has an independent oracle.
+// The rc.4 expectation is rendered independently: the rc.3 bytes with the frozen R17 and RD17 amendments and, since decision I17-4, the 21 exact core hunks (G17a..G17u, pinned from the implemented
+// bytes) applied by the helper; every member therefore has an independent oracle and the core is also shown to differ from every baseline core.
 // PLAN-GAP: rc.1 has no project-rule extensions (C14 introduced them in rc.2), so only the rc.2 and rc.3 projects carry them. The installed policy is a schema-2 file with a project addition; the update stages none, so its bytes must stay.
 const U17_PINS = {
   rc1: {
@@ -1992,17 +2090,17 @@ async function update(context) {
     });
 
     // ---- the independent expectation of the rc.4 end state --------------------------------------------------------------------
-    const model = { reviewer: modelOf(fx, 'assets/agents/reviewer.md'), rdiff: modelOf(fx, 'assets/tools/review-diff.mjs') };
-    if (model.reviewer === null || model.rdiff === null) { check(false, 'the pre-C17 reviewer and review-diff take the frozen R17 and RD17 amendments exactly once'); return; }
+    const model = { reviewer: modelOf(fx, 'assets/agents/reviewer.md'), rdiff: modelOf(fx, 'assets/tools/review-diff.mjs'), core: modelOf(fx, 'assets/tools/git-safe-core.mjs') };
+    if (model.reviewer === null || model.rdiff === null || model.core === null) { check(false, 'the pre-C17 reviewer, review-diff and core take the frozen R17 and RD17 amendments and the 21 core hunks exactly once'); return; }
     const sourceMissing = U17_TARGETS.filter((x) => cur(x.src) === null).map((x) => x.src);
     if (sourceMissing.length) { check(false, 'the shipped assets are readable', sourceMissing); return; }
-    const EXP = {}; // the expected rc.4 text of every managed target (core: PLAN-GAP, the current file)
+    const EXP = {}; // the expected rc.4 text of every managed target
     const CUR = {}; // what setup renders from the current assets
     for (const x of U17_TARGETS) {
       let expected = baseText('rc3', x.src); // everything C17 leaves alone equals the rc.3 bytes
       if (x.src === 'assets/agents/reviewer.md') expected = model.reviewer;
       else if (x.src === 'assets/tools/review-diff.mjs') expected = model.rdiff;
-      else if (x.src === 'assets/tools/git-safe-core.mjs') expected = cur(x.src);
+      else if (x.src === 'assets/tools/git-safe-core.mjs') expected = model.core;
       EXP[x.t] = u17Render(x.kind, expected);
       CUR[x.t] = u17Render(x.kind, cur(x.src));
     }
@@ -2011,8 +2109,8 @@ async function update(context) {
     const OLD = { rc1: rendered('rc1'), rc2: rendered('rc2'), rc3: rendered('rc3') };
     const versionFile = (readText(skillPath(context, 'VERSION')) || '');
 
-    await step('the premises: the shipped assets render to exactly the independent expectation (rc.3 bytes plus the frozen R17 and RD17 amendments; the core is the current file and differs from every baseline core), the delivered targets differ from each baseline in exactly the written-out sets (rc.3: reviewer, core, review-diff; rc.2: plus docs-sync, both Codex wrappers, hooks-selftest and the claude block; rc.1: plus the AGENTS critical-rules block), and VERSION is exactly 3.0.0-rc.4', async () => {
-      for (const t of U17_ALL) if (t !== U17_CORE) check(CUR[t] === EXP[t], `${t}: the shipped asset renders to exactly the independent expectation`);
+    await step('the premises: the shipped assets render to exactly the independent expectation (rc.3 bytes plus the frozen R17 and RD17 amendments and the 21 exact core hunks; the core differs from every baseline core), the delivered targets differ from each baseline in exactly the written-out sets (rc.3: reviewer, core, review-diff; rc.2: plus docs-sync, both Codex wrappers, hooks-selftest and the claude block; rc.1: plus the AGENTS critical-rules block), and VERSION is exactly 3.0.0-rc.4', async () => {
+      for (const t of U17_ALL) check(CUR[t] === EXP[t], `${t}: the shipped asset renders to exactly the independent expectation`);
       check(cur('assets/tools/git-safe-core.mjs') !== null && U17_IDS.every((id) => cur('assets/tools/git-safe-core.mjs') !== baseText(id, 'assets/tools/git-safe-core.mjs')), 'the shipped core differs from the rc.1, rc.2 and rc.3 cores');
       check(model.reviewer !== baseText('rc3', 'assets/agents/reviewer.md') && model.rdiff !== baseText('rc3', 'assets/tools/review-diff.mjs'), 'the expected reviewer and review-diff differ from rc.3');
       for (const id of U17_IDS) {
@@ -2199,6 +2297,44 @@ async function update(context) {
         check(readText(u17Project(root, U17_CORE)) === `${CUR[U17_CORE]}// later edit\n` && readText(u17Project(root, U17_REVIEWER)) === OLD.rc3[U17_REVIEWER] && readText(u17Project(root, U17_RDIFF)) === OLD.rc3[U17_RDIFF] && Buffer.compare(readBytes(u17Project(root, U17_MANIFEST)), manifestBefore) === 0 && Object.entries(unchangedBefore).every(([t, b]) => Buffer.compare(readBytes(u17Project(root, t)), b) === 0) && Object.entries(extensions).every(([t, text]) => readText(u17Project(root, t)) === text), 'the later edit remains; the reviewer and review-diff are back at the rc.3 bytes; the manifest, unchanged outputs and extensions are untouched');
         check(exists(path.join(root, '.ai', '.run', U17_RUN_A, 'vault', 'backup', '.ai', 'tools', 'git-safe-core.mjs')), 'the backup of the later-edited core is retained for the user to resolve');
       });
+
+      // ================================= clean rollback of every authentic baseline (C17-15 step 9, I17-7) =================================
+      for (const id of U17_IDS) {
+        await step(`${id} clean rollback (C17-15 step 9, I17-7): after a normal approved update of the authentic ${BL[id].version} installation the rollback with the updating tooling is complete (exit 0, nothing skipped) and restores every managed target to its authentic baseline bytes and the manifest to its original bytes, records and version, leaving the project extensions, the policy and the unchanged outputs byte for byte as they were; the restored core is the baseline core again (it rejects head); an incomplete restoration (a core, reviewer, review-diff, manifest version or manifest record left at rc.4, or a later byte) is reported by the same check`, async () => {
+          const { root, extensions } = project(id);
+          const baselineSpec = { ...specOf(id, {}, extensions), text: OLD[id], version: BL[id].version };
+          const pre = u17DeliveryIssues(root, baselineSpec, blocks);
+          check(pre.length === 0, `${id}: premise: the synthetic installation is exactly the authentic baseline before the update`, pre.slice(0, 4));
+          const before = Object.fromEntries([...U17_ALL, U17_MANIFEST, U17_POLICY, ...Object.keys(extensions)].map((t) => [t, readBytes(u17Project(root, t))]));
+          if (!kit.begin(root, U17_RUN_A)) return;
+          kit.stage(root, U17_RUN_A, drafts());
+          const p = kit.prepare(root, U17_RUN_A);
+          const c = p.json && p.json.planSha256 ? kit.commit(root, U17_RUN_A, p.json.planSha256) : null;
+          const delivered = c !== null && c.code === 0 ? u17DeliveryIssues(root, specOf(id, {}, extensions), blocks) : ['the update did not commit'];
+          check(p.code === 0 && c !== null && c.code === 0 && c.json && c.json.committed === true && delivered.length === 0, `${id}: the update commits and delivers the rc.4 state before the rollback`, { prepare: p.code, commit: c && c.code, issues: delivered.slice(0, 3) });
+          const rb = kit.rollback(root, U17_RUN_A);
+          // A complete rollback reports no skipped file (the key exists only on an incomplete one) and lists what it restored: exactly the changed targets and the manifest.
+          const restored = rb.json && Array.isArray(rb.json.restored) ? rb.json.restored.slice().sort() : null;
+          check(rb.code === 0 && rb.json && rb.json.ok === true && rb.json.complete === true && rb.json.skipped === undefined && eq(restored, [...U17_CHANGED[id], U17_MANIFEST].sort()), `${id}: the rollback is complete (exit 0, nothing skipped) and restores exactly the changed targets and the manifest`, { code: rb.code, restored, out: rb.stdout.slice(0, 300) });
+          const issues = u17DeliveryIssues(root, baselineSpec, blocks);
+          check(issues.length === 0, `${id}: every managed target, every manifest record and the version are back at the authentic ${BL[id].version} baseline`, issues.slice(0, 6));
+          const moved = Object.entries(before).filter(([t, b]) => b === null || Buffer.compare(readBytes(u17Project(root, t)) || Buffer.alloc(0), b) !== 0).map(([t]) => t);
+          check(moved.length === 0, `${id}: every managed target, the manifest, the policy and the project extensions are byte for byte what they were before the update`, moved);
+          expectOldHead(root, `${id} after the rollback`);
+          const damaged = (name, mutate, want) => {
+            const copy = copyTree(root, path.join(dir, `rbctl-${(counter += 1)}`));
+            mutate(copy);
+            const got = u17DeliveryIssues(copy, baselineSpec, blocks);
+            check(got.length > 0 && got.some((i) => i.startsWith(want)), `${id} control: ${name} is reported as an incomplete restoration`, got.slice(0, 3));
+          };
+          damaged('the core left at the rc.4 bytes', (r) => putFile(u17Project(r, U17_CORE), CUR[U17_CORE]), U17_CORE);
+          damaged('the reviewer left at the rc.4 bytes', (r) => putFile(u17Project(r, U17_REVIEWER), CUR[U17_REVIEWER]), U17_REVIEWER);
+          damaged('review-diff left at the rc.4 bytes', (r) => putFile(u17Project(r, U17_RDIFF), CUR[U17_RDIFF]), U17_RDIFF);
+          damaged('the manifest left at the committed rc.4 version', (r) => { const m = readJson(u17Project(r, U17_MANIFEST)); m.skillVersion = U17_VERSION; putFile(u17Project(r, U17_MANIFEST), jsonText(m)); }, 'manifest skillVersion');
+          damaged('a manifest record left at the rc.4 hash', (r) => { const m = readJson(u17Project(r, U17_MANIFEST)); m.files[U17_CORE] = { ownership: 'full', sha256: NH(CUR[U17_CORE]) }; putFile(u17Project(r, U17_MANIFEST), jsonText(m)); }, `${U17_CORE}: manifest`);
+          damaged('a restored file with a later byte', (r) => fs.appendFileSync(u17Project(r, U17_DOCSYNC), '\n'), U17_DOCSYNC);
+        });
+      }
 
       // ================================= the runtime unit is staged whole (C17-15, F12) =================================
       await step('the unit is staged whole and a changed member cannot be declined: a plan that stages only the two changed runtime members, a plan that keeps the old core and a plan that keeps the old review-diff are each refused (exit nonzero, ok false) with nothing written and no plan file', async () => {
@@ -2398,8 +2534,9 @@ async function release(context) {
 
 // ============================================ V2/C17/preservation ====
 // Plan C17-5, C17-11, C17-12, C17-13, C17-14 (preservation row), C17-18, F1, F7 and F8: every exact C17 amendment is verified once at its stated anchor and reversed, and the reversal must give the pinned pre-C17 bytes (so nothing else changed); a missing, duplicated,
-// moved, altered or differently spaced amendment, and the same amendment looked for in another file, fails before any historical hashing. The core has no exact amendment (PLAN-GAP: the plan freezes its behavior, not its hunks): its pre-C17 view is the committed fixture entry
-// with the plan's raw SHA-256, and the regions the plan says stay unchanged are compared with it instead. The root TODO.md chain is: actual TODO -> exact C17 blocker reversal -> the pre-C17 TODO hash -> the existing C16 reversal -> H8D85 -> the C14 T chain (the last two
+// moved, altered or differently spaced amendment, and the same amendment looked for in another file, fails before any historical hashing. The plan freezes the core's behavior, not its hunks, so after the implementation its 21 hunks (G17a..G17u) are pinned as exact amendments taken from
+// the implemented bytes (decision I17-4, precedent I12-1): reversing them from the current core must give the committed pre-C17 core (raw SHA-256 ad1c51db...),
+// so no historical check substitutes a whole fixture file for the current core (C17-5), and the regions the plan says stay unchanged are also compared with the fixture. The root TODO.md chain is: actual TODO -> exact C17 blocker reversal -> the pre-C17 TODO hash -> the existing C16 reversal -> H8D85 -> the C14 T chain (the last two
 // are checked by C14 and C16 on this view). The C16 records, the six v2 snapshots, the baseline checker and every file C17-4 lists as byte-identical keep their raw SHA-256 values from the inspected commit.
 const PV_TODO_NEEDS = '## Needs manual review\n';
 function pvNormalizeTodo(text) {
@@ -2455,7 +2592,7 @@ async function preservation(context) {
       check(scripts.every((t) => !t.includes('c17-prechange') && !t.includes('c17-upgrade-baselines')), 'no production script reads a C17 fixture');
       check(eq(PRE_C17.map(([rel]) => rel), PRE_C17_FILES.map((p) => (p.startsWith('project-setup/') ? p.slice('project-setup/'.length) : `@root/${p}`))), 'the helper and this test list the same thirteen files in the same order');
     });
-    await step('every file C17 amends reverses exactly to its pinned pre-C17 bytes: the eleven files with exact amendments (the byte convention, each amendment once at its anchor checked at its turn, the reversal in reverse order equal to the plan\'s raw SHA-256) and the core, whose pre-C17 view is the fixture entry; the three runtime identities that move (core, review-diff, reviewer) differ from their pre-C17 hashes', async () => {
+    await step('every file C17 amends reverses exactly to its pinned pre-C17 bytes: the twelve files with exact amendments (the byte convention, each amendment once at its anchor checked at its turn, the reversal in reverse order equal to the plan\'s raw SHA-256), which since I17-4 include the core with its 21 hunks; the three runtime identities that move (core, review-diff, reviewer) differ from their pre-C17 hashes', async () => {
       for (const rel of AMENDED_FILES17) {
         const r = checkAmendedFile(check, context, fx, rel);
         check(r !== null && r.reversed !== null && r.text !== r.reversed, `${rel}: the amendments are installed (the current text differs from its pre-C17 view)`);
@@ -2468,7 +2605,55 @@ async function preservation(context) {
       check(rd !== null && sha(rd) !== PRE_PIN['assets/tools/review-diff.mjs'] && reverseOne(rd.toString('utf8'), AM17.RD17) === (fx.files['assets/tools/review-diff.mjs'] || Buffer.alloc(0)).toString('utf8'), 'review-diff.mjs moved only through its one exact amendment (the command-list diagnostic): reversing RD17 gives the pre-C17 bytes');
       const rv = readBytes(skillPath(context, 'assets/agents/reviewer.md'));
       check(rv !== null && sha(rv) !== PRE_PIN['assets/agents/reviewer.md'], 'the source reviewer identity moved from d3d56613...', rv && sha(rv));
-      check(AMENDED_FILES17.length === 11 && eq([...AMENDED_FILES17].sort(), PRE_C17.map(([rel]) => rel).filter((rel) => rel !== PV_CORE_PRE_REL && rel !== '@root/TODO.md').sort()), 'the eleven amended files plus the core and the TODO are the thirteen fixture files', AMENDED_FILES17);
+      check(AMENDED_FILES17.length === 12 && eq([...AMENDED_FILES17].sort(), PRE_C17.map(([rel]) => rel).filter((rel) => rel !== '@root/TODO.md').sort()), 'the twelve amended files (the core included) plus the TODO are the thirteen fixture files', AMENDED_FILES17);
+    });
+    await step('the core (I17-4, C17-RV1): its 21 C17 hunks G17a..G17u, pinned from the implemented bytes, stand once each at their anchors, reverse in reverse order to exactly the pre-C17 core (raw SHA-256 ad1c51db...) and apply forward to exactly the current core, so a historical check never substitutes a whole fixture file; an unrelated edit of the current core and a missing, duplicated, misplaced or modified hunk each fail the exact view', async () => {
+      const coreRel = PV_CORE_PRE_REL;
+      const ids = FORWARD_ORDER17[coreRel] || [];
+      const letters = 'abcdefghijklmnopqrstu';
+      check(eq([...ids], [...letters].map((c) => `G17${c}`)) && eq([...(REVERSAL_ORDER17[coreRel] || [])], [...ids].reverse()) && ids.every((id) => AM17[id] && AM17[id].file === coreRel), 'the core has exactly the hunks G17a..G17u in file order and the reverse order is their reversal', ids);
+      const pre = preText(fx, coreRel); const curRaw = readText(skillPath(context, coreRel));
+      if (pre === null || curRaw === null) { check(false, 'the pre-C17 core (fixture) and the current core are readable'); return; }
+      const cur = LF(curRaw);
+      // The exact view the historical sites use: every hunk reversed and verified, then the result must be the pre-C17 core by its raw SHA-256 (the helper cannot hash).
+      const coreView = (t) => { const r = reverseForFile(t, coreRel); if (r.text === null) return null; const b = Buffer.from(r.text, 'utf8'); return sha(b) === PRE_PIN[coreRel] ? b : null; };
+      const view = coreView(curRaw);
+      check(view !== null && Buffer.compare(view, fx.files[coreRel]) === 0 && sha(view) === 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85', 'reversing the 21 hunks from the current core gives exactly the pre-C17 core (31839 bytes, SHA-256 ad1c51db... of plan C17-12)', view && sha(view));
+      check(view !== null && view.length === 31839, 'the reversed core is 31839 bytes', view && view.length);
+      check(applyForFile(pre, coreRel) === curRaw && curRaw === cur, 'applying the 21 hunks forward to the pre-C17 core gives exactly the current core (the hunks describe the whole delta, nothing more)');
+      for (const id of ids) {
+        const a = AM17[id];
+        check(COUNT(pre, a.before + a.old + a.after) === 1 && COUNT(cur, a.before + a.neu + a.after) === 1 && COUNT(cur, a.neu) === 1 && a.neu !== '' && a.neu.endsWith('\n'), `${id}: its pre-C17 slice stands once in the pre-C17 core, its amended slice and its new block once in the current core`);
+      }
+      // Every hunk fails in every mode (missing, partial, duplicated, moved, altered, spaced, CRLF, wrong file) before any historical hashing.
+      for (const id of ids) amendmentControls(check, `core ${id}`, modelThrough(fx, coreRel, id) || '', AM17[id], { otherFileText: sourceText(context, 'SKILL.md') || '' });
+      // A modified, missing, duplicated or moved hunk in the current core stops the reversal at exactly that hunk (never a silent partial view).
+      for (const id of ids) {
+        const a = AM17[id];
+        const modified = cur.replace(a.neu, () => `${a.neu.slice(0, -2)}${a.neu.slice(-2, -1) === ';' ? ':' : ';'}\n`);
+        const missing = cur.replace(a.before + a.neu + a.after, () => a.before + a.old + a.after);
+        const duplicated = cur.replace(a.before + a.neu, (m) => m + a.neu);
+        const moved = cur.replace(a.before + a.neu + a.after, () => a.before + a.after) + a.neu;
+        for (const [name, x] of [['modified', modified], ['missing', missing], ['duplicated', duplicated], ['misplaced', moved]]) {
+          const r = reverseForFile(x, coreRel);
+          check(x !== cur && r.text === null && r.failed === id && coreView(x) === null, `core ${id}: a ${name} hunk fails the reversal at ${id}`, r.failed);
+        }
+      }
+      // An unrelated edit of the current core never reaches the historical comparison as the pre-C17 core: the exact view is refused or is not the pinned bytes.
+      const unrelated = [
+        ['a comment appended at the end of the file', `${cur}// unrelated\n`],
+        ['an unrelated constant changed', cur.replace('export const MAX_GIT_ARG_UNITS = 24000;', () => 'export const MAX_GIT_ARG_UNITS = 24001;')],
+        ['the output bound changed', cur.replace('export const MAX_OUTPUT_BYTES = 1048576;', () => 'export const MAX_OUTPUT_BYTES = 1048577;')],
+        ['an unrelated line deleted', cur.replace('const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;\n', () => '')],
+        ['an unrelated line duplicated', cur.replace('const MAX_COUNT = 2147483647;\n', () => 'const MAX_COUNT = 2147483647;\nconst MAX_COUNT = 2147483647;\n')],
+        ['trailing whitespace added to an unrelated line', cur.replace('export const MAX_OUTPUT_BYTES = 1048576;\n', () => 'export const MAX_OUTPUT_BYTES = 1048576; \n')],
+        ['an unrelated blank line inserted at the top', `\n${cur}`],
+        ['an edit inside a C16 hunk (the empty-tree probe)', cur.replace(AM16.G16c.neu, () => AM16.G16c.neu.replace('\n', ' \n'))],
+        ['CRLF line ends', cur.replace(/\n/g, '\r\n')],
+        ['a BOM', `\ufeff${cur}`],
+      ];
+      for (const [name, x] of unrelated) check(x !== cur && coreView(x) === null, `core: ${name} fails the exact pre-C17 view`);
+      check(coreView(cur) !== null && coreView(`${cur}`) !== null, 'control: the unmodified current core gives the exact pre-C17 view');
     });
     await step('the regions of the core that the plan says stay unchanged are byte-identical to the pre-C17 core (the fixed prefix, the output bound, the argument bound and the object-ID and empty-tree constants, and the C16 grep empty-tree probe block with its -E vector), so only the head form, the ownership classification and their messages changed', async () => {
       const pre = preText(fx, PV_CORE_PRE_REL) || '';
@@ -2558,6 +2743,13 @@ async function preservation(context) {
         'tests/c16.test.mjs': ['49596e4814ef48880a6e08ea2741f667a29c2aa1a12ed098a9cb4b65dc9b3548', '4c6eb90964c0106b4a1daa518524096eca4b6a428feab1dcb1cab8d3b981d5be', 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85', '8059a41c48a4ff78819ca5926ec81bba23f0c4fef29d0c710d77765f8c59ceab', 'ef2f32bda081d9597a6cfdd463b76a9c85f128974ab3d583f6e8be69464672d7'],
       };
       for (const [rel, digests] of Object.entries(hist)) { const src = text(rel) || ''; for (const d of digests) check(src.includes(d), `${rel} still carries the historical digest ${d.slice(0, 8)}...`); }
+      // I17-4 (C17-RV1, C17-5): no historical check replaces the current core by the fixture; each site reverses the exact hunks of the current file.
+      for (const rel of ['tests/c13.test.mjs', 'tests/c14.test.mjs']) {
+        const src = text(rel) || '';
+        check(!src.includes("c17PreBytes(context, 'project-setup/assets/tools/git-safe-core.mjs')") && src.includes('the exact C17 reversal of the current core') && src.includes('ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85'), `${rel} reverses the exact C17 hunks of the current core (no whole-file fixture substitution) and keeps the ad1c51db... check`);
+      }
+      const c16src = text('tests/c16.test.mjs') || '';
+      check(!c16src.includes('if (rel === C17_CORE_REL) { const b = c17FixtureBytes') && c16src.includes('the exact C17 reversal of the current core') && c16src.includes('ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85'), 'tests/c16.test.mjs derives the pre-C17 core by reversing the exact C17 hunks of the current core (no whole-file fixture substitution)');
       const c16 = text('tests/c16.test.mjs') || '';
       check(c16.includes('rows.slice(33)') && !c16.includes('rows.slice(-2)') && c16.includes("head: 'head'"), 'C16 checks the fixture rows with slice(33) and the supported forms with the head key (C17-F1 items 1 and 2)');
       const c15 = text('tests/c15.test.mjs') || ''; const c13 = text('tests/c13.test.mjs') || ''; const c14 = text('tests/c14.test.mjs') || '';
@@ -2812,7 +3004,7 @@ async function contracts(context) {
       const preIssues = pre.core === null ? null : ctStopCoverage(text('assets/agents/reviewer.md') || '', pre.core);
       check(preIssues !== null && eq(preIssues, ['the emitters do not carry GIT_SAFE_OWNERSHIP (premise)']), 'control: the pre-C17 core does not carry the ownership code (the check is about the new code)', preIssues);
     });
-    await step('the amendment helper is pure and exact: it exports exactly the listed names, imports nothing, uses no file access, process, console, clock or randomness outside strings and comments, and is ASCII (non-ASCII text is written as escapes); every amendment has exactly the five fields (SE4_17 also flex), is frozen, ends with one LF where it has text, has no implicit leading blank line and names an amended file; the forward and reverse orders cover the eleven amended files in plan order; the descriptor list and the R29 block are the plan\'s', async () => {
+    await step('the amendment helper is pure and exact: it exports exactly the listed names, imports nothing, uses no file access, process, console, clock or randomness outside strings and comments, and is ASCII (non-ASCII text is written as escapes); every amendment has exactly the five fields (SE4_17 also flex), is frozen, ends with one LF where it has text, has no implicit leading blank line and names an amended file; the forward and reverse orders cover the twelve amended files in plan order; the descriptor list and the R29 block are the plan\'s', async () => {
       const helperPath = skillPath(context, 'tests/helpers/c17-amendments.mjs');
       const src = readText(helperPath) || '';
       check(src !== '' && !/^\s*import\s/m.test(src) && !/\bimport\(/.test(src) && !/\brequire\(/.test(src), 'the helper imports nothing (it cannot import a component module)');
@@ -2830,7 +3022,7 @@ async function contracts(context) {
       check(eq(Object.keys(H.TD17), FIVE) && Object.isFrozen(H.TD17) && H.TD17.file === '@root/TODO.md' && H.TD17.neu.endsWith('\n') && H.TD17.old.endsWith('\n\n'), 'TD17 has exactly the five fields, is frozen and replaces a whole block with its trailing blank line');
       const covered = Object.values(H.FORWARD_ORDER17).flat();
       check(eq([...covered].sort(), Object.keys(H.AM17).sort()) && new Set(covered).size === covered.length, 'every amendment is in exactly one forward order', covered.length);
-      check(Object.entries(H.FORWARD_ORDER17).every(([f, ids]) => eq([...ids].reverse(), [...H.REVERSAL_ORDER17[f]]) && ids.every((id) => H.AM17[id].file === f) && Object.isFrozen(ids)) && H.AMENDED_FILES17.length === 11, 'the reverse order of each file is its forward order reversed and every amendment names its own file');
+      check(Object.entries(H.FORWARD_ORDER17).every(([f, ids]) => eq([...ids].reverse(), [...H.REVERSAL_ORDER17[f]]) && ids.every((id) => H.AM17[id].file === f) && Object.isFrozen(ids)) && H.AMENDED_FILES17.length === 12, 'the reverse order of each file is its forward order reversed and every amendment names its own file');
       check(eq(JSON.parse(JSON.stringify(H.C17_DESCRIPTORS)), EXPECTED_DESCRIPTORS) && H.C17_R29_BLOCK.length === 14 && H.C17_R29_BLOCK[0] === 'const c17context = {' && H.C17_R29_BLOCK[13] === '});', 'the descriptor list is the plan\'s and the R29 block is its 14 lines');
       check(typeof H.reverseOne === 'function' && H.reverseOne('x', { file: 'x', before: '', old: '', neu: 'x\n', after: '' }) === null && H.applyOne('x', { file: 'x', before: '', old: 'zz', neu: 'y', after: '' }) === null, 'a synthetic amendment shows the failure modes: a text without the amended slice is refused in both directions (never a substring deletion)');
     });

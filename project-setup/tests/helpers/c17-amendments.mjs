@@ -13,8 +13,11 @@
 // duplicated, altered, moved or differently spaced amendment is refused (null). There is no substring deletion and no refreshed digest.
 //
 // PLAN-GAPs this module resolves (each is reported to the orchestrator): (1) the plan freezes git-safe-core.mjs behavior and messages
-// but no hunks, so the core has no exact amendment here (its pre-C17 view is the verified fixture entry; CORE_FROZEN_LITERALS lists
-// what the plan does freeze); (2) F9's sentence inside the security.md paragraph has no frozen wrapping, so that one block (SE4_17)
+// but no hunks (CORE_FROZEN_LITERALS lists what the plan does freeze). Decision I17-4 (review round 1, C17-RV1) pins the core's 21
+// C17 hunks, G17a..G17u, after the implementation as exact amendments (old block, new block and anchors) taken from the implemented
+// bytes (the precedent is I12-1); reversing them from the current core gives exactly the pre-C17 core (SHA-256 ad1c51db..., checked by
+// the callers, which hash), so a historical check never substitutes a whole fixture file for the current core (C17-5);
+// (2) F9's sentence inside the security.md paragraph has no frozen wrapping, so that one block (SE4_17)
 // is compared with whitespace collapsed; (3) the root README tree line (242) and the skill README S07 sentence hold current-candidate
 // tokens that F7 does not list by line, and they move to rc.4 with the others; (4) F5 is read as inserting the skill-reference input
 // after evaluation 38's first files element (the fixed-diagnostic input stays).
@@ -490,8 +493,10 @@ const COUNT = (text, part) => (part === '' ? 0 : String(text).split(part).length
 const squash = (s) => String(s).replace(/\s+/g, ' ').trim();
 
 // The security.md paragraph that C17-8 item 4 inserts, with the F9 sentence spliced after "GIT_SAFE_REPOSITORY result." (the plan
-// does not freeze how that sentence is wrapped, so this rendering is canonical and the comparison of the real file is
-// whitespace-insensitive for this one block; every other block is compared byte for byte).
+// does not freeze how that sentence is wrapped, so this rendering is canonical). Decision I17-6: only the line breaks of the F9 prose
+// (the spliced sentence and the rest of that paragraph) may differ from it; the quoted "fatal: detected dubious ownership in
+// repository at " prefix, the first paragraph, the wrapping of the frozen words that precede the splice and the paragraph
+// boundaries are compared byte for byte, like every other block.
 const SE4_RENDERED = [
   ...SE4_PLAN.slice(0, 6),
   'GIT_SAFE_REPOSITORY result. Older Git releases word this refusal differently or do not',
@@ -500,7 +505,6 @@ const SE4_RENDERED = [
   'effective global or system safe.directory prerequisite and the exact-path command.',
   ...SE4_PLAN.slice(9),
 ];
-const SE4_FLAT = squash(T(SE4_PLAN).replace('GIT_SAFE_REPOSITORY result. Neither', `GIT_SAFE_REPOSITORY result. ${F9B.join(' ')} Neither`));
 
 // ------------------------------------------------ pre-C17 text not given by the plan ----
 // Inspected at eac5b07 (the pins in tests/fixtures/c17-prechange.json prove that every reversal lands on those exact bytes).
@@ -527,13 +531,378 @@ const RD_NEW = "  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, l
 const NEST12_LAST = 'Nest 11. See `backend-standards/SKILL.md` \u00a7 "Nest 12".';
 const CODEX_LAST_PARA = 'The older 0.160.1 observations above remain historical observations of that configuration.\n';
 
+// ------------------------------------------------- git-safe-core.mjs hunks (I17-4) ----
+// The 21 C17 hunks of assets/tools/git-safe-core.mjs, taken from the implemented bytes against the pre-C17 core (SHA-256 ad1c51db...
+// of plan C17-12) and verified forward and backward on those exact bytes. Each hunk is an exact old block, new block and anchors made
+// only of unchanged lines; the anchors are two lines where two exist (one where a neighbouring hunk leaves one). An empty list is an
+// empty block (an insertion has no old block).
+const CORE_REL17 = 'assets/tools/git-safe-core.mjs';
+const CORE_HUNKS = [
+  { id: 'G17a',
+    before: [
+      "export const MAX_GIT_ARG_UNITS = 24000;",
+      "const MAX_COUNT = 2147483647;",
+    ],
+    old: [
+      "const COMMANDS = ['diff', 'log', 'show', 'cat', 'ls', 'grep'];",
+    ],
+    neu: [
+      "const COMMANDS = ['diff', 'log', 'show', 'cat', 'ls', 'grep', 'head'];",
+    ],
+    after: [
+      "",
+      "// Plan 3.2 and 3.9: exact strings.",
+    ],
+  },
+  { id: 'G17b',
+    before: [
+      "  ls: 'ls <commit> [-- <paths>]',",
+      "  grep: 'grep <commit> <pattern> [-- <paths>]',",
+    ],
+    old: [],
+    neu: [
+      "  head: 'head',",
+    ],
+    after: [
+      "});",
+      "export const NARROWING_GUIDANCE = Object.freeze({",
+    ],
+  },
+  { id: 'G17c',
+    before: [
+      "const DETAIL = {",
+      "  GIT_SAFE_INPUT: 'invalid Git helper input',",
+    ],
+    old: [
+      "  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, review-diff', // C5 plan 2.7 adds review-diff",
+    ],
+    neu: [
+      "  GIT_SAFE_COMMAND: 'supported commands: diff, log, show, cat, ls, grep, head, review-diff', // C5 plan 2.7 adds review-diff",
+    ],
+    after: [
+      "  GIT_SAFE_VERSION: 'Git 2.31 or later is required',",
+      "  GIT_SAFE_REPOSITORY: 'not inside a Git repository',",
+    ],
+  },
+  { id: 'G17d',
+    before: [
+      "  GIT_SAFE_VERSION: 'Git 2.31 or later is required',",
+      "  GIT_SAFE_REPOSITORY: 'not inside a Git repository',",
+    ],
+    old: [],
+    neu: [
+      "  GIT_SAFE_OWNERSHIP: \"Git refused dubious repository ownership; ask the user to add only the trusted checkout's absolute path to the effective global or system safe.directory. Example: git config --global --add safe.directory \\\"<trusted-checkout-path>\\\". No result was emitted.\",",
+    ],
+    after: [
+      "  GIT_SAFE_POLICY_IO: 'cannot read .ai/security-paths.json; refusing to run without a valid policy',",
+      "  GIT_SAFE_SECRET: 'requested path is protected by the security policy',",
+    ],
+  },
+  { id: 'G17e',
+    before: [
+      "// A range splits at the first `..`; a following `.` makes it `...`. Both endpoints must be single revisions, so",
+      "// `a....b`, `A..`, `..B` and `A..B..C` fail. kind: range (diff), any (log), single (show, cat, ls, grep).",
+    ],
+    old: [
+      "const KIND = { diff: 'range', log: 'any', show: 'single', cat: 'single', ls: 'single', grep: 'single' };",
+    ],
+    neu: [
+      "const KIND = { diff: 'range', log: 'any', show: 'single', cat: 'single', ls: 'single', grep: 'single', head: 'single' };",
+    ],
+    after: [
+      "function revisionShape(s, kind) {",
+      "  if (typeof s !== 'string') return null;",
+    ],
+  },
+  { id: 'G17f',
+    before: [
+      "}",
+      "",
+    ],
+    old: [
+      "const DEFAULT_FORMAT = { diff: 'patch', log: 'medium', show: 'patch', cat: null, ls: 'name-only', grep: null };",
+      "const FORMATS = { diff: ['patch', 'stat', 'name-status', 'name-only'], log: ['medium', 'oneline'], show: ['patch', 'stat', 'name-status'], cat: [null], ls: ['name-only'], grep: [null] };",
+    ],
+    neu: [
+      "const DEFAULT_FORMAT = { diff: 'patch', log: 'medium', show: 'patch', cat: null, ls: 'name-only', grep: null, head: null };",
+      "const FORMATS = { diff: ['patch', 'stat', 'name-status', 'name-only'], log: ['medium', 'oneline'], show: ['patch', 'stat', 'name-status'], cat: [null], ls: ['name-only'], grep: [null], head: [null] };",
+    ],
+    after: [
+      "const SUMMARY = { diff: { '--stat': 'stat', '--name-status': 'name-status', '--name-only': 'name-only' }, show: { '--stat': 'stat', '--name-status': 'name-status' } };",
+      "const countOf = (v) => (/^(?:0|[1-9][0-9]{0,9})$/.test(v) && Number(v) <= MAX_COUNT ? Number(v) : null);",
+    ],
+  },
+  { id: 'G17g',
+    before: [
+      "  const bad = () => argError(sub);",
+      "  const rest = argv.slice(1);",
+    ],
+    old: [],
+    neu: [
+      "  // C17-6: the checkout-identity form takes no argument at all; it is not a revision resolver.",
+      "  if (sub === 'head') {",
+      "    if (rest.length !== 0) throw bad();",
+      "    return { subcommand: 'head', revisions: ['HEAD'], paths: [], format: null, patch: false, maxCount: null, pattern: null };",
+      "  }",
+    ],
+    after: [
+      "  const out = { subcommand: sub, revisions: null, paths: [], format: DEFAULT_FORMAT[sub], patch: sub === 'diff' || sub === 'show', maxCount: null, pattern: null };",
+      "  const positional = [];",
+    ],
+  },
+  { id: 'G17h',
+    before: [
+      "  if (!isPlain(r) || Object.keys(r).sort().join('\\u0000') !== REQUEST_KEYS) return false;",
+      "  const { subcommand: sub, revisions, paths, format, patch, maxCount, pattern } = r;",
+    ],
+    old: [],
+    neu: [
+      "  // C17-6: head accepts exactly the one parsed combination and never another revision.",
+      "  if (sub === 'head') {",
+      "    return denseStrings(revisions) && revisions.length === 1 && revisions[0] === 'HEAD' && denseStrings(paths) && paths.length === 0",
+      "      && format === null && patch === false && maxCount === null && pattern === null;",
+      "  }",
+    ],
+    after: [
+      "  if (!COMMANDS.includes(sub) || !denseStrings(revisions) || revisions.length !== 1 || revisionShape(revisions[0], KIND[sub]) === null) return false;",
+      "  if (!denseStrings(paths) || new Set(paths).size !== paths.length || !paths.every(validPath) || (sub === 'cat' && paths.length !== 1)) return false;",
+    ],
+  },
+  { id: 'G17i',
+    before: [
+      " * Plan 2.5 and 3.8: the production executor. Always `git`, no shell, hidden window, stdin closed. Output is buffered,",
+      " * never streamed; a bounded call that sees byte limit+1 stops the child and reports overflow without the bytes. Git",
+    ],
+    old: [
+      " * stderr is drained and dropped.",
+    ],
+    neu: [
+      " * stderr is drained and dropped, except for one classification (C17-7): whether it began exactly with the English",
+      " * dubious-ownership refusal. Only the match position and a match/mismatch state are kept, never the bytes or the path.",
+    ],
+    after: [
+      " */",
+    ],
+  },
+  { id: 'G17j',
+    before: [
+      " */",
+    ],
+    old: [],
+    neu: [
+      "const OWNERSHIP_PREFIX = Buffer.from('fatal: detected dubious ownership in repository at ', 'ascii');",
+    ],
+    after: [
+      "function executeGit({ argv, cwd, env, limit }) {",
+      "  return new Promise((resolve) => {",
+    ],
+  },
+  { id: 'G17k',
+    before: [
+      "    let settled = false;",
+      "    const done = (r) => { if (!settled) { settled = true; resolve(r); } };",
+    ],
+    old: [
+      "    const failed = (e) => done({ status: null, signal: null, error: String((e && e.code) || 'ESPAWN'), stdout: Buffer.alloc(0), overflow: false });",
+    ],
+    neu: [
+      "    const failed = (e) => done({ status: null, signal: null, error: String((e && e.code) || 'ESPAWN'), stdout: Buffer.alloc(0), overflow: false, dubiousOwnership: false });",
+    ],
+    after: [
+      "    let child;",
+      "    try { child = spawn('git', argv, { cwd, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { failed(e); return; }",
+    ],
+  },
+  { id: 'G17l',
+    before: [
+      "      chunks.push(c);",
+      "    });",
+    ],
+    old: [
+      "    child.stderr.on('data', () => {});",
+    ],
+    neu: [
+      "    // Incremental prefix comparison: verdict 0 = still matching at byte seen, 1 = complete match, 2 = mismatch (stop inspecting).",
+      "    let seen = 0;",
+      "    let verdict = 0;",
+      "    child.stderr.on('data', (c) => {",
+      "      if (verdict !== 0) return;",
+      "      for (let i = 0; i < c.length; i++) {",
+      "        if (c[i] !== OWNERSHIP_PREFIX[seen]) { verdict = 2; return; }",
+      "        seen += 1;",
+      "        if (seen === OWNERSHIP_PREFIX.length) { verdict = 1; return; }",
+      "      }",
+      "    });",
+    ],
+    after: [
+      "    child.on('error', failed);",
+      "    child.on('close', (code, signal) => {",
+    ],
+  },
+  { id: 'G17m',
+    before: [
+      "    child.on('error', failed);",
+      "    child.on('close', (code, signal) => {",
+    ],
+    old: [
+      "      if (overflow) done({ status: null, signal: null, error: null, stdout: Buffer.alloc(0), overflow: true });",
+      "      else if (signal) done({ status: null, signal: String(signal), error: null, stdout: Buffer.alloc(0), overflow: false });",
+      "      else done({ status: code, signal: null, error: null, stdout: Buffer.concat(chunks), overflow: false });",
+    ],
+    neu: [
+      "      if (overflow) done({ status: null, signal: null, error: null, stdout: Buffer.alloc(0), overflow: true, dubiousOwnership: false });",
+      "      else if (signal) done({ status: null, signal: String(signal), error: null, stdout: Buffer.alloc(0), overflow: false, dubiousOwnership: false });",
+      "      else {",
+      "        const stdout = Buffer.concat(chunks);",
+      "        done({ status: code, signal: null, error: null, stdout, overflow: false, dubiousOwnership: verdict === 1 && code === 128 && stdout.length === 0 });",
+      "      }",
+    ],
+    after: [
+      "    });",
+      "  });",
+    ],
+  },
+  { id: 'G17n',
+    before: [
+      "",
+      "const RESULT_KEYS = 'error\\u0000overflow\\u0000signal\\u0000status\\u0000stdout';",
+    ],
+    old: [
+      "// Plan 2.5 executor seam: exact keys, types and combinations; overflow only for a bounded call.",
+    ],
+    neu: [
+      "const RESULT_KEYS_FLAG = 'dubiousOwnership\\u0000error\\u0000overflow\\u0000signal\\u0000status\\u0000stdout';",
+      "// Plan 2.5 executor seam: exact keys, types and combinations; overflow only for a bounded call. C17-7: an optional sixth",
+      "// own boolean, dubiousOwnership; true is valid only for status 128 with empty stdout and no signal, error or overflow.",
+    ],
+    after: [
+      "function validResult(r, limit) {",
+    ],
+  },
+  { id: 'G17o',
+    before: [
+      "function validResult(r, limit) {",
+    ],
+    old: [
+      "  if (!isPlain(r) || Object.keys(r).sort().join('\\u0000') !== RESULT_KEYS) return false;",
+    ],
+    neu: [
+      "  if (!isPlain(r)) return false;",
+      "  const keys = Object.keys(r).sort().join('\\u0000');",
+      "  if (keys !== RESULT_KEYS && keys !== RESULT_KEYS_FLAG) return false;",
+    ],
+    after: [
+      "  const { status, signal, error, stdout, overflow } = r;",
+    ],
+  },
+  { id: 'G17p',
+    before: [
+      "  const { status, signal, error, stdout, overflow } = r;",
+    ],
+    old: [],
+    neu: [
+      "  if (keys === RESULT_KEYS_FLAG) {",
+      "    if (typeof r.dubiousOwnership !== 'boolean') return false;",
+      "    if (r.dubiousOwnership && !(status === 128 && Buffer.isBuffer(stdout) && stdout.length === 0 && signal === null && error === null && overflow === false)) return false;",
+      "  }",
+    ],
+    after: [
+      "  if (!(status === null || (Number.isInteger(status) && status >= 0 && status <= 255))) return false;",
+      "  if (!(signal === null || (typeof signal === 'string' && signal !== '')) || !(error === null || (typeof error === 'string' && error !== ''))) return false;",
+    ],
+  },
+  { id: 'G17q',
+    before: [
+      " * One executor call (C4-P3-1): the argument bound before any process; a rejection, throw, invalid result, signal or",
+      " * spawn error is GIT_SAFE_GIT, E2BIG/ENAMETOOLONG GIT_SAFE_ARG_LIMIT, overflow or an oversized Buffer GIT_SAFE_LIMIT.",
+    ],
+    old: [
+      " * Returns { status, stdout }; what a nonzero status means is the caller's stage-specific decision.",
+    ],
+    neu: [
+      " * Returns { status, stdout, dubiousOwnership }; what a nonzero status means is the caller's stage-specific decision.",
+      " * The flag is classification only and only root discovery reads it.",
+    ],
+    after: [
+      " */",
+      "async function call(state, argv, cwd, limit) {",
+    ],
+  },
+  { id: 'G17r',
+    before: [
+      "  if (r.error !== null) throw gsError(LENGTH_ERROR.test(r.error) ? 'GIT_SAFE_ARG_LIMIT' : 'GIT_SAFE_GIT');",
+      "  if (r.signal !== null) throw gsError('GIT_SAFE_GIT');",
+    ],
+    old: [
+      "  return { status: r.status, stdout: r.stdout };",
+    ],
+    neu: [
+      "  return { status: r.status, stdout: r.stdout, dubiousOwnership: r.dubiousOwnership === true };",
+    ],
+    after: [
+      "}",
+      "",
+    ],
+  },
+  { id: 'G17s',
+    before: [
+      "  if (!m || !(Number(m[1]) > 2 || (Number(m[1]) === 2 && Number(m[2]) >= 31))) throw gsError('GIT_SAFE_VERSION');",
+      "  const t = await call(state, ['rev-parse', '--show-toplevel'], o.start, null);",
+    ],
+    old: [
+      "  if (t.status !== 0) throw gsError('GIT_SAFE_REPOSITORY');",
+    ],
+    neu: [
+      "  if (t.status !== 0) throw gsError(t.status === 128 && t.stdout.length === 0 && t.dubiousOwnership ? 'GIT_SAFE_OWNERSHIP' : 'GIT_SAFE_REPOSITORY');",
+    ],
+    after: [
+      "  const raw = utf8(t.stdout);",
+      "  const top = raw === null ? null : raw.endsWith('\\r\\n') ? raw.slice(0, -2) : raw.endsWith('\\n') ? raw.slice(0, -1) : null;",
+    ],
+  },
+  { id: 'G17t',
+    before: [
+      "  if (!state) throw inputError();",
+      "  const { subcommand: sub, revisions, paths, format, patch, maxCount, pattern } = request;",
+    ],
+    old: [],
+    neu: [
+      "  // C17-6: the checkout identity is one commit resolution; no inventory, content read or write follows.",
+      "  if (sub === 'head') return Buffer.from(`${await resolveIn(state, 'HEAD')}\\n`, 'ascii');",
+    ],
+    after: [
+      "  const isProtected = (p) => matchesPolicyPath(p, state.policy);",
+      "  if (sub === 'cat' && isProtected(paths[0])) throw gsError('GIT_SAFE_SECRET');",
+    ],
+  },
+  { id: 'G17u',
+    before: [
+      " * Plan 2.5 and 3.9: arguments before any session; streams and the exit code are the caller's (git-safe.mjs).",
+      " * C5 plan 2.7: after the container check, review-diff is delegated to the lazily imported review helper, which owns",
+    ],
+    old: [
+      " * its grammar, dependency keys and result. The six object commands never import it, so they keep working without it;",
+    ],
+    neu: [
+      " * its grammar, dependency keys and result. The six object commands and head never import it, so they keep working without it;",
+    ],
+    after: [
+      " * a missing or broken helper is GIT_SAFE_INTERNAL for review-diff only.",
+      " */",
+    ],
+  },
+];
+const TB = (lines) => (lines.length === 0 ? '' : T(lines));
+const CORE_AM = Object.fromEntries(CORE_HUNKS.map((h) => [h.id, Object.freeze({ file: CORE_REL17, before: TB(h.before), old: TB(h.old), neu: TB(h.neu), after: TB(h.after) })]));
+
 // ---------------------------------------------------------------- amendments ----
 // An amendment is { file, before, old, neu, after } (as in c15/c16-amendments.mjs): before + old + after is the pre-C17 slice
 // and before + neu + after the amended slice. Every inserted or replacing block ends with one LF; the blank lines outside a block
-// belong to the anchors. `flex` (SE4 only) compares its inserted region with whitespace collapsed.
+// belong to the anchors. `flex` (SE4 only) compares its inserted region byte for byte except for the line breaks of the F9 prose (I17-6).
 // Root files are keyed "@root/<path>"; every other key is relative to project-setup/.
 export const AM17 = Object.freeze({
   R17: Object.freeze({ file: 'assets/agents/reviewer.md', before: '   If the base is ambiguous, ask once; otherwise use the merge-base with the default branch.\n', old: T(R17_OLD), neu: T(R17_NEW), after: '3. If the requested refs are unavailable, stop and ask the user to fetch them from the trusted\n' }),
+  ...CORE_AM,
   RD17: Object.freeze({ file: 'assets/tools/review-diff.mjs', before: "  GIT_SAFE_INPUT: 'invalid Git helper input',\n", old: RD_OLD, neu: RD_NEW, after: '  GIT_SAFE_ARGUMENT: `unsupported arguments; supported: ${REVIEW_FORM}`,\n' }),
 
   SH17: Object.freeze({ file: 'SKILL.md', before: '---\n\n', old: '# project-setup 3.0.0-rc.3\n', neu: '# project-setup 3.0.0-rc.4\n', after: '\nOne skill, one source, two tools. Produces a repository layout that Claude Code and Codex both follow:\n' }),
@@ -577,6 +946,7 @@ export const AM17 = Object.freeze({
 // O17, codex.md host notes and O17) are listed so that the one nearest an existing anchor is applied first.
 export const FORWARD_ORDER17 = Object.freeze({
   'assets/agents/reviewer.md': Object.freeze(['R17']),
+  'assets/tools/git-safe-core.mjs': Object.freeze(CORE_HUNKS.map((h) => h.id)),
   'assets/tools/review-diff.mjs': Object.freeze(['RD17']),
   'SKILL.md': Object.freeze(['SH17', 'S17', 'SO17']),
   'README.md': Object.freeze(['RM1_17', 'RM_HOST17', 'RM_O17', 'RM4a_17', 'RM4b_17']),
@@ -589,9 +959,9 @@ export const FORWARD_ORDER17 = Object.freeze({
   '@root/.ai/context/project-tree.md': Object.freeze(['PT1', 'PT2', 'PT3']),
 });
 export const REVERSAL_ORDER17 = Object.freeze(Object.fromEntries(Object.entries(FORWARD_ORDER17).map(([f, ids]) => [f, Object.freeze([...ids].reverse())])));
-// The 11 files whose C17 change is fully frozen text (the TODO and the evaluations have their own functions below). The two runtime
-// files: review-diff.mjs is one exact amendment (RD17); git-safe-core.mjs has no exact amendment because the plan freezes its
-// behavior and messages, not its hunks (see CORE_FROZEN_LITERALS).
+// The 12 files whose C17 change is an exact amendment (the TODO and the evaluations have their own functions below). The two runtime
+// files: review-diff.mjs is one exact amendment (RD17) and git-safe-core.mjs holds the 21 hunks G17a..G17u pinned after the
+// implementation (I17-4); the plan itself freezes the core's behavior and messages, not its hunks (see CORE_FROZEN_LITERALS).
 export const AMENDED_FILES17 = Object.freeze(Object.keys(FORWARD_ORDER17));
 export const HEADING_AMENDMENT17 = 'SH17';
 // The files of the pre-C17 fixture and their pre-C17 raw SHA-256 values, in the plan's C17-12 order (13 entries).
@@ -612,16 +982,36 @@ export const PRE_C17_FILES = Object.freeze([
 ]);
 
 // ----------------------------------------------------------------- engine ----
+// The F9 prose of the security.md paragraph: the canonical region between FLEX_OPEN (the last frozen words before the spliced
+// sentence, with their own line break) and FLEX_CLOSE (the paragraph boundary after that paragraph) is the only part whose line
+// breaks may differ (I17-6). Words there are separated by exactly one space or one line break; a doubled space, a tab, a blank line
+// or a carriage return is never a re-wrap. Everything before FLEX_OPEN (the first paragraph with its quoted prefix, the blank line
+// and the frozen start of the second) and from FLEX_CLOSE on (the boundary, the third paragraph and the blank line that ends the
+// block) is compared byte for byte.
+const FLEX_OPEN = 'keep the existing\nGIT_SAFE_REPOSITORY result.';
+const FLEX_CLOSE = '\n\nGIT_SAFE_OWNERSHIP is not an argument or pattern rejection.';
+const FLEX_WRAPPED = /^[ \n](?:\S+[ \n])*\S+$/;
+const unwrapped = (s) => s.replace(/\n/g, ' ');
+function flexParts(neu) {
+  if (COUNT(neu, FLEX_OPEN) !== 1 || COUNT(neu, FLEX_CLOSE) !== 1) return null;
+  const i = neu.indexOf(FLEX_OPEN) + FLEX_OPEN.length;
+  const j = neu.indexOf(FLEX_CLOSE);
+  return j > i ? { head: neu.slice(0, i), mid: neu.slice(i, j), tail: neu.slice(j) } : null;
+}
 function flexBounds(text, a) {
-  if (COUNT(text, a.before) !== 1) return null;
+  if (COUNT(text, a.before) !== 1 || a.old !== '') return null;
+  const parts = flexParts(a.neu);
+  if (parts === null) return null;
   const i = text.indexOf(a.before) + a.before.length;
   const j = text.indexOf(a.after, i);
   if (j < 0) return null;
   const region = text.slice(i, j);
-  if (squash(region) !== squash(a.neu) || !region.endsWith('\n\n') || a.old !== '') return null;
+  if (region.length < parts.head.length + parts.tail.length || !region.startsWith(parts.head) || !region.endsWith(parts.tail)) return null;
+  const mid = region.slice(parts.head.length, region.length - parts.tail.length);
+  if (!FLEX_WRAPPED.test(mid) || unwrapped(mid) !== unwrapped(parts.mid)) return null;
   return [i, j];
 }
-/** True only when before + neu + after stands exactly once and neu itself stands exactly once (flex: the region between the anchors equals neu with whitespace collapsed). */
+/** True only when before + neu + after stands exactly once and neu itself stands exactly once (flex: the region between the anchors equals neu except for the line breaks of the F9 prose). */
 export const amendmentOnce = (text, a) => (a.flex === true ? flexBounds(text, a) !== null : COUNT(text, a.before + a.neu + a.after) === 1 && COUNT(text, a.neu) === 1);
 /** The text with one amendment removed at its anchor, or null when it does not stand exactly once there. */
 export function reverseOne(text, a) {
@@ -751,7 +1141,7 @@ export const C17_R29_BLOCK = Object.freeze([...R29]);
 // ------------------------------------------------------------- exported text ----
 export const C17_BLOCKS = Object.freeze({
   R17_OLD: Object.freeze([...R17_OLD]), R17_NEW: Object.freeze([...R17_NEW]), O17: Object.freeze([...O17]), P17: Object.freeze([...P17]),
-  SE1_OLD: Object.freeze([...SE1_OLD]), SE1_NEW: Object.freeze([...SE1_NEW]), SE3: Object.freeze([...SE3]), SE4_PLAN: Object.freeze([...SE4_PLAN]), SE4_RENDERED: Object.freeze([...SE4_RENDERED]), SE4_FLAT,
+  SE1_OLD: Object.freeze([...SE1_OLD]), SE1_NEW: Object.freeze([...SE1_NEW]), SE3: Object.freeze([...SE3]), SE4_PLAN: Object.freeze([...SE4_PLAN]), SE4_RENDERED: Object.freeze([...SE4_RENDERED]),
   HOST: Object.freeze([...HOST]), CL_OLD: Object.freeze([...CL_OLD]), CL_NEW: Object.freeze([...CL_NEW]), CX_OLD: Object.freeze([...CX_OLD]), CX_NEW: Object.freeze([...CX_NEW]),
   RM_OPEN_OLD: Object.freeze([...RM_OPEN_OLD]), RM_OPEN_NEW: Object.freeze([...RM_OPEN_NEW]), RELEASE_CMD_NEW: Object.freeze([...RELEASE_CMD_NEW]),
   ROOT_README_OLD: Object.freeze([...ROOT_README_OLD]), ROOT_README_NEW: Object.freeze([...ROOT_README_NEW]), ROOT_TREE_OLD: Object.freeze([...ROOT_TREE_OLD]), ROOT_TREE_NEW: Object.freeze([...ROOT_TREE_NEW]),

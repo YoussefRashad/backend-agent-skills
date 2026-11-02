@@ -920,12 +920,6 @@ function c16PreBytes(context, repoPath) {
 }
 // C16 (plan C16-14 and C16-15): the exact C16 amendments of one file (see tests/helpers/c16-amendments.mjs) are verified once at their anchors and reversed before any C15, C14 or C13 historical comparison; a missing, duplicated, altered, moved or
 // differently spaced amendment fails here. Records one failure and returns null when one does not verify. `keepHeading` leaves the SKILL.md heading amendment for the existing heading normalization.
-// C17 (plan C17-12 and C17-13, tests/fixtures/c17-prechange.json): one entry of the verified pre-C17 fixture (raw bytes) by its repository path, or null.
-function c17PreBytes(context, repoPath) {
-  const doc = readJson(skillPath(context, 'tests/fixtures/c17-prechange.json'));
-  const e = doc && Array.isArray(doc.entries) ? doc.entries.find((x) => x && x.path === repoPath) : undefined;
-  return e && typeof e.base64 === 'string' ? Buffer.from(e.base64, 'base64') : null;
-}
 // C17 (plan C17-12/C17-13): the historical view of a file the earlier components compare is the pre-C17 view first (the exact C17 amendments of that file, when it has any, are verified once at their anchors and reversed), then the C16 view
 // (the exact C16 amendments reversed, with the unchanged C16 helper). Returns { text, failed } like the helpers; text is null and failed names the first amendment that does not verify.
 function histC16(text, rel, opts = {}) {
@@ -2230,12 +2224,21 @@ async function release(context) {
       const C16_REVERSED = ['assets/tools/git-safe-core.mjs', 'assets/tools/hooks-selftest.mjs', 'references/codex.md', 'assets/wrappers/codex-reviewer.toml', 'assets/wrappers/codex-docs_sync.toml'];
       for (const [rel, digest] of UNCHANGED_FILE_PINS) {
         let b = readBytes(skillPath(context, rel));
-        // C17 (plan C17-12/C17-13, PLAN-GAP: the plan freezes the core's behavior, not its hunks): the core's pre-C17 view is the committed fixture entry whose raw SHA-256 is the plan's ad1c51db...; review-diff.mjs has one exact amendment (RD17) that is reversed first.
-        if (rel === 'assets/tools/git-safe-core.mjs') { b = c17PreBytes(context, 'project-setup/assets/tools/git-safe-core.mjs'); check(b !== null && sha(b) === 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85', 'the pre-C17 core view is the fixture entry with the plan\'s raw SHA-256 ad1c51db...', b && sha(b)); }
+        // C17 (plan C17-12/C17-13, decision I17-4 and C17-5): the current core is reversed through its 21 exact C17 hunks (G17a..G17u, each verified once at its anchor) and the result must be the plan's pre-C17 core before the C16 reversal below; a fixture is never substituted for the current file.
+        if (b !== null && rel === 'assets/tools/git-safe-core.mjs') { const r17 = reverseC17File(b.toString('utf8'), rel); const v17 = r17.text === null ? null : Buffer.from(r17.text, 'utf8'); check(v17 !== null && sha(v17) === 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85', 'the exact C17 reversal of the current core gives the pre-C17 core (raw SHA-256 ad1c51db...)', r17.failed || (v17 && sha(v17))); }
         if (b !== null && rel === 'assets/tools/review-diff.mjs') { const r = revertC16(check, rel, b.toString('utf8'), rel); b = r === null ? null : Buffer.from(r, 'utf8'); }
         if (b !== null && C14_REVERSALS[rel]) { const r = revertC14(check, rel, b.toString('utf8'), C14_REVERSALS[rel]); b = r === null ? null : Buffer.from(r, 'utf8'); }
         if (b !== null && C16_REVERSED.includes(rel)) { const r = revertC16(check, rel, b.toString('utf8'), rel); b = r === null ? null : Buffer.from(r, 'utf8'); }
         check(b !== null && NH(b) === digest, `${rel} is unchanged${C14_REVERSALS[rel] ? ` after exactly reversing the C14 amendment${C14_REVERSALS[rel].length > 1 ? 's' : ''} ${C14_REVERSALS[rel].join(' and ')}` : ''}${C16_REVERSED.includes(rel) ? ' after exactly reversing the C16 amendments' : ''}${rel === 'assets/tools/git-safe-core.mjs' ? ' (from its verified pre-C17 view)' : ''}${rel === 'assets/tools/review-diff.mjs' ? ' (after exactly reversing the C17 amendment RD17)' : ''}`);
+      }
+      // I17-4 controls: the exact C17 view of the current core is refused after an unrelated edit and after a missing, duplicated or modified C17 hunk.
+      const coreNow = readBytes(skillPath(context, 'assets/tools/git-safe-core.mjs'));
+      if (coreNow !== null) {
+        const t = coreNow.toString('utf8');
+        const view17 = (x) => { const r = reverseC17File(x, 'assets/tools/git-safe-core.mjs'); return r.text !== null && sha(Buffer.from(r.text, 'utf8')) === 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85'; };
+        check(view17(t), 'control: the unmodified current core gives the exact pre-C17 view');
+        const edited = [['an unrelated comment appended', `${t}// unrelated\n`], ['an unrelated constant changed', t.replace('export const MAX_GIT_ARG_UNITS = 24000;', () => 'export const MAX_GIT_ARG_UNITS = 24001;')], ['a modified C17 hunk', t.replace("  head: 'head',\n", () => "  head: 'head', // changed\n")], ['a duplicated C17 hunk', t.replace("  head: 'head',\n", () => "  head: 'head',\n  head: 'head',\n")], ['a missing C17 hunk', t.replace("  head: 'head',\n", () => '')]];
+        for (const [name, x] of edited) check(x !== t && !view17(x), `the exact pre-C17 core view refuses ${name}`);
       }
       check(!C16_REVERSED.includes('assets/templates/nested-CLAUDE.md') && UNCHANGED_FILE_PINS.some(([f, d]) => f === 'assets/templates/nested-CLAUDE.md' && d === '336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49'), 'nested-CLAUDE.md keeps its direct comparison (no C16 reversal)');
       check(UNCHANGED_FILE_PINS.length >= 45, 'the pin table covers the production scripts, assets, data and installers', UNCHANGED_FILE_PINS.length);

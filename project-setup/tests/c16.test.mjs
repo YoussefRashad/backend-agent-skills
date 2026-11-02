@@ -71,24 +71,27 @@ const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return nul
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
-// C17 (plan C17-12, C17-13 and F1): C16's historical checks read the PRE-C17 view of every file C17 changes. A file with exact C17 amendments is reversed through them (each verified once at its anchor; null when one does not verify, which C17's own
-// preservation component reports by name); the root TODO.md is reversed through the exact blocker replacement and must then be the pre-C17 TODO (hash ebf6df3a...); git-safe-core.mjs has no exact amendment (PLAN-GAP: the plan freezes its behavior,
-// not its hunks), so its pre-C17 view is the committed fixture entry whose raw SHA-256 is the plan's ad1c51db.... Every other file is its own pre-C17 view.
+// C17 (plan C17-12, C17-13 and F1; decision I17-4): C16's historical checks read the PRE-C17 view of every file C17 changes. A file with exact C17 amendments is reversed through them (each verified once at its anchor; null when one does not verify, which C17's own
+// preservation component reports by name); the root TODO.md is reversed through the exact blocker replacement and must then be the pre-C17 TODO (hash ebf6df3a...); git-safe-core.mjs is reversed through its 21 exact hunks (G17a..G17u, pinned from the
+// implemented bytes) and the result must be the plan's pre-C17 core (raw SHA-256 ad1c51db...), so a historical check never substitutes a whole fixture file for the current core (C17-5). Every other file is its own pre-C17 view.
 const C17_CORE_REL = 'assets/tools/git-safe-core.mjs';
+const PRE_C17_CORE_SHA = 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85';
 function c17FixtureBytes(context, repoPath) {
   const doc = readJson(skillPath(context, 'tests/fixtures/c17-prechange.json'));
   const e = doc && Array.isArray(doc.entries) ? doc.entries.find((x) => x && x.path === repoPath) : undefined;
   return e && typeof e.base64 === 'string' ? Buffer.from(e.base64, 'base64') : null;
 }
-function pre17Bytes(context, rel) {
-  if (rel === C17_CORE_REL) { const b = c17FixtureBytes(context, 'project-setup/' + rel); return b !== null && sha(b) === 'ad1c51db23444c022dcb4eca06d0b3fd52984cb1bf3230596a840f34203b5f85' ? b : null; }
-  const b = readBytes(rel.startsWith('@root/') ? rootPath(context, rel.slice(6)) : skillPath(context, rel));
+// The pre-C17 view of one file from its current bytes (pure, so the controls can feed it altered bytes). Null when an amendment does not verify exactly once at its anchor or when the reversed core is not the pinned pre-C17 core.
+function pre17View(rel, b) {
   if (b === null) return null;
   if (rel === '@root/TODO.md') { const r = reverseTodoC17(b.toString('utf8')); return r !== null && sha(Buffer.from(r, 'utf8')) === TODO_PRE_C17_HASH ? Buffer.from(r, 'utf8') : null; }
   if (!Object.prototype.hasOwnProperty.call(REVERSAL_ORDER17, rel)) return b;
   const r = reverseC17File(b.toString('utf8'), rel);
-  return r.text === null ? null : Buffer.from(r.text, 'utf8');
+  if (r.text === null) return null;
+  const v = Buffer.from(r.text, 'utf8');
+  return rel === C17_CORE_REL && sha(v) !== PRE_C17_CORE_SHA ? null : v;
 }
+function pre17Bytes(context, rel) { return pre17View(rel, readBytes(rel.startsWith('@root/') ? rootPath(context, rel.slice(6)) : skillPath(context, rel))); }
 const pre17Text = (context, rel) => { const b = pre17Bytes(context, rel); return b === null ? null : b.toString('utf8'); };
 const sourceText = (context, rel) => { const t = pre17Text(context, rel); return t === null ? null : LF(t); };
 function putFile(p, data) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); }
@@ -1725,7 +1728,7 @@ async function update(context) {
       if (expected[rel] === null || old[rel] === null) { check(false, `${rel}: the pre-change bytes take the frozen amendments exactly once`); return; }
     }
     // C17 (F1, item 4): the C16 model above is the rc.3 text (historical premise). What the update delivers is the current rc.4 skill: the reviewer is the rc.3 model plus the exact C17 amendment R17, review-diff.mjs is its pre-C17 bytes (the C17 fixture entry,
-    // hash-checked; C16 left the file alone, so these are also its pre-C16 bytes) plus the exact C17 amendment RD17, and git-safe-core.mjs has no independent rc.4 expectation (PLAN-GAP: the plan freezes its behavior, not its hunks), so its delivered text is the shipped asset itself.
+    // hash-checked; C16 left the file alone, so these are also its pre-C16 bytes) plus the exact C17 amendment RD17, and git-safe-core.mjs is the rc.3 model plus its 21 exact C17 hunks (G17a..G17u, pinned from the implemented bytes, I17-4).
     const delivered = { ...expected };
     const pre17Review = c17FixtureBytes(context, `project-setup/${C17_REVIEW_DIFF_REL}`);
     if (pre17Review === null || sha(pre17Review) !== C17_REVIEW_DIFF_PRE_SHA) { check(false, 'the C17 fixture holds the pre-C17 review-diff.mjs (raw SHA-256 ae236ae3... of plan C17-12)'); return; }
@@ -1733,10 +1736,8 @@ async function update(context) {
     expected[C17_REVIEW_DIFF_REL] = old[C17_REVIEW_DIFF_REL];
     delivered[C17_REVIEW_DIFF_REL] = applyC17File(old[C17_REVIEW_DIFF_REL], C17_REVIEW_DIFF_REL);
     delivered['assets/agents/reviewer.md'] = applyC17File(expected['assets/agents/reviewer.md'], 'assets/agents/reviewer.md');
-    if (delivered[C17_REVIEW_DIFF_REL] === null || delivered['assets/agents/reviewer.md'] === null) { check(false, 'the rc.3 models take the exact C17 amendments RD17 and R17 once at their anchors'); return; }
-    const currentCore = readText(skillPath(context, 'assets/tools/git-safe-core.mjs'));
-    if (currentCore === null) { check(false, 'the shipped git-safe-core.mjs is readable'); return; }
-    delivered['assets/tools/git-safe-core.mjs'] = currentCore;
+    delivered['assets/tools/git-safe-core.mjs'] = applyC17File(expected['assets/tools/git-safe-core.mjs'], 'assets/tools/git-safe-core.mjs');
+    if (delivered[C17_REVIEW_DIFF_REL] === null || delivered['assets/agents/reviewer.md'] === null || delivered['assets/tools/git-safe-core.mjs'] === null) { check(false, 'the rc.3 models take the exact C17 amendments RD17, R17 and the 21 core hunks once at their anchors'); return; }
     const current = (rel) => readText(skillPath(context, rel));
     const same = (rel) => current(rel);
     const sourceMissing = ['assets/agents/reviewer.md', 'assets/agents/docs-sync.md', 'assets/templates/CLAUDE.md', 'assets/wrappers/codex-reviewer.toml', 'assets/wrappers/codex-docs_sync.toml', 'assets/wrappers/claude-reviewer.md', 'assets/wrappers/claude-docs-sync.md', 'assets/templates/nested-CLAUDE.md', ...RUNTIME_MEMBERS.map((m) => `assets/tools/${m}`)].filter((r) => current(r) === null);
@@ -2151,6 +2152,14 @@ async function release(context) {
       for (const rel of ['assets/agents/reviewer.md', 'assets/agents/docs-sync.md']) { const b = pre17Bytes(context, rel); check(b !== null && sha(b).startsWith(MODEL_SHA[rel]), `${rel}: equals the independently computed model`, b && sha(b).slice(0, 8)); }
       const core = checkAmendedFile(check, context, fx, 'assets/tools/git-safe-core.mjs');
       const coreBytes = pre17Bytes(context, 'assets/tools/git-safe-core.mjs');
+      // I17-4: the view above is the exact C17 reversal of the current core (a fixture is never substituted); an unrelated edit and a changed C17 hunk are refused by it.
+      const curCore = readBytes(skillPath(context, 'assets/tools/git-safe-core.mjs'));
+      check(curCore !== null && coreBytes !== null && Buffer.compare(coreBytes, curCore) !== 0 && sha(coreBytes) === PRE_C17_CORE_SHA, 'the pre-C17 core view is the exact C17 reversal of the current core (the current file differs from it)');
+      if (curCore !== null) {
+        const t = curCore.toString('utf8');
+        const edited = [['an unrelated comment appended', `${t}// unrelated\n`], ['an unrelated constant changed', t.replace('export const MAX_GIT_ARG_UNITS = 24000;', () => 'export const MAX_GIT_ARG_UNITS = 24001;')], ['the head form of a request check altered', t.replace("if (sub === 'head') {\n    if (rest.length !== 0) throw bad();", () => "if (sub === 'head') {\n    if (rest.length > 1) throw bad();")], ['the ownership prefix altered', t.replace('fatal: detected dubious', () => 'fatal:  detected dubious')], ['a C17 hunk applied twice', t.replace("  head: 'head',\n", () => "  head: 'head',\n  head: 'head',\n")]];
+        for (const [name, x] of edited) check(x !== t && pre17View(C17_CORE_REL, Buffer.from(x, 'utf8')) === null, `the pre-C17 core view refuses ${name}`);
+      }
       check(coreBytes !== null && coreBytes.length === CORE_IDENTITY.bytes && sha(coreBytes) === CORE_IDENTITY.sha, 'the core is exactly the five frozen hunks applied to the inspected bytes (31839 bytes, SHA-256 ad1c51db... of plan C16-8)', coreBytes && { len: coreBytes.length, sha: sha(coreBytes) });
       const hs = checkAmendedFile(check, context, fx, 'assets/tools/hooks-selftest.mjs');
       const hsBytes = readBytes(skillPath(context, 'assets/tools/hooks-selftest.mjs'));
