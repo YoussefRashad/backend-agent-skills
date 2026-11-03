@@ -36,7 +36,8 @@ The bounded correction whitelist remains GIT_SAFE_ARGUMENT and GIT_SAFE_PATTERN 
 
 ## Verification
 
-Run node tests/accept-rc1.mjs for complete release acceptance.
+Run node tests/accept-rc1.mjs for the complete strict gate, then node tests/c18.test.mjs for the
+standalone 3.0.0 final-release assertions. Neither accept-rc1.mjs nor run-tests.mjs runs c18.
 The rc.1 case names and accept-rc1.mjs are retained for 3.0.0.
 
 Required totals are 100 PASS / 0 FAIL / 0 SKIP, or 99 PASS / 0 FAIL / 1 SKIP with only the
@@ -97,6 +98,10 @@ C16's malformed-configuration pattern-classification residual, Git 2.31 probe-fl
 limitation and unverified regex platforms remain unchanged.
 Existing trusted-checkout, path-policy and agent-read confinement limitations remain.
 No backend-standards scaffold integration is established by this release.
+
+The rc.3-era measurement sections of references/claude.md and references/codex.md still say
+"Final 3.0.0 remains gated on the rc.4 measurements". They are kept byte-identical to rc.4 on
+purpose and are dated history: that gate was resolved by the measurements recorded here.
 
 ## Provenance and release artifacts
 

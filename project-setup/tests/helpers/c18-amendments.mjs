@@ -69,6 +69,25 @@ export const AM18 = Object.freeze({
   RM18_S07: Object.freeze({ file: 'README.md', before: AM17.RM4a_17.before, old: AM17.RM4a_17.neu, neu: 'requires or creates project-setup-v3.0.0 in the distribution repository.\n', after: AM17.RM4a_17.after }),
   RM18_CMD: Object.freeze({ file: 'README.md', before: AM17.RM4b_17.before, old: AM17.RM4b_17.neu, neu: 'node install/release.mjs --tag project-setup-v3.0.0 --out <unused-directory>\n', after: AM17.RM4b_17.after }),
 
+  RM18_GATE: Object.freeze({
+    file: 'README.md',
+    before: '',
+    old: T(['These are intended fixes,', 'not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.']),
+    neu: T(['These were intended fixes,', 'not yet measured when this section was written. Their rc.4 measurement is recorded in', 'RELEASE-NOTES-3.0.0.md.']),
+    after: '',
+  }),
+  RM18_ACC: Object.freeze({
+    file: 'README.md',
+    before: '',
+    old: T(['Candidate acceptance requires the complete strict gate below. A focused run or a zero exit']),
+    neu: T([
+      'Release acceptance requires the complete strict gate below and, separately, node tests/c18.test.mjs',
+      '(the standalone 3.0.0 final-release assertions; neither run-tests.mjs nor accept-rc1.mjs runs it).',
+      'A focused run or a zero exit',
+    ]),
+    after: '',
+  }),
+
   LC18: Object.freeze({ file: 'CHANGELOG.md', before: '# Changelog\n\n', old: '', neu: `${T(CHANGELOG_ENTRY18)}`, after: '## 3.0.0-rc.4\n' }),
   V18: Object.freeze({ file: 'VERSION', before: '', old: AM17.V17.neu, neu: '3.0.0\n', after: '' }),
 
@@ -117,7 +136,7 @@ export const AM18 = Object.freeze({
 
 export const FORWARD_ORDER18 = Object.freeze({
   'SKILL.md': Object.freeze(['SH18']),
-  'README.md': Object.freeze(['RM18_OPEN', 'RM18_S07', 'RM18_CMD']),
+  'README.md': Object.freeze(['RM18_OPEN', 'RM18_S07', 'RM18_CMD', 'RM18_GATE', 'RM18_ACC']),
   'CHANGELOG.md': Object.freeze(['LC18']),
   VERSION: Object.freeze(['V18']),
   '@root/README.md': Object.freeze(['RR18_1', 'RR18_2', 'RR18_3', 'RR18_4', 'RR18_5']),

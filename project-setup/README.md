@@ -127,8 +127,9 @@ a separate Windows user, and git-safe stripped the injected safe.directory confi
 An exact fixture entry in the isolated global config allowed both later reviews.
 A global safe.directory = * is broader than the checkout-specific grant.
 
-C17 adds git-safe head and an actionable ownership diagnostic. These are intended fixes,
-not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.
+C17 adds git-safe head and an actionable ownership diagnostic. These were intended fixes,
+not yet measured when this section was written. Their rc.4 measurement is recorded in
+RELEASE-NOTES-3.0.0.md.
 
 Headless P3 h also produced a false launch refusal until the parent supplied its original
 root-start context. This did not reproduce in the TUI, where the brief supplied that
@@ -193,7 +194,9 @@ node tests/run-tests.mjs --keep     # keep fixtures + results.json for inspectio
 
 The suite runs in a temp directory with HOME/USERPROFILE and git config redirected there.
 
-Candidate acceptance requires the complete strict gate below. A focused run or a zero exit
+Release acceptance requires the complete strict gate below and, separately, node tests/c18.test.mjs
+(the standalone 3.0.0 final-release assertions; neither run-tests.mjs nor accept-rc1.mjs runs it).
+A focused run or a zero exit
 from diagnostic selection does not replace it. Only R13d may skip for the recorded Windows
 file-symlink privilege reason.
 

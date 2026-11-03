@@ -36,7 +36,7 @@ const RC4_SHA = Object.freeze({
 });
 const RC4_TREE_NO_TESTS = '71cd5d9c9934ef0f651cdfcf12d9dd9bbb174f6243ba3c82a0703580a08ad254';
 const RC4_TREE_FILES = 69;
-const NOTES_SHA = '7a06d2b8c2d202e9e70f347b6a3681ee636554f2c1b318858d38d1d7bcf2ec80';
+const NOTES_SHA = 'fc48e03b7dcd671dffb75c6d108ee53831b00096c25d021333f88e448c24ff28';
 
 const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: ok === true, detail }); };
