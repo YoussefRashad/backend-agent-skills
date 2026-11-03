@@ -203,21 +203,35 @@ exact, that everything else outside `tests/` is the rc.4 source, and that the re
 
 ### Gate results
 
-Run serially on a clean tree at commit `c7c788e` (Node v24.14.1, git 2.53.0.windows.2, Windows 11
-10.0.26100), started 2026-11-03 04:38 (+02:00), nothing else running:
+The gates ran twice, serially on a clean tree, with nothing else running (Node v24.14.1, git
+2.53.0.windows.2, Windows 11 10.0.26100). The first run, at `c7c788e` on 2026-11-03 04:38 (+02:00),
+passed with the same totals. The Codex review of that commit found two non-blocking wording
+findings (README still said final 3.0.0 was gated; acceptance instructions omitted the standalone
+c18 run). They were fixed in `5b964fa`, which changed README.md, the notes, c18.test.mjs and the c18
+amendment table, so every gate was run again. Results for `5b964fa`, started 2026-11-03 06:05:
 
-| Gate                                       | Result                           | Duration |
-| ------------------------------------------ | -------------------------------- | -------- |
-| `node project-setup/tests/run-tests.mjs`   | 99 PASS / 0 FAIL / 1 SKIP, exit 0 | 1302 s   |
-| `node project-setup/tests/accept-rc1.mjs`  | 99 PASS / 0 FAIL / 1 SKIP, exit 0 | 1172 s   |
+| Gate                                       | Result                            | Duration |
+| ------------------------------------------ | --------------------------------- | -------- |
+| `node project-setup/tests/run-tests.mjs`   | 99 PASS / 0 FAIL / 1 SKIP, exit 0 | 1165 s   |
+| `node project-setup/tests/accept-rc1.mjs`  | 99 PASS / 0 FAIL / 1 SKIP, exit 0 | 1171 s   |
 | `node project-setup/tests/c18.test.mjs`    | 61 PASS / 0 FAIL / 0 SKIP, exit 0 | 2 s      |
-| `npm run check` (prettier, version stamps) | exit 0                           | 3 s      |
+| `npm run check` (prettier, version stamps) | exit 0                            | 2 s      |
 
 The one skip in both full runs is R13d (a pre-placed backup leaf symlink is never written through):
 this host cannot create a file symlink without Developer Mode. It is a host limitation, not a
 product failure. `c18.test.mjs` is standalone, so neither full run executes it; it was run separately
-above. The accept-rc1 run is inside the 1,800,000 ms limit with 628 s of headroom.
+above. The accept-rc1 run is inside the 1,800,000 ms limit with 629 s of headroom.
 `npm run check:versions` ran without `BASE_REF`, so its bump check was skipped; CI sets it on the PR.
+
+### Codex review of the change
+
+Lane `review` (gpt-6-astra, effort high, read-only, isolated; no MCP calls, no touched files,
+`mcpViolation` false). Verdict: approve with changes, two NON-BLOCKING findings, both fixed in
+`5b964fa` as described above. The contract pass found none; the adversarial pass found none beyond
+the coverage wording of the standalone c18 run. There was no second review pass: the fix changed
+wording only and the gates above were re-run on it. The `references/claude.md` and
+`references/codex.md` rc.3-era sentence "Final 3.0.0 remains gated on the rc.4 measurements" was not
+changed, because those files are pinned byte for byte as rc.4; the release notes say so.
 
 ## Housekeeping left to the maintainer
 
