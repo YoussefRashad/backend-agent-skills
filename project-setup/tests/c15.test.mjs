@@ -31,6 +31,7 @@ import { AM15, C15_BLOCKS, FORWARD_ORDER, REVERSAL_ORDER, amendmentOnce, applyOn
 // C16 (plan C16-14, C16-15): every historical comparison of this file first reverses the exact C16 amendments of the file (verified, once, at their anchors) and then runs its existing C15 reversal; the current-bytes assertions stay on the actual current text.
 import { AMENDED_FILES16, C16_BLOCKS, applyForFile as applyC16, reverseForFile as reverseC16Only } from './helpers/c16-amendments.mjs';
 import { C17_BLOCKS, REVERSAL_ORDER17, applyForFile as applyC17, reverseEvalsC17, reverseForFile as reverseC17File } from './helpers/c17-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
 
 // C17 (plan C17-12/C17-13): the historical view of an earlier component's file is the pre-C17 view first (the exact C17 amendments of that file, when it has any, are verified once at their anchors and reversed), then the C16 view
 // (the exact C16 amendments reversed by the unchanged C16 helper). { text, failed } like the helpers; a file only C17 amends has no C16 amendment and its C17-reversed text is its C16 view as well.
@@ -81,8 +82,10 @@ async function importOrFail(failures, url, label) {
 }
 const skillPath = (context, rel) => path.join(context.skillRoot, ...rel.split('/'));
 const rootPath = (context, rel) => path.join(context.repository, ...rel.split('/'));
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
+// The update tests deliver the real tree, so the expected manifest skillVersion is its VERSION as it is (3.0.0), not the rc.4 view.
+const readRawText = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
 const sourceText = (context, rel) => { const t = readText(skillPath(context, rel)); return t === null ? null : LF(t); };
@@ -1268,7 +1271,7 @@ async function update(context) {
     const expReviewerRaw = expReviewerC16 === null ? null : applyC17(expReviewerC16, REVIEWER_REL);
     if (expReviewerRaw === null || expDocsRaw === null) { check(false, 'the C15 model of each agent takes the exact C16 amendments (and the reviewer the exact C17 amendment R17) once at their anchors (the independent expectation of the current agents)'); return; }
     const expReviewer = renderAgent(expReviewerRaw); const expDocsync = renderAgent(expDocsRaw); // the independent expectation
-    const versionFile = (readText(skillPath(context, 'VERSION')) || '').trim();
+    const versionFile = (readRawText(skillPath(context, 'VERSION')) || '').trim();
     const preVersionBytes = c16PreVersion(context); const preVersion = preVersionBytes === null ? null : preVersionBytes.toString('latin1').trim();
     await step('the premises: the pre-C15 and the current canonical agents differ and the current ones render to exactly the independent expectation (pre-C15 bytes plus the frozen amendment), only they carry the two new rules, and an installed pre-C15 rc.2 manifest already carries the current version string (equality is not currency)', async () => {
       check(NH(oldReviewer) !== NH(newReviewer) && NH(oldDocsync) !== NH(newDocsync), 'the pre-C15 and current canonical reviewer and docs-sync differ (an update has something to deliver)');

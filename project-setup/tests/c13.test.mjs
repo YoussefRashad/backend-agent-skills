@@ -30,6 +30,7 @@ import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/pros
 import { reverseSteps as reverseC15 } from './helpers/c15-amendments.mjs';
 import { REVERSAL_ORDER16, reverseForFile as reverseC16File } from './helpers/c16-amendments.mjs';
 import { REVERSAL_ORDER17, reverseForFile as reverseC17File } from './helpers/c17-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
 
 // C14 (docs/plans/2026-10-23-project-setup-v3-rc2-c14.md, C14-13 and C14-17): the prose checks and their controls moved to the shared test-only module tests/helpers/prose-check.mjs, where the C13-R2 and C13-R3
 // residuals are corrected; C14 amends the files this component reads, so the historical C13 checks first verify the exact C14 amendments (copied from the C14 plan below) and reverse them, and the current-candidate release
@@ -73,7 +74,7 @@ async function importOrFail(failures, url, label) {
   try { return await import(url); } catch (e) { failures.push(`cannot import ${label}: ${errMsg(e)}`); return null; }
 }
 const skillPath = (context, rel) => path.join(context.skillRoot, ...rel.split('/'));
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };

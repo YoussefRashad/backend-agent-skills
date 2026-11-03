@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.0
+
+Final release. The skill source is the rc.4 content; only the version number and the release
+headings change. C17 reviewer HEAD identity and Git ownership diagnostics were measured on the
+published rc.4 on 2026-11-02 (Windows 11, Claude Code 2.1.311 and 2.1.316, codex-cli 0.163.0).
+
+Every required review completed with the equal-head warning evaluated through git-safe head.
+The Git ownership failure was content-free without a grant and the review succeeded with the
+exact fixture grant. Two measurement criteria were not met and are recorded as residuals, not
+fixed here: the Codex reviewer rated the seeded lost update INFO in two of two runs, and a
+Claude reviewer refused to start after the parent changed into a subdirectory (the L16 launch
+rule, now seen in the TUI).
+
+Manifest schema 3, policy schemas, approval and rollback behavior remain unchanged.
+
+See RELEASE-NOTES-3.0.0.md. Publication remains a separate authorized action.
+
 ## 3.0.0-rc.4
 
 C17 addresses the reviewer HEAD-routing defect and the Codex elevated-sandbox ownership

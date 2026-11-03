@@ -23,6 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { reverseForFile } from './helpers/c16-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -84,7 +85,7 @@ async function withScratch(context, label, fn) {
     rmrf(dir);
   }
 }
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };

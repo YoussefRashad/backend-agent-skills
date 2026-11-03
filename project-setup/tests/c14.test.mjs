@@ -28,6 +28,7 @@ import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/pros
 import { applySteps as applyC15, reverseSteps as reverseC15 } from './helpers/c15-amendments.mjs';
 import { AMENDED_FILES16, H8D85, REVERSAL_ORDER16, applyTodoC16Pre, TODO_HASHES, TODO_RAW, classifyHeadroomEntry, postHeadroomEntry, reverseForFile as reverseC16File, reverseTodoC16 } from './helpers/c16-amendments.mjs';
 import { REVERSAL_ORDER17, TODO_PRE_C17_HASH, reverseForFile as reverseC17File, reverseTodoC17 } from './helpers/c17-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -66,8 +67,10 @@ async function importOrFail(failures, url, label) {
 }
 const skillPath = (context, rel) => path.join(context.skillRoot, ...rel.split('/'));
 const rootPath = (context, rel) => path.join(context.repository, ...rel.split('/'));
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
+// The update tests deliver the real tree, so the expected manifest skillVersion is its VERSION as it is (3.0.0), not the rc.4 view.
+const readRawText = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
 const sourceText = (context, rel) => { const t = readText(skillPath(context, rel)); return t === null ? null : LF(t); };
@@ -2201,7 +2204,7 @@ async function update(context) {
     const newRaw = readText(skillPath(context, T_DOCSYNC));
     if (oldRaw === null || newRaw === null) { check(false, 'the pre-change fixture docs-sync and the current canonical docs-sync are readable'); return; }
     const oldDocsync = renderAgent(oldRaw); const newDocsync = renderAgent(newRaw);
-    const versionFile = (readText(skillPath(context, 'VERSION')) || '').trim();
+    const versionFile = (readRawText(skillPath(context, 'VERSION')) || '').trim();
     await step('the premises: the pre-C14 and the current canonical docs-sync differ, only the current one names the optional project file, a pre-C14 rc.2 manifest already carries the current version string (equality is not currency), and the six v2 snapshots verify unchanged', async () => {
       check(NH(oldDocsync) !== NH(newDocsync), 'the pre-C14 and current canonical docs-sync differ (an update has something to deliver)');
       check(!oldDocsync.includes('docs-sync.project.md') && newDocsync.includes('".ai/agents/docs-sync.project.md"'), 'only the current canonical docs-sync reads the optional project file (an old canonical agent does not, whatever extension exists)');
