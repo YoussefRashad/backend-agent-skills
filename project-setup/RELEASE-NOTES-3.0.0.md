@@ -44,6 +44,8 @@ recorded Windows R13d file-symlink privilege exception. No rc.1 case may skip.
 R91 must retain real Windows junction coverage.
 
 The dated results record is docs/plans/2026-11-02-project-setup-v3-rc4-host-measurements.md.
+Run node tests/c18.test.mjs for the 3.0.0 assertions: the amendment layer over rc.4, the pinned
+release notes and the release builder on this tree. It is standalone, not a registered component.
 Static instruction tests and evaluation objects do not prove agent behavior.
 
 ## Host measurements on rc.4

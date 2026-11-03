@@ -187,12 +187,19 @@ All other limitations in the rc.4 notes stand unchanged.
 and release text. The residuals go to a 3.0.x change. The recorded blocking conditions of C17-19 did
 not occur.
 
+**I18-2 (2026-11-03, orchestrator, Normal mode).** The 3.0.0 final assertions are the standalone
+`project-setup/tests/c18.test.mjs`, not a registered component. Registering one would amend the exact
+`run-tests.mjs` block and registry pins of C11b to C17 and add no behavioral coverage. It runs in the
+final gates and is named in the 3.0.0 notes. Integrating it is a 3.0.x item.
+
 ## Final change
 
 The 3.0.0 change adds an exact amendment layer, `project-setup/tests/helpers/c18-amendments.mjs`, to
 VERSION, the SKILL.md heading, the README release text, the changelog entry, the root README, the
 project tree and the TODO. Earlier component tests read those files through their verified rc.4 view
-and expect the real tree version in installer and update behavior. Gate results are recorded below
+and expect the real tree version in installer and update behavior. `c18.test.mjs` proves the layer is
+exact, that everything else outside `tests/` is the rc.4 source, and that the release builder builds
+3.0.0 from this tree. Gate results are recorded below
 once they have run.
 
 ## Housekeeping left to the maintainer
