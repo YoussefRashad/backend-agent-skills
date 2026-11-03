@@ -29,6 +29,7 @@ import {
   amendmentOnce, applyForFile, applyOne, applySteps, applyTodoC16Pre, classifyHeadroomEntry, postHeadroomEntry, reverseForFile, reverseOne, reverseSteps, reverseTodoC16,
 } from './helpers/c16-amendments.mjs';
 import { C17_BLOCKS, REVERSAL_ORDER17, TODO_PRE_C17_HASH, applyForFile as applyC17File, reverseEvalsC17, reverseForFile as reverseC17File, reverseTodoC17 } from './helpers/c17-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -67,8 +68,10 @@ async function importOrFail(failures, url, label) {
 }
 const skillPath = (context, rel) => path.join(context.skillRoot, ...rel.split('/'));
 const rootPath = (context, rel) => path.join(context.repository, ...rel.split('/'));
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
+// The update tests deliver the real tree, so the expected manifest skillVersion is its VERSION as it is (3.0.0), not the rc.4 view.
+const readRawText = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
 const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
 // C17 (plan C17-12, C17-13 and F1; decision I17-4): C16's historical checks read the PRE-C17 view of every file C17 changes. A file with exact C17 amendments is reversed through them (each verified once at its anchor; null when one does not verify, which C17's own
@@ -1782,7 +1785,7 @@ async function update(context) {
       check(pv === '3.0.0-rc.2\n' && cv !== null && cv !== pv, 'the prechange VERSION is 3.0.0-rc.2 (the rc.2 manifest skillVersion) and the current VERSION differs', { pv, cv });
       check(Buffer.compare(Buffer.from(TARGETS[I_NESTED].cur), Buffer.from('@AGENTS.md\n')) === 0, 'the nested Claude template is exactly "@AGENTS.md" plus LF');
     });
-    const versionFile = (readText(skillPath(context, 'VERSION')) || '').trim();
+    const versionFile = (readRawText(skillPath(context, 'VERSION')) || '').trim();
     await withScratch(context, 'update', async (dir) => {
       const base = sharedBase(context);
       const recordOf = (t, text) => (t === I_CLAUDE ? { ownership: 'blocks', blocks: blocks.blockHashes(text).hashes } : { ownership: 'full', sha256: NH(text) });

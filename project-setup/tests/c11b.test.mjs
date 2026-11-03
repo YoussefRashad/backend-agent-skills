@@ -24,6 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { reverseForFile } from './helpers/c16-amendments.mjs';
 import { reverseForFile as reverseC17File } from './helpers/c17-amendments.mjs';
+import { FINAL_VERSION18, readRc4, toRc4Tree } from './helpers/c18-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -80,8 +81,10 @@ async function withScratch(context, label, fn) {
     rmrf(dir);
   }
 }
-const readBytes = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
+const readBytes = (p) => { try { return readRc4(p); } catch { return null; } };
 const readText = (p) => { const b = readBytes(p); return b === null ? null : b.toString('utf8'); };
+// The installer tests install the real tree, so their expectations read it as it is (3.0.0), not through the rc.4 view.
+const readRaw = (p) => { try { return fs.readFileSync(p); } catch { return null; } };
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
 function putFile(p, data) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); }
 // A directory link: a junction on Windows (no privilege needed), a symbolic link elsewhere. Returns false when it cannot be created.
@@ -1293,6 +1296,7 @@ async function buildWorld(context) {
   git(['commit', '-q', '-m', 'commit without a subtree']);
   git(['tag', 'c11b-fixture-nosubtree']);
   copyTree(context.skillRoot, path.join(repo, 'project-setup'), (rel) => rel.split('/').some((s) => s === '.git' || s === 'node_modules'));
+  toRc4Tree(path.join(repo, 'project-setup')); // the release-builder world is the rc.4 tree this file pins; c18 builds the real 3.0.0 tree
   git(['add', '-A']);
   git(['commit', '-q', '-m', 'candidate subtree']);
   const ids = gitText(git(['rev-parse', 'HEAD', 'HEAD:project-setup', 'HEAD:project-setup/VERSION'])).trim().split('\n');
@@ -2204,16 +2208,16 @@ async function installedPayload(context) {
           const want = [...PAYLOAD_INVENTORY, '.installed.json'].sort();
           check(eq(found, want), `${name}: the installed inventory is exactly the plan inventory plus .installed.json`, { missing: want.filter((f) => !found.includes(f)).slice(0, 6), extra: found.filter((f) => !want.includes(f)).slice(0, 6) });
           for (const a of PAYLOAD_ABSENT) check(!exists(path.join(root, ...a.replace(/\/$/, '').split('/'))), `${name}: ${a} is absent`);
-          const differ = PAYLOAD_INVENTORY.filter((rel) => { const s = readBytes(skillPath(context, rel)); const d = readBytes(path.join(root, ...rel.split('/'))); return s === null || d === null || Buffer.compare(s, d) !== 0; });
+          const differ = PAYLOAD_INVENTORY.filter((rel) => { const s = readRaw(skillPath(context, rel)); const d = readRaw(path.join(root, ...rel.split('/'))); return s === null || d === null || Buffer.compare(s, d) !== 0; });
           check(differ.length === 0, `${name}: every payload file equals the candidate source bytes`, differ.slice(0, 6));
         }
       });
       await step('plan 3.7: installer metadata (candidate version, the normalized payload hash recomputed independently with the existing algorithm) and the unchanged runtime catalog of seven members', async () => {
-        const srcVersion = readText(skillPath(context, 'VERSION'));
+        const srcVersion = (readRaw(skillPath(context, 'VERSION')) || Buffer.alloc(0)).toString('utf8');
         for (const [name, root] of roots) {
           const meta = parseJson(readText(path.join(root, '.installed.json')) || '');
           check(meta && eq(Object.keys(meta).sort(), ['installedAt', 'name', 'source', 'treeSha256', 'version']) && meta.name === 'project-setup', `${name}: .installed.json has the existing installer fields`, meta && Object.keys(meta));
-          check(meta && srcVersion !== null && meta.version === srcVersion.trim() && meta.version === CANDIDATE_VERSION, `${name}: the installed version is the candidate version ${CANDIDATE_VERSION}`, meta && meta.version);
+          check(meta && srcVersion !== null && meta.version === srcVersion.trim() && meta.version === FINAL_VERSION18, `${name}: the installed version is the source tree version ${FINAL_VERSION18}`, meta && meta.version);
           check(meta && meta.treeSha256 === normalizedTreeHash(root, PAYLOAD_INVENTORY) && meta.treeSha256 === normalizedTreeHash(context.skillRoot, PAYLOAD_INVENTORY), `${name}: treeSha256 equals the independently recomputed normalized payload hash (installed and source)`, meta && meta.treeSha256);
           check(meta && typeof meta.source === 'string' && samePath(meta.source, context.skillRoot), `${name}: the recorded source is the candidate skill directory`, meta && meta.source);
           const catalog = parseJson(readText(path.join(root, 'data', 'runtime-units.json')) || '');

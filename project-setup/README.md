@@ -1,7 +1,7 @@
-# project-setup 3.0.0-rc.4 - skill source
+# project-setup 3.0.0 - skill source
 
-**Release candidate 3.0.0-rc.4.** See RELEASE-NOTES-3.0.0-rc.4.md for compatibility,
-acceptance requirements and the remaining reviewer HEAD and Git ownership host measurements.
+**Release 3.0.0.** See RELEASE-NOTES-3.0.0.md for compatibility, acceptance requirements,
+the rc.4 host measurement results and the remaining limitations.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -127,8 +127,9 @@ a separate Windows user, and git-safe stripped the injected safe.directory confi
 An exact fixture entry in the isolated global config allowed both later reviews.
 A global safe.directory = * is broader than the checkout-specific grant.
 
-C17 adds git-safe head and an actionable ownership diagnostic. These are intended fixes,
-not measured rc.4 host results. Final 3.0.0 remains gated on the rc.4 measurements.
+C17 adds git-safe head and an actionable ownership diagnostic. These were intended fixes,
+not yet measured when this section was written. Their rc.4 measurement is recorded in
+RELEASE-NOTES-3.0.0.md.
 
 Headless P3 h also produced a false launch refusal until the parent supplied its original
 root-start context. This did not reproduce in the TUI, where the brief supplied that
@@ -193,7 +194,9 @@ node tests/run-tests.mjs --keep     # keep fixtures + results.json for inspectio
 
 The suite runs in a temp directory with HOME/USERPROFILE and git config redirected there.
 
-Candidate acceptance requires the complete strict gate below. A focused run or a zero exit
+Release acceptance requires the complete strict gate below and, separately, node tests/c18.test.mjs
+(the standalone 3.0.0 final-release assertions; neither run-tests.mjs nor accept-rc1.mjs runs it).
+A focused run or a zero exit
 from diagnostic selection does not replace it. Only R13d may skip for the recorded Windows
 file-symlink privilege reason.
 
@@ -232,7 +235,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.0.0-rc.4 in the distribution repository.
+requires or creates project-setup-v3.0.0 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -241,5 +244,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.0.0-rc.4 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.0.0 --out <unused-directory>
 ```
