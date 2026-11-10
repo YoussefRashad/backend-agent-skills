@@ -217,7 +217,8 @@ backend-agent-skills/
 │   └── templates/               eslint · prettier · tsconfig · husky · security-scan
 ├── project-setup/               general-purpose — shared Claude Code + Codex setup (3.0.0, own installer and tests)
 ├── pr-review/SKILL.md           general-purpose — per-PR multi-lane review
-└── audit/SKILL.md               general-purpose — full-codebase safety net
+├── audit/SKILL.md               general-purpose — full-codebase safety net
+└── LICENSE                      MIT
 ```
 
 ### Why source templates rather than descriptions
