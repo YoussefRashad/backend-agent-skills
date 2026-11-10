@@ -20,7 +20,8 @@ backend-agent-skills/
 ├── pr-review/SKILL.md          skill 4 — per-PR multi-lane review (general-purpose)
 ├── audit/SKILL.md              skill 5 — full-codebase safety net (general-purpose)
 ├── scripts/check-versions.mjs  version-stamp guard (run by `npm run check` and CI)
-└── .github/workflows/ci.yml    format check + stamp guard for THIS repo
+├── .github/workflows/ci.yml    format check + stamp guard for THIS repo
+└── LICENSE                     MIT
 ```
 
 `project-setup` / `pr-review` / `audit` are **framework-agnostic** skills. The CI version-stamp
