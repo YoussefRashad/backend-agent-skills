@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Owner-signed: **maintainer, 2026-09-20**.
+Accepted. Decision (maintainer, 2026-09-20).
 
 ## Context
 
@@ -47,7 +47,7 @@ scale or accumulates over thousands of rows — but that is a dependency decisio
 
 ## Evidence
 
-- `backend-standards/references/01-engineering-standards.md` §6 — the signed decision
+- `backend-standards/references/01-engineering-standards.md` §6 — the decision
   block, and the surrounding MUSTs on normalization and accumulation.
 - `backend-standards/templates/src/common/money.util.ts` — the header comment restates the
   decision and the reasoning.

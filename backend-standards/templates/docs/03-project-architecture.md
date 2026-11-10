@@ -203,18 +203,18 @@ Read from the lockfile, not from memory.
 
 ## 10. Observability
 
-| Question                                     | Answer                                                            |
-| -------------------------------------------- | ----------------------------------------------------------------- |
-| Logger                                       | `<library, or "console">`                                         |
-| Correlation ID                               | `<how generated/accepted; is a client-supplied value validated?>` |
-| Request logging                              | `<what is stored, which table, success and/or failure>`           |
-| Outbound logging                             | `<table>`                                                         |
-| **Redaction: configured key list** (`02` §2) | `<explicit list, or "library defaults">`                          |
-| **Are library defaults verified?**           | `<date checked; do they include token/authorization?>`            |
-| Payload size cap                             | `<value, or "none">`                                              |
-| Metrics                                      | `<what exists; which environments>`                               |
-| Alerting                                     | `<channels and conditions>`                                       |
-| Known blind spots                            | `<be honest — this is what someone reads at 2 AM>`                |
+| Question                                     | Answer                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| Logger                                       | `<library, or "console">`                                          |
+| Correlation ID                               | `<how generated/accepted; is a client-supplied value validated?>`  |
+| Request logging                              | `<what is stored, which table, success and/or failure>`            |
+| Outbound logging                             | `<table>`                                                          |
+| **Redaction: configured key list** (`02` §2) | `<explicit list covering Class A, B and C, or "library defaults">` |
+| **Are library defaults verified?**           | `<date checked; do they include token/authorization/nationalId?>`  |
+| Payload size cap                             | `<value, or "none">`                                               |
+| Metrics                                      | `<what exists; which environments>`                                |
+| Alerting                                     | `<channels and conditions>`                                        |
+| Known blind spots                            | `<be honest — this is what someone reads at 2 AM>`                 |
 
 ### Retention (`02` §3)
 

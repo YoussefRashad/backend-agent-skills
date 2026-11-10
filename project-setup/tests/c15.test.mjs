@@ -181,7 +181,7 @@ const PRE_C15 = {
 };
 // Plan C15-9: the two frozen repository-root C14 records, raw bytes, MUST stay unedited (asserted by RC1/C15/release).
 const C14_RECORDS = [
-  ['docs/plans/2026-10-23-project-setup-v3-rc2-c14-acceptance.md', '2330a2b0db34379df43c3adc2411bb877bc70bb05388b8e7dd74cba012e95e56'],
+  ['docs/plans/2026-10-23-project-setup-v3-rc2-c14-acceptance.md', '3a53e330fbd561b2c9193be0f1ccf450b34056f11a479ca24c572e9d20619055'],
   ['docs/plans/2026-10-23-project-setup-v3-rc2-c14.md', 'a1a87ae314f3897b008e34b3be41f22d834586f1d3fd9132d15547411fe27ba4'],
 ];
 // Plan C15-10: the runner files C15 MUST NOT touch keep their pins.

@@ -13,7 +13,7 @@ YAML frontmatter with `name` and `description`, then prose.
   650–850 characters; keep new ones in that range.
 - Numbered procedure steps, each with the _reason_ the step exists in that order — e.g.
   `git init` before `npm install` because Husky's `prepare` needs `.git`.
-- Decisions are quoted blocks signed with a name and date, and say **what was actually
+- Decisions are quoted blocks marked `Decision (maintainer, <date>)`, and say **what was actually
   verified** versus what was assumed.
 - Footgun boxes use `## ⚠️ Critical <thing> footgun` and follow the same shape: what the
   setting is, what breaks, why it is invisible, what not to do about it.

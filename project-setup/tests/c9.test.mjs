@@ -1133,7 +1133,7 @@ function validParseCases() {
   out.push([['keys', '--template', 'auto'], { command: 'keys', template: 'auto', keysFile: null, runId: null }]);
   const parts = { template: ['--template', 'auto'], keys: (k) => ['--keys', k], run: (id) => ['--run-id', id] };
   const perms = (a) => (a.length <= 1 ? [a] : a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map((p) => [x, ...p])));
-  const values = [['keys.json', 'valid-id-1'], ['..\\x\\k.json', '<run-id>'], ['/abs/path/k.json', 'review-2'], ['dir with space/k.json', 'review1'], ['-k.json', 'Run.id_9-x']];
+  const values = [['keys.json', 'valid-id-1'], ['..\\x\\k.json', 'ps-20261019-ab12'], ['/abs/path/k.json', 'review-2'], ['dir with space/k.json', 'review1'], ['-k.json', 'Run.id_9-x']];
   values.forEach(([k, id]) => {
     for (const p of perms(['template', 'keys', 'run'])) out.push([['merge', ...p.flatMap((x) => (x === 'template' ? parts.template : x === 'keys' ? parts.keys(k) : parts.run(id)))], { command: 'merge', template: 'auto', keysFile: k, runId: id }]);
     for (const p of perms(['keys', 'run'])) out.push([['merge', ...p.flatMap((x) => (x === 'keys' ? parts.keys(k) : parts.run(id)))], { command: 'merge', template: 'auto', keysFile: k, runId: id }]);

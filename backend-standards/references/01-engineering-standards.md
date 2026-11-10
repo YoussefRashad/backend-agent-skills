@@ -215,7 +215,7 @@ The recommended shape:
 - `forbidNonWhitelisted` **SHOULD** be **off**. Unknown fields are stripped silently rather
   than rejected.
 
-  > **Decision — maintainer, 2026-09-20.** Client compatibility is worth more than early
+  > **Decision (maintainer, 2026-09-20).** Client compatibility is worth more than early
   > detection: a newer app version sending an extra field keeps working against an older
   > backend, and a field removed from a DTO does not start returning 400 to clients still
   > sending it.
@@ -253,7 +253,7 @@ purpose; splitting storage rules from DTO rules is how the two drift apart.
   floats. Rounding to the currency's scale after one multiplication is fine; adding fifty
   amounts and rounding once at the end is not — the drift compounds before you round it away.
 
-  > **Decision — maintainer, 2026-09-20.** No decimal library. The rules below achieve
+  > **Decision (maintainer, 2026-09-20).** No decimal library. The rules below achieve
   > correctness with zero dependencies.
 
 - The shared utility **MUST** normalize to the currency's scale after **every** operation,

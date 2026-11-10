@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Owner-signed: **maintainer, 2026-09-20**.
+Accepted. Decision (maintainer, 2026-09-20).
 
 ## Context
 
@@ -42,7 +42,7 @@ rather than globally.
 
 ## Evidence
 
-- `backend-standards/references/01-engineering-standards.md` §5 — the signed decision
+- `backend-standards/references/01-engineering-standards.md` §5 — the decision
   block, including the explicitly stated cost.
 - `backend-standards/templates/src/main.ts` — the `ValidationPipe` comment restating the
   decision and the per-route escape hatch.

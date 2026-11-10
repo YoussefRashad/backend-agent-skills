@@ -17,7 +17,7 @@ stamps its version into the target repository so drift is detectable.
 
 Two stamps per project: `CLAUDE.md` carries a sentence for a human reader, and
 `.backend-standards.json` / `.toolchain-config.json` carry the machine-readable version
-for a sweep of adopting services. Both are compared against `templates/version.json` in this repo.
+for a sweep across the services that adopt this skill. Both are compared against `templates/version.json` in this repo.
 
 ## Alternatives Considered
 

@@ -91,11 +91,11 @@ These pins are **deliberately held**, not merely old. As of the `lastVerified` d
 
 | Package                            | Pinned | Latest seen | Why held                                                                                                       |
 | ---------------------------------- | ------ | ----------- | -------------------------------------------------------------------------------------------------------------- |
-| `eslint` / `@eslint/js`            | `^9`   | `10.x`      | Flat-config behaviour changes; needs a validated pass across the adopting services                                         |
+| `eslint` / `@eslint/js`            | `^9`   | `10.x`      | Flat-config behaviour changes; needs a validated pass across adopting services                                 |
 | `typescript`                       | `^5.8` | `7.x`       | TS 7 is the native port. Decorator-metadata emit is load-bearing here (see SKILL.md); it is not a config sweep |
 | `lint-staged`                      | `^15`  | `17.x`      | Config-format changes between majors                                                                           |
 | `eslint-plugin-sonarjs`            | `^3`   | `4.x`       | Rule set changed; would move the cognitive-complexity baseline                                                 |
-| `eslint-plugin-simple-import-sort` | `^12`  | `14.x`      | Grouping semantics; would reorder imports across every adopting service in one commit                                             |
+| `eslint-plugin-simple-import-sort` | `^12`  | `14.x`      | Grouping semantics; would reorder imports in every adopting service in one commit                              |
 | `eslint-plugin-security`           | `^3`   | `4.x`       | Rule renames; the ratchet list would need re-checking                                                          |
 
 **Upgrading these is a deliberate initiative, not a toolchain sweep** — the same

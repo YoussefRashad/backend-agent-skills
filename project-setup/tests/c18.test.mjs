@@ -50,7 +50,9 @@ for (const rel of AMENDED_FILES18) {
   check(`${rel}: LF only, no BOM, exactly one final LF`, !raw.includes('\r') && raw.charCodeAt(0) !== 0xfeff && raw.endsWith('\n') && !raw.endsWith('\n\n'));
   const back = reverseForFile(raw, rel);
   check(`${rel}: every 3.0.0 amendment stands once at its anchor and reverses`, back.text !== null, back.failed);
-  check(`${rel}: the reversed text is the pinned rc.4 file (SHA-256)`, back.text !== null && sha(Buffer.from(back.text, 'utf8')) === RC4_SHA[rel], back.text === null ? null : sha(Buffer.from(back.text, 'utf8')));
+  // Public edition: the repository-root release records (README.md, TODO.md, .ai/context/project-tree.md) were rewritten for
+  // publication, so their bytes differ from the private line and their rc.4 SHA-256 is not evaluated here.
+  if (!rel.startsWith('@root/')) check(`${rel}: the reversed text is the pinned rc.4 file (SHA-256)`, back.text !== null && sha(Buffer.from(back.text, 'utf8')) === RC4_SHA[rel], back.text === null ? null : sha(Buffer.from(back.text, 'utf8')));
   check(`${rel}: applying the amendments to the rc.4 view gives the current file`, back.text !== null && applyForFile(back.text, rel) === raw);
   check(`${rel}: control: reversing the rc.4 view again is refused`, back.text !== null && reverseForFile(back.text, rel).text === null);
   const ids = Object.keys(AM18).filter((id) => AM18[id].file === rel);

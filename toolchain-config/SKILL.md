@@ -629,12 +629,12 @@ Not everything is a ratchet. Rules backing a **MUST** in `01` or `02` ship as `e
 because a `warn` does not enforce a MUST and `lint` carries no `--max-warnings 0`
 (which would defeat the ratchet above):
 
-| Rule                                                                             | Backs                                               |
-| -------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `no-console`                                                                     | `02` §2.5 — stdout is outside the log store |
-| `no-restricted-syntax` — `any`/inline-literal on `@Body()`/`@Query()`/`@Param()` | `01` §5 — bypasses validation entirely              |
-| `no-restricted-syntax` — interpolation or `+` inside query-builder calls         | `01` §7 — SQL injection                             |
-| `no-debugger`, `import/no-cycle`, `no-floating-promises`                         | correctness                                         |
+| Rule                                                                             | Backs                                              |
+| -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `no-console`                                                                     | `02` §2.5 — stdout bypasses the logger's redaction |
+| `no-restricted-syntax` — `any`/inline-literal on `@Body()`/`@Query()`/`@Param()` | `01` §5 — bypasses validation entirely             |
+| `no-restricted-syntax` — interpolation or `+` inside query-builder calls         | `01` §7 — SQL injection                            |
+| `no-debugger`, `import/no-cycle`, `no-floating-promises`                         | correctness                                        |
 
 Adopting these in a legacy repo can surface a lot at once. **That is a report, not a
 fix** (step 8) — do not edit application source to clear them. If the volume blocks

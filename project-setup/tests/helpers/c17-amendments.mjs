@@ -420,13 +420,13 @@ const REPO_MESSAGE = [
 
 const C16_IDS = [
   "plan:",
-  "c08622f9580f1c154fe03d069e802e864d80e6b0ec6dd8f4ce5e7947b5998129",
+  "06bd660c48ee75214b91240b794f71042c8973a928a7fc5f458bfd4b0b12c4c8",
   "",
   "decisions:",
-  "befc8c52d8fe9a817f070fe17914a0158631455fe1dfe4d1b751a90da044d839",
+  "9f2b6d1ae6a3c7dbe2f726b0df43fc806daa365ffa06f9ceafbdce31ee6ce39b",
   "",
   "acceptance:",
-  "adc7d97592f0001f3995744d51f9a90c8bb802c01ce602c96079832c3e833673",
+  "5bee9e326243ae5bdfe3daf639c27db10f601b4312f081cf61e633bfd1a84977",
 ];
 
 const UPGRADE_COMMITS = [

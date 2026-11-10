@@ -71,9 +71,10 @@ export default tseslint.config(
     rules: {
       // General
       // `error`, not `warn`: 02 §2.5 makes this a MUST NOT, because console output
-      // goes to stdout — outside the log store and outside its retention, so
-      // a console.log of a request body writes Class B/C data somewhere it must never
-      // appear. A rule at `warn` does not enforce a MUST NOT. Specs override it below.
+      // goes to stdout — past the configured logger's redaction and outside the log
+      // store's retention, so a console.log of a request body writes Class B/C data
+      // somewhere it must never appear. A rule at `warn` does not enforce a MUST NOT.
+      // Specs override it below.
       'no-console': 'error',
       'no-debugger': 'error',
 
@@ -278,7 +279,7 @@ export default tseslint.config(
       '@typescript-eslint/no-misused-promises': 'off',
       'import/no-extraneous-dependencies': 'off',
       // A spec legitimately logs while diagnosing, and a spec is not a request path —
-      // it cannot write Class B/C data to the log store's stdout. 02 §2.5 is about
+      // it cannot write a request's Class B/C data to stdout. 02 §2.5 is about
       // application code.
       'no-console': 'off',
       // Specs construct fixtures and stubs that deliberately mimic bad shapes.

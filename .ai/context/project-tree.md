@@ -7,7 +7,7 @@ What each part of this repository is, and which parts are dangerous to change.
 > breaks every service scaffolded after it, silently, until someone notices.
 
 ```
-claude-backend-skills/
+backend-agent-skills/
 ├── backend-standards/          skill 1 — scaffold/align a backend service
 │   ├── SKILL.md                the 12-step procedure
 │   ├── README.md               install notes
@@ -40,18 +40,18 @@ remaining platform limitations are in project-setup/RELEASE-NOTES-3.0.0.md.
 
 ## `backend-standards/`
 
-| Path                                       | What it is                                                                                                      | Ships to                     |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Path                                       | What it is                                                                                                                  | Ships to                     |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | `SKILL.md`                                 | 12-step procedure; also holds the Defaults, the adopting-services table, the owner/escalation table and the **Nest 12** gap | —                            |
-| `references/00-ai-agent-instructions.md`   | Read-first rules: RFC 2119 key, precedence order, inspect-before-implement, escalation                          | `.ai/standards/`             |
-| `references/01-engineering-standards.md`   | 19 sections — architecture, API, money, DB, Redis, idempotency, backward compatibility, CI                      | `.ai/standards/`             |
-| `references/02-security-and-compliance.md` | **The security floor.** Data classes A–D, the logging posture, retention, authn/authz, webhooks, secrets        | `.ai/standards/`             |
-| `references/04-review-and-dod.md`          | Part A (machine-checkable) vs Part B (human judgment)                                                           | `.ai/standards/`             |
-| `templates/docs/`                          | `CLAUDE.md` (placeholders), `03-project-architecture.md`, `known-deviations.md`                                 | `.ai/standards/` + repo root |
-| `templates/agents/`                        | `reviewer.md`, `docs-sync.md` — **for the scaffolded service**, not for this repo                               | `.claude/agents/`            |
-| `templates/ci/github-actions.yml`          | The 04 Part A gates plus a boot smoke test                                                                      | `.github/workflows/`         |
-| `templates/src/`                           | 16 real TypeScript files (3 are specs)                                                                          | `src/`                       |
-| `templates/version.json`                   | The stamp. **Bump on any change under `templates/` or `references/`.**                                          | —                            |
+| `references/00-ai-agent-instructions.md`   | Read-first rules: RFC 2119 key, precedence order, inspect-before-implement, escalation                                      | `.ai/standards/`             |
+| `references/01-engineering-standards.md`   | 19 sections — architecture, API, money, DB, Redis, idempotency, backward compatibility, CI                                  | `.ai/standards/`             |
+| `references/02-security-and-compliance.md` | **The security floor.** Data classes A–D, the redaction rule, retention, authn/authz, webhooks, secrets                     | `.ai/standards/`             |
+| `references/04-review-and-dod.md`          | Part A (machine-checkable) vs Part B (human judgment)                                                                       | `.ai/standards/`             |
+| `templates/docs/`                          | `CLAUDE.md` (placeholders), `03-project-architecture.md`, `known-deviations.md`                                             | `.ai/standards/` + repo root |
+| `templates/agents/`                        | `reviewer.md`, `docs-sync.md` — **for the scaffolded service**, not for this repo                                           | `.claude/agents/`            |
+| `templates/ci/github-actions.yml`          | The 04 Part A gates plus a boot smoke test                                                                                  | `.github/workflows/`         |
+| `templates/src/`                           | 16 real TypeScript files (3 are specs)                                                                                      | `src/`                       |
+| `templates/version.json`                   | The stamp. **Bump on any change under `templates/` or `references/`.**                                                      | —                            |
 
 ## `toolchain-config/`
 
@@ -67,14 +67,14 @@ remaining platform limitations are in project-setup/RELEASE-NOTES-3.0.0.md.
 
 These carry the most risk per line. See `critical-modules.md` before editing.
 
-| File                                             | Why                                                                      |
-| ------------------------------------------------ | ------------------------------------------------------------------------ |
-| `references/02-security-and-compliance.md`       | Defines what may be logged. A relaxed rule here relaxes it across every adopting service    |
-| `templates/src/common/money.util.ts`             | Exact integer-minor-unit arithmetic. A rounding change is a money change |
-| `templates/src/common/sortable.ts`               | The only barrier between a `sortBy` parameter and `ORDER BY`             |
-| `templates/src/common/webhook-signature.util.ts` | Constant-time comparison; verify-before-state-change                     |
-| `templates/src/common/redis-lock.service.ts`     | Ownership-checked release; fails closed                                  |
-| `templates/scripts/security-scan.mjs`            | Exit codes decide whether the A4/A5 gates can block                      |
+| File                                             | Why                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `references/02-security-and-compliance.md`       | Defines what may be logged. A relaxed rule here relaxes it for every adopting service |
+| `templates/src/common/money.util.ts`             | Exact integer-minor-unit arithmetic. A rounding change is a money change              |
+| `templates/src/common/sortable.ts`               | The only barrier between a `sortBy` parameter and `ORDER BY`                          |
+| `templates/src/common/webhook-signature.util.ts` | Constant-time comparison; verify-before-state-change                                  |
+| `templates/src/common/redis-lock.service.ts`     | Ownership-checked release; fails closed                                               |
+| `templates/scripts/security-scan.mjs`            | Exit codes decide whether the A4/A5 gates can block                                   |
 
 ## Dependencies between the two skills
 

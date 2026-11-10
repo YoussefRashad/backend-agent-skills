@@ -19,7 +19,7 @@ version and OS. Nothing here touches a real project or user-level configuration.
 2. Isolated tool config (new login inside each isolated config is expected):
    - Claude Code: set `CLAUDE_CONFIG_DIR` to an empty directory for that terminal.
    - Codex: set `CODEX_HOME` to an empty directory for that terminal.
-   PowerShell: `$env:CLAUDE_CONFIG_DIR="<lab>\claude-home"` / `$env:CODEX_HOME="<lab>\codex-home"`.
+   PowerShell: `$env:CLAUDE_CONFIG_DIR="C:\live\claude-home"` / `$env:CODEX_HOME="C:\live\codex-home"`.
 3. Known collision risk: your machine has v1 copies in `~/.claude/skills/project-setup` and
    `~/.agents/skills/project-setup`. `CLAUDE_CONFIG_DIR` should hide the Claude one; whether Codex still scans
    `~/.agents/skills` under a custom `CODEX_HOME` is **unverified**. L02 measures it. If both copies are visible,

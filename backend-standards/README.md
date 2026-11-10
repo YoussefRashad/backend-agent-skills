@@ -109,7 +109,7 @@ Propagation is **pull-based**. Nothing is pushed to a project, so one silently f
 until someone re-runs the skill on it.
 
 Each project carries the standards version it was created with, in two places:
-`CLAUDE.md` for a human reader, and `.backend-standards.json` for the sweep of adopting services.
+`CLAUDE.md` for a human reader, and `.backend-standards.json` for a sweep across the services that adopt this skill.
 Compare either against `templates/version.json` to find projects that are behind.
 
 ---

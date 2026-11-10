@@ -46,7 +46,7 @@ If nothing was specified and the tree is clean, **ask what to sync** rather than
 | A tsconfig compiler option                   | The footgun boxes in `toolchain-config/SKILL.md`, `critical-modules.md`                  |
 | `package-fragments.md` pins                  | The dependency-currency table **and** `lastVerified` in `version.json`                   |
 | `security-scan.mjs` exit codes or mounts     | `critical-modules.md`, `04` Part A notes, `toolchain-config/SKILL.md` § scanners         |
-| A new signed decision                        | A new ADR in `.ai/decisions/` + the index table                                          |
+| A new dated decision                         | A new ADR in `.ai/decisions/` + the index table                                          |
 | The procedure's step count or order          | `CLAUDE.md` commands, `backend-standards/README.md`, the layout block in `README.md`     |
 | Anything about which Nest major is supported | `SKILL.md` § Nest 12, the README verification section, `glossary.md`                     |
 | A resolved gap                               | Remove it from `TODO.md` rather than leaving it standing                                 |
@@ -79,8 +79,8 @@ The statements that go stale silently, because nothing fails when they do:
 ### 5. The security floor
 
 If a change touches `references/02` — a class boundary, a MUST, or one of the four
-conditions the Class B/C decision rests on — that is **not** a documentation update.
-Stop and raise it with the owner. The decision has to be re-taken, not silently inherited,
+conditions the capture risk acceptance rests on — that is **not** a documentation update.
+Stop and raise it with the maintainer. The decision has to be re-taken, not silently inherited,
 and `ADR-006` needs updating rather than quietly drifting.
 
 ### 6. Stamps

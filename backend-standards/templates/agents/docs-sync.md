@@ -75,12 +75,14 @@ These are the statements that go stale silently, because nothing fails when they
 
 ### 5. The conditions in `02` §1
 
-The logging decision in `02` is **conditional** on four facts: no API exposes the log store,
-access is restricted, retention is enforced, and logs do not reach a lower-trust environment.
+`02` redacts Class B and Class C data in every log by default. A project that captures them
+unredacted does so under a risk acceptance recorded in `known-deviations.md` §3, and that
+risk acceptance is **conditional** on four facts: no API exposes the log store, access is
+restricted, retention is short and enforced, and logs do not reach a lower-trust environment.
 
-If a change breaks any of them — a log-viewer endpoint, an export, a restore into staging —
-that is not a documentation update. **Stop and raise it with the owner.** The decision has to
-be re-taken, not silently inherited.
+If the project records one and a change breaks any of the four — a log-viewer endpoint, an
+export, a restore into staging — that is not a documentation update. **Stop and raise it with
+whoever signed the risk acceptance.** It has to be re-taken, not silently inherited.
 
 ### 6. Deviations
 
