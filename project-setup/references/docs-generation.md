@@ -155,6 +155,279 @@ evidence: describe the technology in context docs and add the missing rationale 
 Sections: Needs Manual Review · Missing Information · Security Concerns · Inconsistencies · Unverified Controls ·
 Cleanup. Every item: file:line where possible, what to confirm, never a secret value.
 
+## Documentation source of truth on backend-standards projects
+
+On a project where backend-standards (BS) provenance is established, `.ai/standards/03-project-architecture.md` (03) owns the architectural facts. Project-setup writes navigation pointers for the overlapping documents instead of a second full description, because two detailed descriptions of one fact drift apart.
+
+This mapping is a documentation policy layered over the detected mode. Mode selection in `references/modes.md` stays authoritative: a valid manifest selects `update`, invalid metadata selects `invalid`, existing configuration without reliable provenance uses conservative adoption, and BS naming or markers do not establish v1 provenance. The no-source rules above stay authoritative too: setup never generates context documents merely to populate this mapping.
+
+### Detection and activation
+
+BS writes provenance in two ways. Its new-service procedure writes a root `.backend-standards.json` stamp:
+
+```json
+{
+  "version": "<templates version>",
+  "appliedBy": "backend-standards"
+}
+```
+
+Its existing-project procedure writes no stamp. It optionally recommends running project-setup first, then delivers 03, known deviations, CLAUDE.md and two Claude agents. The BS CLAUDE.md template carries the 03 import and a provenance sentence:
+
+```text
+@.ai/standards/03-project-architecture.md
+
+Applied from the `backend-standards` skill, version `<version>`.
+```
+
+On these signals, automatic activation requires a readable, permitted 03 and either:
+
+1. A valid root stamp object with `appliedBy: "backend-standards"` and a valid semantic-version string; or
+2. With no stamp, one unambiguous BS CLAUDE provenance sentence containing a concrete semantic version, together with the import of this same 03.
+
+The second signal is accepted (maintainer decision Q1, 2026-11-11), because the existing-project BS procedure writes no stamp and a stamp-only rule would prompt on a primary path. An explicitly approved owner decision, recorded as described below, may independently select the layout.
+
+> Setup MUST distinguish absent signals from denied, unsafe, malformed or unreadable signals, because a failed read does not establish absence.
+>
+> Setup MUST inspect provenance only within the existing permitted-read boundary. Layout signals grant no additional read, write or ownership permissions.
+>
+> Setup MUST NOT infer BS provenance from the architecture filename alone.
+
+Do not require exactly BS 3.1.0. Resolve the installed document's headings and coverage.
+
+| Signals | Treatment |
+|---|---|
+| Readable 03 and valid stamp; other signals agree or are absent | Activate mapping. |
+| Readable 03, absent stamp, valid BS CLAUDE sentence and matching import | Activate mapping; show the sentence and the import in Phase 0. |
+| Readable 03 and the exact approved owner-decision sentence | Honor the decision unless current evidence conflicts. |
+| Recognized BS provenance but 03 absent | Hold affected generation and report incomplete BS documentation. |
+| 03 alone | Show ambiguity and request a concrete disposition. Do not generate competing full documents while pending. |
+| Malformed stamp, conflicting `appliedBy`, contradictory versions, conflicting provenance sentences or inconsistent imports | Hold activation. Another signal cannot silently override the conflict. |
+| No accepted signal | Existing PS documentation rules. |
+| Owner confirms an unrelated 03 | Existing PS rules; no automatic conversion or ownership claim over 03. |
+| Installed pointers but a signal disappears | Preserve pointers and report inconsistency. Never automatically expand them into full documents. |
+
+### Durable owner decision
+
+The fixed location is **root `AGENTS.md`, outside every managed block**. The exact affirmative sentence is:
+
+```text
+Documentation layout decision: use .ai/standards/03-project-architecture.md as the source of truth for project-setup mapped documentation.
+```
+
+> Setup MUST search for this exact standalone sentence in root AGENTS.md outside managed blocks, because a decision in an unspecified location cannot reliably guide later runs.
+>
+> Setup MUST propose and record this sentence only after explicit owner approval through the reviewed instruction-file workflow. Its absence, approximate wording, quotation inside an example, or presence in another file MUST NOT count as this decision.
+>
+> Setup MUST hold conflicting or duplicated decision records for explicit disposition rather than choosing one silently.
+>
+> Setup MUST show the signals, selected policy, detected mode and unresolved dispositions in Phase 0, because otherwise adoption can create duplicate factual owners.
+>
+> Setup MUST NOT repair or manufacture the BS stamp.
+
+The sentence records an owner-selected layout; it does not prove that BS ran. A non-BS project may opt in through the same reviewed decision.
+
+Preserving this sentence outside blocks follows the existing preservation requirement for user text (see "Root AGENTS.md" and the root-start rule above). Bind unchanged root AGENTS.md as an input when activation relies on it (see "Source binding" below).
+
+### Document mapping
+
+The existing PS document inventory above remains intact. Heading text, not section numbers, determines destinations; the numbers below describe the current BS template.
+
+| PS document | Destination or disposition |
+|---|---|
+| `.ai/context/project-tree.md` | **Module layout** (§4); dangerous-module references also link to **Landmines** (§15). |
+| `.ai/context/critical-modules.md` | **Module layout** (§4), **Authentication and authorization** (§6), **Database** (§7), including **Money (`01` §6)**, **Cache, locks and queues** (§8), **Outbound integrations** (§9), **Observability** (§10), including **Retention (`02` §3)**, and **Landmines** (§15). Preserve invariants, ownership boundaries, transactions, locking, idempotency and PII facts. |
+| `.ai/context/code-patterns.md` | Generate in full. Preserve implementation examples and conventions; reference architectural facts in 03. |
+| `.ai/context/error-contract.md` | **API surface** (§5), including error contracts and final response-writing paths. |
+| `.ai/context/configuration.md` | **Configuration** (§3). Preserve variable name, requiredness, classification, consumer, description and source coverage. Never values. |
+| `.ai/context/glossary.md` | **Domain glossary** (§14). |
+| `.ai/context/development-rules.md` | Generate in full. Preserve testing, compatibility, scope and test-run hygiene requirements; reference tooling and local-development facts in 03. |
+| `docs/api-conventions.md` | **API surface** (§5) and **Authentication and authorization** (§6), including evidenced rate-limit conventions. |
+| `docs/database.md` | **Database** (§7), including **Schema changes** and **Money (`01` §6)**; **Module layout** (§4) for entity locations and naming conventions. |
+| `docs/observability.md` | **Observability** (§10) and **Health, shutdown, deployment** (§11), retaining health-check coverage. |
+| `docs/integrations/<vendor>.md` | **Outbound integrations** (§9), scoped to the vendor; **Observability** (§10) for shared logging/redaction behavior. |
+| `docs/business-rules/<flow>.md` | Generate in full only with sufficient domain evidence. Reference shared contracts in 03. |
+| `.ai/decisions/README.md` | Generate in full as the ADR index. |
+| `.ai/decisions/<adr>.md` | Generate in full, retaining the evidence requirement. |
+| `TODO.md` | Generate in full for uncertainty, conflicts and unverified controls. |
+| Root `AGENTS.md` | Generate instructions with critical rules, navigation and conditional routing. |
+| Root `CLAUDE.md` | Generate or merge instructions, preserving BS imports and version information and installing the PS import and managed block through review. |
+| Directory-specific `AGENTS.md` / `CLAUDE.md` pairs | Preserve local instructions and paired files; reference 03 for shared facts. |
+
+> For an activated mapping, setup MUST generate each applicable mapped PS document as a pointer and consolidate its evidenced architectural facts into the mapped sections of 03, because separate detailed descriptions drift.
+>
+> Setup MUST preserve the information requirements of the original PS document. A shorter BS table MUST NOT justify losing configuration inventories, transaction details, error transformations, integration safeguards or critical-module invariants.
+
+03 may require reviewed expansion. Its Configuration and Outbound integrations sections start with comparatively compact structures. Changes are to the target project's 03, never the BS template.
+
+**Instruction-summary exception:** root and local instruction files retain concise critical-rule summaries, stack identification, DB-change policy and executable commands required for their instruction role. These summaries MUST agree with 03 and reference it for architectural detail.
+
+This keeps the rule above that the root keeps the short version, and the BS requirement that its CLAUDE.md commands stay consistent.
+
+> Setup MUST resolve headings after removing an optional leading section number and normalizing whitespace. It MUST preserve meaningful text, including parenthetical cross-references, because removing arbitrary parentheses can collapse distinct destinations.
+>
+> Setup MUST resolve subordinate headings within their named parent section. Missing, renamed or ambiguous destinations require explicit disposition; setup MUST NOT choose a similar heading silently or generate a duplicate full document.
+>
+> Pointers MUST reproduce actual resolved heading names.
+
+Use file links with named headings rather than generated fragment identifiers. Renumbering remains usable; changed cross-references or meaning require review.
+
+Each section bullet is one line: `- <Heading>` for a top-level section, or `- <Parent> > <Subheading>` for a subordinate heading, for example `- Database > Schema changes`. A subordinate heading is never listed without its parent, and every mapped section of the PS document is listed.
+
+### Pointer format
+
+Use this skeleton; no shipped template file carries it.
+
+```markdown
+# {{TITLE}}
+
+<!-- project-setup:documentation-pointer v=1 -->
+
+Source of truth: [Project architecture]({{RELATIVE_PATH_TO_03}}).
+
+Sections:
+{{SECTION_BULLETS}}
+
+Scope: {{TOPIC_OR_VENDOR}}.
+
+Readers and agents MUST follow the source link and read the named sections
+before relying on or updating this topic, because this file contains
+navigation only.
+
+Readers and agents making documentation updates MUST change the source
+sections instead of adding factual content here, because duplicate
+descriptions drift. Preserve this pointer unless its destination changes.
+
+If the source or a named section is missing or unclear, documentation-writing
+agents MUST record the gap in the repository-root TODO.md within their
+authorized scope. Read-only agents MUST report the gap in their output and
+MUST NOT create, modify or delete files. Other readers MUST report the gap
+to the documentation owner. These duties preserve each actor's write
+boundary.
+
+Documentation-writing agents MUST resolve the destination before changing
+the affected documented facts, because an unresolved destination cannot
+establish the factual source of truth.
+```
+
+Expansion rules:
+
+- Replace every placeholder.
+- Emit one section bullet per resolved heading or parent/subheading pair.
+- Use the relative paths below.
+- Include no copied factual summaries, tables, timestamps or hashes.
+- Identify the vendor in `Scope`; generate vendor pointers only with evidence.
+- Exempt valid pointers from the generic "skip near-empty documents" instruction.
+- Keep the pointer marker distinct from managed-block markers.
+
+| Pointer directory | Relative path to 03 |
+|---|---|
+| `.ai/context/` | `../standards/03-project-architecture.md` |
+| `docs/` | `../.ai/standards/03-project-architecture.md` |
+| `docs/integrations/` | `../../.ai/standards/03-project-architecture.md` |
+
+Each pointer MUST supply complete routing when opened alone. Correct routing MUST NOT depend on root text, imports or subagent inheritance. Actual agent compliance remains a live measurement.
+
+The split reporting duty matches both reviewer wrappers: the Claude reviewer has no Edit/Write tools and forbids shell workarounds, and the Codex reviewer forbids file changes.
+
+### Ownership
+
+> Setup MUST request `merged` ownership for pointers and a created or changed 03, because these are living project documents.
+>
+> Setup MUST NOT claim ownership of 03 merely by reading or linking it.
+>
+> Setup MUST preserve user additions to pointers until their disposition is approved; the pointer marker grants no deletion permission.
+>
+> Setup MUST review ownership transitions alongside content changes.
+
+Living PS docs without blocks already infer `merged`. `.ai/standards/` is outside that inference, so a newly created or changed 03 needs an explicit entry in the ownership request to avoid `full`.
+
+### Conditional root routing
+
+For activated projects, add this paragraph to the generated root `critical-rules` block:
+
+> Readers and agents MUST follow documentation pointers to their named source sections before relying on or updating the topic. For BS-mapped documentation, `.ai/standards/03-project-architecture.md` owns the facts; pointer files contain navigation only. All agents, including reviewer and docs-sync, MUST follow that routing. Documentation-writing agents MUST update the affected source sections instead of expanding a pointer, because separate descriptions drift. If a destination is missing or unclear, documentation-writing agents MUST record the gap in root `TODO.md` within their authorized scope and resolve the destination before changing the affected documented facts. Read-only agents MUST report the gap in their output and MUST NOT create, modify or delete files. Other readers MUST report the gap to the documentation owner. These duties preserve each actor's write boundary.
+
+Add this sentence to the generated navigation:
+
+> Some entries below are documentation pointers; follow their source links and named headings.
+
+Keep `assets/templates/AGENTS.md` unchanged. Non-activated output receives neither addition.
+
+Preserve the existing money/auth critical rule and its `.ai/context/critical-modules.md` reference, including locking, atomicity and idempotency requirements. That document becomes a self-sufficient pointer.
+
+### Canonical agents and extensions
+
+The canonical agents stay unchanged. Docs-sync maps changes to PS document paths and reads the entire target document before editing; the pointer supplies the onward destination. The reviewer also reads documents that become pointers. This specifies the intended workflow without proving host compliance.
+
+> Setup MUST NOT synthesize or append a docs-sync extension solely to enable pointer routing. Existing project customizations MUST retain explicit dispositions and exact-text preservation, because mapping cannot bypass project-rule approval.
+>
+> If BS has changed an installed PS wrapper, setup MUST apply the existing user-modified-file rule separately to that wrapper: keep theirs, take new, or merge through review.
+>
+> Setup MUST inventory rules and frontmatter before replacement. Approved project rules MUST use the existing project-extension destinations, preserving existing extension bytes. Approval cannot relax a canonical restriction.
+>
+> Setup MUST report a retained standalone BS agent or unresolved custom wrapper as an incomplete PS agent update and identify the definition actually invoked.
+
+These apply the existing adoption and update rules in `references/modes.md`; they add no new wrapper-generation behavior. A declined replacement of the standalone BS docs-sync still permits the mapping (maintainer decision Q8): keep the retained agent, report the incomplete PS agent installation and make no canonical-compatibility claim.
+
+### Existing-content consolidation
+
+> Before converting an existing document, setup MUST inventory its substantive content and propose a destination for every item: an evidenced section of 03, an uncovered full document, or an explicitly unresolved TODO item.
+>
+> Setup MUST obtain dispositions for contradictions and removals. It MUST NOT move a known invariant solely into TODO to make conversion appear complete.
+>
+> Setup MUST stage approved source changes, pointer replacements, routing instructions and ownership changes in one reviewed apply transaction. It MUST NOT replace an original while necessary consolidation remains unapproved.
+
+Apply this equally to adoption and update. PS provenance does not make existing knowledge disposable. When consolidation is declined or a destination stays unresolved, keep the originals and report incomplete conversion (maintainer decision Q3). A project where BS ran after project-setup follows the per-file recovery in `references/modes.md` before any conversion.
+
+| Case | Required treatment |
+|---|---|
+| PS full documents precede BS's 03 | Inventory and reconcile during PS update; do not require a new-service stamp. |
+| BS overwrites or merges PS instructions/wrappers | Measure first, then apply the per-file recovery table. Retain the BS overwrite TODO. |
+| Missing or malformed managed markers | Apply existing removed-content or marker-error rules; no silent repair. |
+| Blank mapped section | Complete from permitted implementation evidence; identify unknowns explicitly. |
+| Owner declines necessary completion | Retain originals, hold dependent conversions, report incomplete consolidation. |
+| Existing document contradicts 03 | Show both locations and verify permitted code; obtain disposition. |
+| Detail exceeds BS tables | Propose reviewed expansion under the matching section; apply Q7 (see "Size" below). |
+| Heading renumbered | Match normalized heading text under its parent. |
+| Heading renamed, removed, duplicated or cross-reference changed | Hold until a replacement/addition is approved. |
+| Facts added to a pointer | Preserve and inventory them; propose consolidation. |
+| User deleted a pointer | Do not silently recreate it; resolve disposition. Docs-sync reports missing navigation. |
+| Local instructions exist | Preserve both members of each pair and local constraints. |
+| Local instruction conflicts with routing | Resolve before installing contradictory root text. |
+| 03 protected, unsafe or unreadable | Stop the affected step; no bypass or duplicate-document fallback. |
+| No evidenced vendor/business flow | Do not invent documents. |
+| All source/output unchanged | Zero diff, including manifest bytes. |
+| Required source changes after prepare | Existing drift binding refuses commit; reprepare according to run lifecycle. |
+| Partial apply or intervening rollback edits | Preserve recovery material and follow journal handling. |
+
+**Size.** Decision Q7 (2026-11-11): record the UTF-8 bytes and line count of 03 before and after consolidation, use a review threshold rather than an assumed host ceiling, keep concise complete facts in 03 and make no automatic split. Never truncate facts to meet an assumed limit; an appendix needs its own reviewed ownership and navigation contract first.
+
+### Source binding
+
+> A pointer transaction MUST declare existing 03 in `transaction-inputs.json` when it is not drafted, because approval must bind the source used to resolve headings and content.
+>
+> Setup MUST also bind unchanged root CLAUDE.md when activation relies on its provenance, and unchanged root AGENTS.md when activation relies on the exact owner decision. Drafted targets already receive target-hash binding.
+
+The existing prepare and commit recheck inputs, targets, drafts and request metadata before writing (`references/state-and-apply.md`).
+
+Do not declare `.backend-standards.json`: it is outside the existing scope accepted for transaction inputs. Reconfirm its disposition immediately before prepare.
+
+**Accepted limitation:** the stamp can change between that check and commit. This release adds neither atomic stamp binding nor a production-script change.
+
+### Validation boundary
+
+`reference-exists` examines instruction files and `.ai/agents/*.md`; it does not validate ordinary pointer destinations or headings. Therefore:
+
+- Preserve applicable navigation references to emitted pointers.
+- Deleting a referenced pointer must still fail `reference-exists`.
+- The project-setup test-only checker validates pointer paths, containment, headings and format.
+- Drafting instructions MUST require destination inspection.
+- The checker does not become shipped enforcement.
+- Validator success alone does not prove mapping correctness or restored root-start semantics.
+
+A later BS copy or re-sync can erase consolidated 03 content and can replace PS instructions or wrappers again; project-setup does not prevent either. Accepting a BS re-sync requires reviewed preservation or merge of that content, and the durable fix remains BS 4.0.0 work.
+
 ## Ownership hints
 
 Living docs (`docs/**`, `.ai/context/**`, `.ai/decisions/**`, `TODO.md`) default to `merged`: people and

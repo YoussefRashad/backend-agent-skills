@@ -24,7 +24,10 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { reverseForFile } from './helpers/c16-amendments.mjs';
 import { reverseForFile as reverseC17File } from './helpers/c17-amendments.mjs';
-import { FINAL_VERSION18, readRc4, toRc4Tree } from './helpers/c18-amendments.mjs';
+import { readRc4, toRc4Tree } from './helpers/c18-amendments.mjs';
+// 3.1.0 (plan 2026-11-11-project-setup-v3.1-bs-doc-map.md section 7): the installed version of the real tree is the current 3.1.0;
+// FINAL_VERSION18 keeps its historical 3.0.0 meaning and every historical view still goes through readRc4 and toRc4Tree.
+import { CURRENT_VERSION31 } from './helpers/v31-amendments.mjs';
 
 // ===================================================== generic utilities ====
 const eq = (a, b) => isDeepStrictEqual(a, b);
@@ -2217,7 +2220,7 @@ async function installedPayload(context) {
         for (const [name, root] of roots) {
           const meta = parseJson(readText(path.join(root, '.installed.json')) || '');
           check(meta && eq(Object.keys(meta).sort(), ['installedAt', 'name', 'source', 'treeSha256', 'version']) && meta.name === 'project-setup', `${name}: .installed.json has the existing installer fields`, meta && Object.keys(meta));
-          check(meta && srcVersion !== null && meta.version === srcVersion.trim() && meta.version === FINAL_VERSION18, `${name}: the installed version is the source tree version ${FINAL_VERSION18}`, meta && meta.version);
+          check(meta && srcVersion !== null && meta.version === srcVersion.trim() && meta.version === CURRENT_VERSION31, `${name}: the installed version is the source tree version ${CURRENT_VERSION31}`, meta && meta.version);
           check(meta && meta.treeSha256 === normalizedTreeHash(root, PAYLOAD_INVENTORY) && meta.treeSha256 === normalizedTreeHash(context.skillRoot, PAYLOAD_INVENTORY), `${name}: treeSha256 equals the independently recomputed normalized payload hash (installed and source)`, meta && meta.treeSha256);
           check(meta && typeof meta.source === 'string' && samePath(meta.source, context.skillRoot), `${name}: the recorded source is the candidate skill directory`, meta && meta.source);
           const catalog = parseJson(readText(path.join(root, 'data', 'runtime-units.json')) || '');

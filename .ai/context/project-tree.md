@@ -16,7 +16,7 @@ backend-agent-skills/
 ├── toolchain-config/           skill 2 — the canonical ESLint/Prettier/tsconfig baseline
 │   ├── SKILL.md                diff-and-ask workflow
 │   └── templates/              eslint · prettier · tsconfig · husky · security-scan
-├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0)
+├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.1.0)
 ├── pr-review/SKILL.md          skill 4 — per-PR multi-lane review (general-purpose)
 ├── audit/SKILL.md              skill 5 — full-codebase safety net (general-purpose)
 ├── scripts/check-versions.mjs  version-stamp guard (run by `npm run check` and CI)
@@ -31,13 +31,20 @@ it does not apply to any of them, and none carries a `templates/version.json`. T
 skills" in `backend-standards/SKILL.md`.
 
 `pr-review` and `audit` are single `SKILL.md` files. `project-setup` is a versioned release
-(`project-setup/VERSION` is `3.0.0`) with its own layout: `SKILL.md`,
+(`project-setup/VERSION` is `3.1.0`) with its own layout: `SKILL.md`,
 `references/`, `assets/`, `data/`, `scripts/`, `install/` (installer and local release builder),
 `tests/`, `evals/`, `README.md`, `CHANGELOG.md` and release notes. Its test suite and its
 `scripts/check-agent-baselines.mjs` pin SHA-256 digests of several of its files, so it is excluded
 from Prettier (`.prettierignore`) — do not edit it as a side effect of other work.
 The rc.4 host measurements completed with two recorded residuals. Dated observations and
 remaining platform limitations are in project-setup/RELEASE-NOTES-3.0.0.md.
+
+Since 3.1.0, on a project with backend-standards provenance, `project-setup` treats
+`.ai/standards/03-project-architecture.md` as the documentation source of truth and emits pointer
+documents (`project-setup/references/docs-generation.md`). Its standalone gates are
+`tests/bs-doc-map.test.mjs`, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs`; the live
+acceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) is pending
+evidence, see project-setup/RELEASE-NOTES-3.1.0.md.
 
 ## `backend-standards/`
 

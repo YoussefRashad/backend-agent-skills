@@ -1,7 +1,7 @@
-# project-setup 3.0.0 - skill source
+# project-setup 3.1.0 - skill source
 
-**Release 3.0.0.** See RELEASE-NOTES-3.0.0.md for compatibility, acceptance requirements,
-the rc.4 host measurement results and the remaining limitations.
+**Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards
+documentation mapping, acceptance requirements, pending live evidence and the remaining limitations.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -185,6 +185,21 @@ for its command and result scope. An unresolved prerequisite means the lane is n
 The canonical agents also say this in their own words: instructions are guidance, not a sandbox. See
 `references/codex.md` ("Review-lane launcher prerequisite") for the Codex launcher wording.
 
+## Backend-standards documentation mapping (3.1.0)
+
+On a project with backend-standards provenance (a valid `.backend-standards.json` stamp, or the BS
+CLAUDE.md version sentence with its matching 03 import, or the exact owner decision in root
+AGENTS.md), `.ai/standards/03-project-architecture.md` owns the architecture facts. Setup turns the
+overlapping project-setup documents into self-sufficient pointers to named 03 sections and
+consolidates their facts into 03 through one reviewed transaction. The rules are in
+`references/docs-generation.md` ("Documentation source of truth on backend-standards projects");
+recovery after BS ran on a project-setup project is in `references/modes.md`.
+
+Backend-standards and the shipped canonical agents, wrappers and templates are unchanged. The
+static gates check the instructions and a test-only checker; whether a Claude or Codex agent
+follows a pointer is measured live with `tests/live/BS-DOC-MAP-ACCEPTANCE.md` and the helper
+`tests/live/bs-doc-map.mjs`. That live acceptance is pending evidence for 3.1.0.
+
 ## Test first (no installation, no real config touched)
 
 ```
@@ -194,8 +209,10 @@ node tests/run-tests.mjs --keep     # keep fixtures + results.json for inspectio
 
 The suite runs in a temp directory with HOME/USERPROFILE and git config redirected there.
 
-Release acceptance requires the complete strict gate below and, separately, node tests/c18.test.mjs
-(the standalone 3.0.0 final-release assertions; neither run-tests.mjs nor accept-rc1.mjs runs it).
+Release acceptance requires the complete strict gate below and, separately, the three standalone
+gates node tests/bs-doc-map.test.mjs, node tests/release-3.1.test.mjs and node tests/c18.test.mjs
+(the 3.1.0 mapping contract, the 3.1.0 release assertions and the historical 3.0.0 assertions;
+neither run-tests.mjs nor accept-rc1.mjs runs them). Run them serially.
 A focused run or a zero exit
 from diagnostic selection does not replace it. Only R13d may skip for the recorded Windows
 file-symlink privilege reason.
@@ -235,7 +252,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.0.0 in the distribution repository.
+requires or creates project-setup-v3.1.0 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -244,5 +261,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.0.0 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.1.0 --out <unused-directory>
 ```

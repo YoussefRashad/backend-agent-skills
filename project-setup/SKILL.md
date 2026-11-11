@@ -3,7 +3,7 @@ name: project-setup
 description: Set up, migrate, or update shared AI-agent scaffolding for a backend repository so Claude Code and Codex work from the same rules - AGENTS.md as the shared source of truth, CLAUDE.md importing it, shared reviewer and docs-sync agents with thin per-tool wrappers, secret-path protection for both tools, and project docs generated from the actual code. Use this whenever the user wants to set up, install, initialize, re-run, upgrade, or migrate project setup, AGENTS.md, CLAUDE.md, agent docs, or reviewer/docs-sync agents in a repo, including repos already configured by the older Claude-only project-setup (v1), repos with hand-written CLAUDE.md or AGENTS.md, and new or empty repos. Treats the codebase as sensitive (fintech-grade), never reads secrets, enforces plan-and-confirm gates, and changes documentation and agent configuration only.
 ---
 
-# project-setup 3.0.0
+# project-setup 3.1.0
 
 One skill, one source, two tools. Produces a repository layout that Claude Code and Codex both follow:
 
@@ -227,6 +227,12 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 6. Classify the mode with `references/modes.md`. If `migrate-v1`, also read `references/migration-v1.md`. A valid
    schema-2 manifest needs update: also read `references/migration-v2.md`. Invalid metadata (mode `invalid`)
    requires repair through the documented procedure first; it is not permission to invent ownership.
+
+   Phase 0 mapping assessment: on a project that may be a backend-standards (BS) project, show the documentation
+   mapping signals (stamp, provenance sentence and import, recorded owner decision), the selected policy, the
+   detected mode and every unresolved disposition, then stop for approval. The signals and dispositions are defined
+   in `references/docs-generation.md` ("Documentation source of truth on backend-standards projects"); the mapping
+   never changes the detected mode.
 7. Permission decisions. Read `claude.allows.rules`, `managed`, `omitted` and `results`. The managed inventory comes
    from installed ownership records; omitted entries remain explicit decisions. Diagnostics
    identify risk and remedy, not permission to remove a rule. Inventory is not approval.
@@ -262,6 +268,10 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 2. Generate content into `.ai/.run/<id>/drafts/<repo-path>` following `references/docs-generation.md` and the
    templates in `assets/templates/`. For Markdown and `.gitignore`, write managed sections with
    `blocks.mjs upsert` so user content outside the markers is preserved.
+
+   Before drafting overlapping documentation, setup MUST apply the source-of-truth mapping in
+   `references/docs-generation.md`, including activation dispositions, existing-content consolidation and source
+   binding, so generation cannot introduce a second factual owner.
 3. Security policy and tooling. With no installed policy (`.ai/security-paths.json` absent), copy
    `data/secret-paths.json` → `.ai/security-paths.json` as a draft: this is the fresh-install path, with `full`
    ownership. With an installed policy, never copy `data/secret-paths.json` over it. Stage no policy draft unless

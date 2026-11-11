@@ -71,7 +71,52 @@ a reviewed correction, so adoption cannot claim a valid installation with broken
 Source inspection confirms that existing Claude instructions or agents without a valid manifest
 or v1 provenance select adopt. A valid manifest selects update, and invalid metadata selects
 invalid. A BS name or marker is not v1 provenance.
-This behavior has not been verified on a real backend-standards scaffold.
+A real Nest CLI 11 scaffold was exercised with BS followed by PS adopt on 2026-11-11. Prepare
+held CLAUDE.md and both standalone Claude agents for approval. That run did not exercise the
+agents, Codex, or PS followed by BS, and did not verify the 3.1 pointer workflow.
+
+**backend-standards documentation mapping (adopt and update).** The mode decides the workflow;
+the documentation layout is a separate policy. In adopt and in update, assess the BS layout
+signals and apply the source-of-truth mapping in `references/docs-generation.md` ("Documentation
+source of truth on backend-standards projects"), including its existing-content consolidation,
+before drafting any overlapping document. PS provenance does not exempt an update from that
+consolidation; BS markers still grant project-setup no ownership.
+
+**PS-first recovery: measure BS before proposing repairs.** BS instructs the agent to write
+CLAUDE.md from its template and copy two Claude agents. Its existing-project procedure invokes
+those operations. The repository records the overwrite problem as unfinished BS 4.0.0 work.
+The actual outcome of a particular agent run—overwrite, merge, unchanged or mixed—must be
+observed. Live measurement uses the test-only helper `tests/live/bs-doc-map.mjs`.
+The helper MUST NOT pre-restore PS files, intercept BS writes, or simulate a desired outcome.
+
+| File | If BS overwrites | If BS merges or preserves | PS 3.1 completion/checker expectation |
+|---|---|---|---|
+| Root `CLAUDE.md` | Inventory lost PS import/block and preserved/new BS content. Propose a reviewed merge restoring `@AGENTS.md` and the complete current managed `claude` block, including the root-start rule. Preserve BS imports, version sentence, commands and approved user content. | Inspect the resulting import, block, BS lines and user text. Preserve correct content; review missing or changed parts. Do not assume a merge preserved every rule. | Exactly one effective sibling import and one valid managed `claude` block with the required source-template content; BS imports/version information retained; approved user content preserved; no duplicate/conflicting instructions. |
+| `.claude/agents/reviewer.md` | Treat it as a user-modified fully owned file when its manifest record says `full`. Offer keep/take-new/merge and inventory BS rules/frontmatter. | Compare actual bytes against the manifest and shipped wrapper. Apply the same disposition rule whenever modified. | Take-new or approved canonical restoration: exact shipped wrapper plus approved project-extension preservation. Keep or unresolved custom merge: exact retained/approved bytes, actual invoked definition recorded, incomplete PS agent layer. |
+| `.claude/agents/docs-sync.md` | Same per-file user-modified workflow; preserve approved documentation rules through the existing extension mechanism. | Same comparison and separate disposition; reviewer's choice does not decide docs-sync's choice. | Same distinction between canonical completion and retained/custom incomplete installation. |
+| `.ai/agents/*`, Codex wrappers, root `AGENTS.md`, settings, runtime and manifest | Inspect the explicit permitted inventory for collateral changes; no blanket assumption that BS touched or preserved them. | Same. | Unaffected bytes remain unchanged. Any observed change receives its existing ownership/disposition workflow; no unexplained collateral modification is accepted. |
+
+The root-start rule and the reviewed installation of the managed `claude` block come from
+`references/docs-generation.md`; retained old instructions remain an incomplete update.
+Missing blocks are not silently recreated. Marker errors stop for repair; removed blocks or
+files require disposition. Keeping deficient CLAUDE.md is a held/incomplete result, not
+successful root recovery.
+
+Before candidate PS, record:
+
+- Per-file before/after hashes and overwrite/merge/unchanged classification, with evidence.
+- Whether `@AGENTS.md`, the `claude` block, root-start rule and BS imports/version sentence exist.
+- Actual `validate.mjs` results and `blocks.mjs drift` results.
+- Actual installed agent definitions and manifest ownership.
+
+If BS removed `@AGENTS.md` while sibling AGENTS.md exists, expect `claude-import` failure.
+Full-file differences produce `userModified: true` in block drift and validator drift warnings;
+removed managed blocks appear as `removed-by-user`. A merge may produce different results;
+record actual diagnostics rather than forcing overwrite expectations.
+
+Retain the BS overwrite TODO (BS 4.0.0 work); do not close it here. Rolling back the candidate
+PS transaction returns to the post-BS state captured before it; it does not undo BS's earlier
+changes.
 
 **add-claude.** Leave `AGENTS.md` content intact; add managed blocks only where sections are missing. Create
 `CLAUDE.md` as `@AGENTS.md` plus the `claude` block.
