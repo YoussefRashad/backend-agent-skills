@@ -17,3 +17,13 @@ env
 # spurious diff, and a diff that is always noise is a diff nobody reads.
 .ai/standards/
 .claude/agents/
+
+# Managed by the project-setup skill, which byte-tracks them. A reformat makes its
+# validate report each file as edited by hand, and the next setup run then asks for
+# approval of every one — lint-staged does this on the first commit after setup.
+.ai/agents/
+.ai/tools/
+.ai/manifest.json
+.ai/security-paths.json
+AGENTS.md
+CLAUDE.md

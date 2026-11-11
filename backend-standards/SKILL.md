@@ -113,6 +113,11 @@ runs `prepare` — without a repository it fails with `.git can not be found` an
 hooks are silently absent. Pass `--skip-git` to the CLI and init yourself, so the
 initial commit is yours rather than the generator's.
 
+**Copy `templates/gitignore` → `.gitignore` before anything is staged.** The CLI writes its
+`.gitignore` in the git step that `--skip-git` skips. Verified 2026-11-11 on CLI 11: without
+the copy, the first `git add -A` committed 45,080 files under `node_modules/` and the whole
+of `dist/`, and a `node_modules` in history cannot be removed without rewriting it.
+
 Note the Nest major the CLI installed. Step 3 depends on it.
 
 ### 2. Install the dependencies the templates need
@@ -303,8 +308,11 @@ the box:
 
 ```bash
 npx eslint . --fix
-npx prettier --write "src/**/*.ts" "test/**/*.ts" CLAUDE.md
+npx prettier --write "src/**/*.ts" "test/**/*.ts"
 ```
+
+`CLAUDE.md` is not in that list: the canonical `.prettierignore` excludes it, because
+`project-setup` byte-tracks its managed block there and a reformat reads as a hand edit.
 
 This is generator boilerplate, not application source — `toolchain-config`'s rule about not
 modifying source to satisfy lint does not apply to a file the generator wrote sixty seconds
