@@ -938,6 +938,8 @@ export const snapshotJson = (snap) => `${JSON.stringify(snap, null, 2)}\n`;
 // An unavailable state on any consulted path makes the verification not evaluable, with a reason naming the path, the side (baseline | current) and the state.
 // A state is never resolved by reading the path: a skipped path stays unread, and the read boundary is the one of readPermitted. "No record" is absence only where the
 // snapshot proves coverage with what it already records (files and the skipped list) and the helper's own inventory definition (inInventory, the one captureProject walks).
+// A snapshot may hold a SECOND record of a path: the manifest ownership summary of MANIFEST_REL. It is trusted only where it agrees with the path state of the same snapshot
+// (reconcileManifest, baselineManifestProblem; N20): a summary of "absent" or "valid" over a path that is skipped or contradicts it is not evaluable, never a shortcut around the state.
 /**
  * Whether the explicit inventory covers a path: SNAPSHOT_FILES, every accepted file below SNAPSHOT_DIRS (recursively, never below node_modules or .git) and the AGENTS.md / CLAUDE.md files
  * below src. captureProject walks with the same constants, so this and the walk cannot drift apart unnoticed (the spec compares them over a fixture). A path outside it is never
@@ -972,17 +974,47 @@ export function snapshotPathState(snapshot, rel) {
   if (!inInventory(rel)) return { state: 'unavailable', cause: 'outside-inventory', why: 'has no record and lies outside the explicit inventory the snapshot covers, so it was never looked at' };
   return { state: 'absent' };
 }
+// What a manifest ownership summary is, in one word: 'absent' | 'valid' (with an ownership map) | 'valid-without-ownership' | 'skipped' | 'malformed' | 'unrecognised' (missing, not an
+// object, or any other state). A summary is a claim about the PATH .ai/manifest.json, so it is read together with the path state the same snapshot records for it (reconcileManifest).
+const summaryKind = (m) => {
+  if (m === null || typeof m !== 'object' || Array.isArray(m)) return 'unrecognised';
+  if (m.state === 'absent') return 'absent';
+  if (m.state === 'valid') return m.ownership !== null && typeof m.ownership === 'object' && !Array.isArray(m.ownership) ? 'valid' : 'valid-without-ownership';
+  return m.state === 'skipped' || m.state === 'malformed' ? m.state : 'unrecognised';
+};
 /**
- * The BASELINE side of the manifest ownership summary (the state function of MANIFEST_REL on the baseline): null when it is usable ('absent' is a confirmed absence,
- * 'valid' holds an ownership map); otherwise the reason naming the path, the side and the state. A skipped, malformed or unrecognised summary is unavailable, in every layout.
+ * The manifest ownership summary of ONE snapshot (N20: it is the one consult that carries a second record of a path, so it must agree with the first) set against the path state
+ * snapshotPathState gives MANIFEST_REL from the same snapshot's own file record and skipped list: { path, summary, consistent }.
+ * The pairs a snapshot taken by this helper can hold are consistent: absent <-> absent, valid <-> present, malformed <-> present, skipped <-> unavailable (skipped). Anything else is a
+ * contradiction (the summary says "absent" or holds an ownership map for a path whose record says the opposite or is unavailable) and a hand-made or damaged snapshot.
+ * captureProject builds the summary and the record of the CURRENT project in one pass, so that side agrees by construction (the spec checks it over real snapshots); only the baseline,
+ * which is read from a file, can disagree with itself.
  */
-export function baselineManifestProblem(m) {
-  if (m !== null && typeof m === 'object' && !Array.isArray(m)) {
-    if (m.state === 'absent') return null;
-    if (m.state === 'valid' && m.ownership !== null && typeof m.ownership === 'object' && !Array.isArray(m.ownership)) return null;
-  }
-  const cause = m !== null && typeof m === 'object' && (m.state === 'skipped' || m.state === 'malformed') ? m.state : 'unprovable';
-  return `the baseline has no usable manifest ownership summary for ${MANIFEST_REL} (baseline side: unavailable, ${cause}): a ${cause === 'unprovable' ? 'missing or unrecognised' : cause} manifest cannot be compared (retake the baseline with this helper)`;
+export function reconcileManifest(snapshot) {
+  const ps = snapshotPathState(snapshot, MANIFEST_REL);
+  const summary = summaryKind(snapshot !== null && typeof snapshot === 'object' ? snapshot.manifest : undefined);
+  const consistent = (summary === 'absent' && ps.state === 'absent')
+    || ((summary === 'valid' || summary === 'valid-without-ownership' || summary === 'malformed') && ps.state === 'present')
+    || (summary === 'skipped' && ps.state === 'unavailable' && ps.cause === 'skipped');
+  return { path: ps, summary, consistent };
+}
+/**
+ * The BASELINE side of the manifest (the state function of MANIFEST_REL on the baseline, reconciled with the baseline's own record of the path, N20): null when it is usable, which
+ * is exactly two pairs, a summary of 'absent' with the path confirmed absent, and a summary that holds an ownership map with the path present. Every other pair is unavailable (a
+ * summary of absent or valid over a path that is skipped, an alias, outside the inventory or unprovable; a present-versus-absent contradiction; a skipped, malformed or unrecognised
+ * summary), in every layout, and the reason names the path, the side, the path state and the summary state.
+ */
+export function baselineManifestProblem(baseline) {
+  const { path: ps, summary } = reconcileManifest(baseline);
+  if ((summary === 'absent' && ps.state === 'absent') || (summary === 'valid' && ps.state === 'present')) return null;
+  const unusable = summary === 'skipped' || summary === 'malformed' || summary === 'valid-without-ownership' || summary === 'unrecognised';
+  // The summary's own state decides first (as it always did); otherwise the path state does (skipped, alias, unprovable, outside-inventory), else the two records contradict each other.
+  const cause = summary === 'skipped' || summary === 'malformed' ? summary : unusable ? 'unprovable' : ps.state === 'unavailable' ? ps.cause : 'inconsistent';
+  const detail = unusable
+    ? `a ${cause === 'unprovable' ? 'missing or unrecognised' : cause} manifest cannot be compared`
+    : ps.state === 'unavailable' ? `the path ${ps.why}, so a summary of ${summary} cannot be trusted`
+      : `the baseline's file record says the path is ${ps.state} but its summary says ${summary}, so the two cannot both be true`;
+  return `the baseline has no usable manifest ownership summary for ${MANIFEST_REL} (baseline side: unavailable, ${cause}; path state ${ps.state}, summary state ${summary}): ${detail} (retake the baseline with this helper)`;
 }
 
 // ------------------------------------------------------------- init (workspaces) ----
@@ -1296,7 +1328,8 @@ export function inputProblems({ project, baseline, evidence, expectPartial = fal
     if (baseline.schema !== 1 || baseline.tool !== 'bs-doc-map') p.push('the baseline is not a schema 1 bs-doc-map snapshot');
     if (!isRecord(baseline.files) || Object.keys(baseline.files).length === 0) p.push('the baseline records no files (an empty baseline cannot show any collateral change)');
     else if (!Object.values(baseline.files).every((r) => isRecord(r) && typeof r.sha256 === 'string' && /^[0-9a-f]{64}$/.test(r.sha256))) p.push('a baseline file record has no valid sha256');
-    const mp = baselineManifestProblem(baseline.manifest);
+    // N20: the manifest summary is a second record of MANIFEST_REL, so it is trusted only where it agrees with the baseline's own file record and skipped list for that path.
+    const mp = baselineManifestProblem(baseline);
     if (mp !== null) p.push(mp);
   }
   if (!isRecord(evidence)) { p.push('the scenario evidence is missing or not an object'); return p; }
@@ -1437,8 +1470,9 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
   const baseRec = (rel, why) => (baseState(rel, why) === 'present' ? ownOf(baseline.files, rel) : undefined);
   const basePaths = () => Object.keys(baseline.files);
   const baseSha = (rel) => ownOf(baseline.files, rel).sha256;
-  // The ownership the baseline manifest recorded for a path: inputProblems has already refused a baseline whose manifest is not 'absent' (no manifest, so no record) or
-  // 'valid' (an ownership map that lists every record), so a missing key here is a confirmed absence of the record.
+  // The ownership the baseline manifest recorded for a path: inputProblems has already refused a baseline whose manifest summary is not 'absent' with the manifest path confirmed
+  // absent (no manifest, so no record) or 'valid' with the path present (an ownership map that lists every record), reconciled with the baseline's own file record and skipped
+  // list of that path (N20), so a missing key here is a confirmed absence of the record.
   const baseOwner = (rel) => ownerOf(baseline.manifest, rel);
   // ==== END path-state accessors ====
   const notEvaluableByReads = () => notEvaluableResult([...unavailable], expectPartial);

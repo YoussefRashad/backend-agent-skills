@@ -1522,6 +1522,19 @@ const VF = (args) => { const r = H.verifyFromFiles(args); VERIFY_LOG.push({ r, e
 const mainV = (argv, io) => { const out = []; const err = []; const code = H.main(argv, { out: (s) => { out.push(s); io.out(s); }, err: (s) => { err.push(s); io.err(s); } }); if (argv[0] === 'verify') CLI_LOG.push({ argv, code, out: out.join('\n'), err: err.join('\n') }); return code; };
 const verify = (root, o = {}) => V({ project: root, baseline: o.baseline === undefined ? H.takeSnapshot(root) : o.baseline, evidence: o.evidence === undefined ? EVID() : o.evidence, expectPartial: o.expectPartial === true });
 const clone = (v) => JSON.parse(JSON.stringify(v));
+// N20: a baseline's manifest SUMMARY is a second record of .ai/manifest.json and is trusted only where it agrees with the same baseline's file record and skipped list of that path.
+// A fixture that wants a given summary therefore sets the record with it: absent and skipped have no record (skipped adds the policy entry the real walk writes), valid and malformed have one.
+// (The old fixtures edited the summary over a file list that still held the manifest: a snapshot no run of the helper can produce.)
+const BASE_MANIFEST_RECORD = () => ({ sha256: 'e'.repeat(64), bytes: 2, lines: 1 });
+function setBaseManifest(b, m) {
+  const rel = H.MANIFEST_REL;
+  const kind = m === undefined ? 'unrecognised' : m.state;
+  b.skipped = (Array.isArray(b.skipped) ? b.skipped : []).filter((e) => e.path !== rel);
+  if (kind === 'absent' || kind === 'skipped') delete b.files[rel]; else if (b.files[rel] === undefined) b.files[rel] = BASE_MANIFEST_RECORD();
+  if (kind === 'skipped') b.skipped.push({ path: rel, reason: 'policy-denied' });
+  if (m === undefined) delete b.manifest; else b.manifest = m;
+  return b;
+}
 {
   const G = grp('Verify (R3)');
   const ok = verify(mkVerify('v-ok'));
@@ -1618,7 +1631,7 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
   const run = (o = {}) => {
     const root = mkVerify('v-own', { manifest03: o.now });
     const base = clone(H.takeSnapshot(root));
-    base.manifest = o.baseManifest ?? { state: 'valid', ownership: { ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, 'merged'])), ...(o.baseline03 === undefined ? {} : { [H.BS_03_REL]: o.baseline03 }) } };
+    setBaseManifest(base, o.baseManifest ?? { state: 'valid', ownership: { ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, 'merged'])), ...(o.baseline03 === undefined ? {} : { [H.BS_03_REL]: o.baseline03 }) } });
     if (o.changed) base.files[H.BS_03_REL].sha256 = SHA_OTHER;
     if (o.baseWithout03) delete base.files[H.BS_03_REL];
     if (o.drop03) fs.rmSync(path.join(root, H.BS_03_REL));
@@ -2511,7 +2524,9 @@ function faultFs(hooks, fn) {
 //       TODO.md | both agent wrappers | every listed pointer | every listed full document | every nested pair member | every extension | the blank-section, consolidation and root checks (their reads)
 //   BASELINE side, snapshotPathState(baseline, rel) through baseRec / baseState: present (a record), absent (inside the covered inventory, nothing skipped covers it), unavailable (skipped, below a
 //     skipped directory, outside the inventory, no usable skipped list)
-//       03 (changed or not) | every extension (the bytes it held) | the baseline manifest summary (baselineManifestProblem: absent | valid | unavailable)
+//       03 (changed or not) | every extension (the bytes it held)
+//       the baseline manifest summary (baselineManifestProblem, N20): a SECOND record of the manifest path, trusted only where it agrees with the baseline's own file record and skipped list
+//         (absent <-> path absent, valid <-> path present; every other pair unavailable). The current side builds summary and record in one pass and agrees by construction (spec: real snapshots).
 //   BOTH sides, baseState + snapState: every path with a record on either side in the collateral comparison, and every path listed in evidence.explained.
 {
   const G = grp('Path states (N18, N19)');
@@ -2540,6 +2555,33 @@ function faultFs(hooks, fn) {
   const names = (r, rel, side, cause) => notEval(r) && r.notEvaluable.some((x) => { const s = String(x); return s.includes(rel) && s.includes(`${side} side: unavailable`) && (cause === null || s.includes(`${side} side: unavailable, ${cause}`)); });
   let rows = 0;
   const row = (label, r, rel, side, cause) => { rows += 1; G(`${label}: not evaluable, naming ${rel}, the ${side} side and the state${cause === null ? '' : ` (${cause})`}`, names(r, rel, side, cause), diag(r)); };
+
+  // -------------------------------------------------------------- N20: the manifest summary against the path state, both as ONE snapshot records them
+  // The summary is a second record of .ai/manifest.json, so it is trusted only where it agrees with the same snapshot's own file record and skipped list for that path. Two pairs are usable
+  // (a summary of "absent" with the path confirmed absent; a summary with an ownership map with the path present); every other pair is not evaluable and the reason names the path, the
+  // baseline side, the path state and the summary state. The expectations below are written out here, never derived from the helper.
+  const M_REL = H.MANIFEST_REL;
+  const M_REC = () => ({ sha256: 'e'.repeat(64), bytes: 2, lines: 1 });
+  const M_OWN = Object.fromEntries(VERIFY_POINTERS.map((p) => [p, 'merged']));
+  const M_SUMMARIES = [['absent', { state: 'absent' }], ['valid', { state: 'valid', ownership: M_OWN }], ['valid-without-ownership', { state: 'valid' }], ['skipped', { state: 'skipped' }], ['malformed', { state: 'malformed' }], ['unrecognised', undefined]];
+  // [label, the state snapshotPathState gives the manifest path, its cause (null: none), what to do to a snapshot (a baseline or a hand-made one) so that it records this state]
+  const M_PATHS = [
+    ['a file record (present)', 'present', null, (b) => { b.files[M_REL] = M_REC(); }],
+    ['no record, nothing skipped, inside the inventory (absent)', 'absent', null, (b) => { delete b.files[M_REL]; }],
+    ['no record, skipped by the policy', 'unavailable', 'skipped', (b) => { delete b.files[M_REL]; b.skipped.push({ path: M_REL, reason: 'policy-denied' }); }],
+    ['no record, skipped for an unknown reason', 'unavailable', 'skipped', (b) => { delete b.files[M_REL]; b.skipped.push({ path: M_REL, reason: 'mystery' }); }],
+    ['no record, below a skipped directory', 'unavailable', 'skipped', (b) => { delete b.files[M_REL]; b.skipped.push({ path: '.ai', reason: 'policy-denied' }); }],
+    ['no record, and no usable skipped list to prove coverage', 'unavailable', 'unprovable', (b) => { delete b.files[M_REL]; delete b.skipped; }],
+  ];
+  if (process.platform === 'win32') M_PATHS.push(['a record only under another case (alias)', 'unavailable', 'alias', (b) => { delete b.files[M_REL]; b.files['.AI/MANIFEST.JSON'] = M_REC(); }]);
+  const M_USABLE = (summary, pstate) => (summary === 'absent' && pstate === 'absent') || (summary === 'valid' && pstate === 'present');
+  // What each pair holds true of itself: consistent pairs are the ones this helper's own snapshots can contain.
+  const M_CONSISTENT = (summary, pstate, pcause) => (summary === 'absent' && pstate === 'absent') || (['valid', 'valid-without-ownership', 'malformed'].includes(summary) && pstate === 'present') || (summary === 'skipped' && pstate === 'unavailable' && pcause === 'skipped');
+  // The cause the reason carries: the summary's own state when it is unusable, otherwise the path's cause when it is unavailable, otherwise a contradiction.
+  const M_CAUSE = (summary, pcause) => (summary === 'skipped' || summary === 'malformed' ? summary : summary === 'valid-without-ownership' || summary === 'unrecognised' ? 'unprovable' : (pcause ?? 'inconsistent'));
+  const M_NAMES = (reasons, summary, pstate, cause) => reasons.some((x) => { const s = String(x); return s.includes(M_REL) && s.includes(`baseline side: unavailable, ${cause}`) && s.includes(`path state ${pstate}`) && s.includes(`summary state ${summary}`); });
+  const mSnapshot = () => ({ schema: 1, tool: 'bs-doc-map', files: { 'AGENTS.md': { sha256: 'e'.repeat(64), bytes: 1, lines: 1 } }, skipped: [] });
+  const withSummary = (b, m) => { if (m === undefined) delete b.manifest; else b.manifest = clone(m); return b; };
 
   // -------------------------------------------------------------- the units: the inventory predicate and the state of a path in one snapshot
   { const IN = ['AGENTS.md', 'CLAUDE.md', 'TODO.md', '.backend-standards.json', '.toolchain-config.json', '.ai/manifest.json', '.ai/security-paths.json', '.claude/settings.json', 'docs/a.md', 'docs/integrations/x.md', 'docs/deep/er/x.JSON', '.ai/agents/a.project.md', '.ai/context/x.toml', '.ai/decisions/README.md', '.ai/standards/03-project-architecture.md', '.ai/tools/x.mjs', '.claude/agents/reviewer.md', '.codex/agents/x.toml', 'src/AGENTS.md', 'src/a/b/CLAUDE.md'];
@@ -2573,13 +2615,48 @@ function faultFs(hooks, fn) {
       G('snapshotPathState (win32): a record under another case is unavailable (alias), not absent; the exact spelling is present', st(W, 'docs/notes.md').state === 'unavailable' && st(W, 'docs/notes.md').cause === 'alias' && st(W, 'DOCS/NOTES.MD').cause === 'alias' && st(W, 'docs/Notes.md').state === 'present', [st(W, 'docs/notes.md'), st(W, 'docs/Notes.md')]);
       G('snapshotPathState (win32): a skipped directory covers what is below it whatever the case of the spelling', st(W, 'docs/private/x.md').cause === 'skipped' && st(W, 'DOCS/PRIVATE').cause === 'skipped', [st(W, 'docs/private/x.md'), st(W, 'DOCS/PRIVATE')]);
     } else skip('snapshotPathState: a record or a skipped entry under another case is the same file', 'the file system of this host is case-sensitive (fold is the identity)');
-    G('baselineManifestProblem: an absent summary and a valid one with an ownership map are usable; skipped, malformed, a valid one without ownership, a missing one and a non-object are unavailable and name the path, the side and the state', H.baselineManifestProblem({ state: 'absent' }) === null && H.baselineManifestProblem({ state: 'valid', ownership: {} }) === null
-      && [[{ state: 'skipped' }, 'skipped'], [{ state: 'malformed' }, 'malformed'], [{ state: 'valid' }, 'unprovable'], [{ state: 'valid', ownership: [] }, 'unprovable'], [{ state: 'other' }, 'unprovable'], [undefined, 'unprovable'], [null, 'unprovable'], ['x', 'unprovable'], [[], 'unprovable']].every(([m, cause]) => { const p = H.baselineManifestProblem(m); return typeof p === 'string' && p.includes(H.MANIFEST_REL) && p.includes(`baseline side: unavailable, ${cause}`); })); }
+    // N20, the units. baselineManifestProblem and reconcileManifest take the whole snapshot: the summary is read together with the snapshot's own record and skipped list of the path.
+    // One line per summary state, each over every path state: the usable pairs return null, every other pair names the path, the baseline side, the path state and the summary state.
+    let mUnits = 0;
+    for (const [sl, sm] of M_SUMMARIES) {
+      const bad = [];
+      for (const [pl, pstate, pcause, apply] of M_PATHS) {
+        mUnits += 1;
+        const b = mSnapshot(); apply(b); withSummary(b, sm);
+        const rc = attempt(() => H.reconcileManifest(b)); const pr = attempt(() => H.baselineManifestProblem(b));
+        const usable = M_USABLE(sl, pstate);
+        const okRc = rc.threw === undefined && rc.path.state === pstate && rc.summary === sl && rc.consistent === M_CONSISTENT(sl, pstate, pcause);
+        const okPr = usable ? pr === null : typeof pr === 'string' && M_NAMES([pr], sl, pstate, M_CAUSE(sl, pcause));
+        if (!okRc || !okPr) bad.push({ path: pl, rc, pr });
+      }
+      G(`N20 unit: a baseline manifest summary of ${sl}, against every state of the manifest path: ${['absent', 'valid'].includes(sl) ? 'usable only with the matching path state, every other pair names path, side, path state and summary state' : 'never usable, always naming path, side, path state and summary state'}`, bad.length === 0, bad);
+    }
+    G(`N20 unit: the table covers every summary state against every path state (${mUnits} pairs)`, mUnits === 6 * M_PATHS.length && M_PATHS.length >= 6, mUnits);
+    G('N20 unit: exactly two pairs are usable (absent with an absent path, a summary with an ownership map with a present path); the rest of the table is unavailable', M_SUMMARIES.flatMap(([sl, sm]) => M_PATHS.map(([, pstate, , apply]) => { const b = mSnapshot(); apply(b); withSummary(b, sm); return H.baselineManifestProblem(b) === null; })).filter(Boolean).length === 2, 'two of the pairs');
+    G('N20 unit: a snapshot that is missing, not an object or records no files proves nothing about the manifest path: unavailable, naming the path, the side and the path state, whatever its summary says', [undefined, null, 'x', [], {}, { files: null, manifest: { state: 'absent' } }, { files: 'x', manifest: { state: 'valid', ownership: {} } }].every((s) => { const p = attempt(() => H.baselineManifestProblem(s)); return typeof p === 'string' && p.includes(H.MANIFEST_REL) && p.includes('baseline side: unavailable') && p.includes('path state unavailable'); }));
+    // The CURRENT side cannot disagree with itself: captureProject builds the summary and the record of the project in one pass. Checked over a real snapshot of every state a project can be in
+    // (no manifest, a valid one, a malformed one, one the policy denies), so a change to either half of that pass that made them diverge fails here.
+    { const files = { 'AGENTS.md': '# a\n' };
+      const real = [
+        ['no manifest', liveProj('ps-inv-none', files), 'absent', 'absent', null],
+        ['a valid manifest', liveProj('ps-inv-valid', { ...files, [H.MANIFEST_REL]: manifestJson({}) }), 'valid', 'present', null],
+        ['a malformed manifest', liveProj('ps-inv-bad', { ...files, [H.MANIFEST_REL]: '{nope' }), 'malformed', 'present', null],
+        ['a manifest the policy denies', liveProj('ps-inv-skip', { ...files, [H.MANIFEST_REL]: manifestJson({}), [POLICY_REL]: policyWith([{ glob: H.MANIFEST_REL, kind: 'project' }]) }), 'skipped', 'unavailable', 'skipped'],
+      ];
+      for (const [label, root, summary, pstate, pcause] of real) {
+        const s = H.takeSnapshot(root); const rc = attempt(() => H.reconcileManifest(s));
+        G(`N20, current side: a real snapshot of ${label} holds a summary of ${summary} and a path state of ${pstate}, and the two agree (the current side needs no separate reconciliation because it is one pass)`, rc.threw === undefined && rc.summary === summary && rc.path.state === pstate && (pcause === null || rc.path.cause === pcause) && rc.consistent === true, rc);
+      }
+      G('N20, current side: of those real snapshots only the absent and the valid manifest are usable as a baseline (a malformed or denied one is unavailable, as before)', real.map(([, root]) => H.baselineManifestProblem(H.takeSnapshot(root)) === null).join() === 'true,true,false,false'); }
+  }
   // The structure that keeps the rule general: past the accessors, runVerification never indexes a snapshot or its manifest itself, never reads a file except through need(), and takes the
   // activation signals through need() as well, so no future check can consult a path without its state being asked.
   { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')); const from = src.indexOf('function runVerification('); const end = src.indexOf('==== END path-state accessors ====', from); const body = src.slice(end, src.indexOf('\n}\n', end));
     G('source pin: after the path-state accessors, runVerification never touches baseline.files, snap.files, baseline.manifest, snap.manifest or a skipped list, never calls readPermitted or the raw read, and has no fileRec', from > 0 && end > from && body.length > 2000 && !/\b(?:baseline|snap)\.(?:files|manifest|skipped)\b/.test(body) && !/\b(?:readPermitted|rawRead|fileRec)\b/.test(body), { from, end, hits: body.match(/\b(?:baseline|snap)\.(?:files|manifest|skipped)\b|\b(?:readPermitted|rawRead|fileRec)\b/g) });
-    G('source pin: the activation signals are read through need() (a pointer-directory file the policy denies is then a recorded state, not a deliberate skip), and the accessors ask snapshotPathState', /collectSignals\(root, \{ readFile: need \}\)/.test(body) && /snapshotPathState\(/.test(src.slice(from, end)) && /need\(MANIFEST_REL\)/.test(body)); }
+    G('source pin: the activation signals are read through need() (a pointer-directory file the policy denies is then a recorded state, not a deliberate skip), and the accessors ask snapshotPathState', /collectSignals\(root, \{ readFile: need \}\)/.test(body) && /snapshotPathState\(/.test(src.slice(from, end)) && /need\(MANIFEST_REL\)/.test(body));
+    // N20: the baseline manifest summary is consulted in the input gate as a whole snapshot (its file record and skipped list as well), never as the bare summary object.
+    const ip = src.indexOf('export function inputProblems('); const ipBody = src.slice(ip, src.indexOf('\n}\n', ip));
+    G('source pin: inputProblems reconciles the baseline manifest summary with the baseline snapshot itself (baselineManifestProblem(baseline)), not with the bare summary', ip > 0 && /baselineManifestProblem\(baseline\)/.test(ipBody) && !/baselineManifestProblem\(baseline\.manifest\)/.test(ipBody), { ip }); }
 
   // -------------------------------------------------------------- controls: confirmed absence and plain presence still behave as before
   const base0 = run();
@@ -2690,6 +2767,30 @@ function faultFs(hooks, fn) {
   for (const ordinary of [false, true]) for (const [label, m, cause] of [['skipped', { state: 'skipped' }, 'skipped'], ['malformed', { state: 'malformed' }, 'malformed'], ['valid without an ownership map', { state: 'valid' }, 'unprovable'], ['missing', undefined, 'unprovable'], ['of an unknown state', { state: 'other' }, 'unprovable']]) {
     row(`baseline side, the manifest summary is ${label}, ${ordinary ? 'ORDINARY' : 'mapped'} layout`, run({ ordinary, baseline: (b) => { if (m === undefined) delete b.manifest; else b.manifest = m; } }), H.MANIFEST_REL, 'baseline', cause);
   }
+  // N20, the review replay: the baseline's own record says .ai/manifest.json was skipped by the policy (no file record, a policy-denied entry), while its summary says "absent" or holds an
+  // ownership map. snapshotPathState said unavailable, yet verification trusted the summary and returned no-automated-findings. Both layouts, both summaries, with a REAL baseline taken under
+  // a policy that denies the manifest (its summary is "skipped") and then given the contradicting summary, and with the hand-built shape.
+  for (const ordinary of [false, true]) for (const [label, m] of [['absent', { state: 'absent' }], ['an ownership map', { state: 'valid', ownership: M_OWN }]]) {
+    const layout = ordinary ? 'ORDINARY' : 'mapped';
+    const denied = { files: { [H.MANIFEST_REL]: manifestJson({}), [POLICY_REL]: policyWith([{ glob: H.MANIFEST_REL, kind: 'project' }]) } };
+    const real = run({ ...denied, ordinary, baseline: (b) => { b.manifest = clone(m); } });
+    G(`the review replay of N20, ${layout} layout, with a real baseline: the policy skipped the manifest (no record, a policy-denied entry) and the summary says ${label}: not evaluable, naming the manifest, the baseline side, the path state (unavailable, skipped) and the summary state`, M_NAMES(real.notEvaluable, label === 'absent' ? 'absent' : 'valid', 'unavailable', 'skipped') && !clean(real), diag(real));
+    const hand = run({ ordinary, baseline: (b) => { delete b.files[H.MANIFEST_REL]; b.skipped.push({ path: H.MANIFEST_REL, reason: 'policy-denied' }); b.manifest = clone(m); } });
+    G(`the review replay of N20, ${layout} layout, hand-built: the same contradiction in a baseline of an ordinary fixture is not evaluable`, M_NAMES(hand.notEvaluable, label === 'absent' ? 'absent' : 'valid', 'unavailable', 'skipped') && !clean(hand), diag(hand));
+  }
+  // N20, the table: every summary state against every path state the baseline can show, through the whole verification, in both layouts. The two usable pairs are clean; every other pair is
+  // not evaluable and its reason carries the path, the baseline side, the path state and the summary state (the cause as M_CAUSE says).
+  { let pairs = 0; let usablePairs = 0;
+    for (const ordinary of [false, true]) for (const [sl, sm] of M_SUMMARIES) {
+      const bad = [];
+      for (const [pl, pstate, pcause, apply] of M_PATHS) {
+        pairs += 1;
+        const r = run({ ordinary, baseline: (b) => { apply(b); withSummary(b, sm); } });
+        if (M_USABLE(sl, pstate)) { usablePairs += 1; if (!clean(r)) bad.push({ path: pl, expected: 'clean', got: diag(r) }); } else if (!(notEval(r) && M_NAMES(r.notEvaluable, sl, pstate, M_CAUSE(sl, pcause)))) bad.push({ path: pl, expected: M_CAUSE(sl, pcause), got: diag(r) });
+      }
+      G(`N20 table, ${ordinary ? 'ORDINARY' : 'mapped'} layout, a baseline manifest summary of ${sl} against every state of the manifest path: ${['absent', 'valid'].includes(sl) ? 'clean only with the matching path state, otherwise' : ''} not evaluable, naming path, side, path state and summary state`, bad.length === 0, bad);
+    }
+    G(`N20 table: ${pairs} verifications (2 layouts x 6 summary states x ${M_PATHS.length} path states), of which exactly ${usablePairs} are usable and clean`, pairs === 2 * 6 * M_PATHS.length && usablePairs === 4, { pairs, usablePairs }); }
   // The same states through a REAL snapshot, not a hand-edited one: a baseline taken under a policy that denied the path.
   { const files = { [POLICY_REL]: policyWith([{ glob: EXT, kind: 'project' }]) };
     const r = run({ files, evidence: { explained: [POLICY_REL], extensions: { [EXT]: {} } }, project: (root) => { putF(root, POLICY_REL, policyWith([])); fs.rmSync(at(root, EXT)); } });
