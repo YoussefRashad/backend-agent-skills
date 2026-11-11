@@ -51,6 +51,7 @@ remaining platform limitations are in project-setup/RELEASE-NOTES-3.0.0.md.
 | `templates/docs/`                          | `CLAUDE.md` (placeholders), `03-project-architecture.md`, `known-deviations.md`                                             | `.ai/standards/` + repo root |
 | `templates/agents/`                        | `reviewer.md`, `docs-sync.md` — **for the scaffolded service**, not for this repo                                           | `.claude/agents/`            |
 | `templates/ci/github-actions.yml`          | The 04 Part A gates plus a boot smoke test                                                                                  | `.github/workflows/`         |
+| `templates/gitignore`                      | Replaces the `.gitignore` the CLI skips under `--skip-git`                                                                  | `.gitignore`                 |
 | `templates/src/`                           | 16 real TypeScript files (3 are specs)                                                                                      | `src/`                       |
 | `templates/version.json`                   | The stamp. **Bump on any change under `templates/` or `references/`.**                                                      | —                            |
 
@@ -83,4 +84,6 @@ These carry the most risk per line. See `critical-modules.md` before editing.
 deliberately ships no lint/compiler/hook config — see `ADR-001`. The dependency is
 one-way: `toolchain-config` knows nothing about `backend-standards`, except that its
 canonical `.prettierignore` lists `.ai/standards/` and `.claude/agents/` so a re-sync
-does not reformat vendored files.
+does not reformat vendored files. Since 2.1.0 it also lists the files `project-setup`
+byte-tracks (`.ai/agents/`, `.ai/tools/`, `.ai/manifest.json`, `.ai/security-paths.json`,
+`AGENTS.md`, `CLAUDE.md`), because a reformat reads as drift there.

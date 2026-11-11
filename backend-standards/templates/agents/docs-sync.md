@@ -24,10 +24,17 @@ Your job is to be the thing that stops it.
 
 ### 1. Establish what changed
 
+If `.ai/tools/git-safe.mjs` exists, you **MUST** read the change through it:
+
 ```bash
-git diff main...HEAD --stat
-git diff main...HEAD
+node .ai/tools/git-safe.mjs diff main...HEAD --stat
+node .ai/tools/git-safe.mjs diff main...HEAD
 ```
+
+It drops the paths in `.ai/security-paths.json` from the diff, so a committed secret file is
+never printed into your context; raw `git diff` would print it, and `project-setup`'s hook
+blocks raw Git for that reason. Do not work around a blocked command. Only when the file is
+absent, use `git diff main...HEAD --stat` and `git diff main...HEAD`.
 
 If the caller named a commit range, branch or PR, use that. If nothing was specified and the
 working tree is clean, **ask what to sync** rather than guessing.

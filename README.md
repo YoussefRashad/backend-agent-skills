@@ -11,8 +11,8 @@ templates or the toolchain baseline go through review — see
 
 | Skill                                     | Version | What it does                                                                                                                                            |
 | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`backend-standards`](backend-standards/) | 3.0.0   | Scaffolds a new backend service on the team standards, or brings an existing one onto them. Ships the standards as files plus working source templates. |
-| [`toolchain-config`](toolchain-config/)   | 2.0.1   | ESLint, Prettier, tsconfig, Husky, lint-staged — one reviewed baseline.                                                                                 |
+| [`backend-standards`](backend-standards/) | 3.1.0   | Scaffolds a new backend service on the team standards, or brings an existing one onto them. Ships the standards as files plus working source templates. |
+| [`toolchain-config`](toolchain-config/)   | 2.1.0   | ESLint, Prettier, tsconfig, Husky, lint-staged — one reviewed baseline.                                                                                 |
 
 **These two are a pair.** `backend-standards` deliberately does not ship lint or compiler
 config — that belongs to `toolchain-config`, because two skills shipping the same eslint

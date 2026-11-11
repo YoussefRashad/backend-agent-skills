@@ -1,0 +1,32 @@
+# Copied to .gitignore by backend-standards step 1. `nest new --skip-git` writes no
+# .gitignore (the CLI creates it in the git step it skips), so without this file the
+# first `git add -A` commits node_modules/ and dist/.
+
+# Build output and dependencies
+/dist
+/build
+/node_modules
+
+# Test output
+/coverage
+/.nyc_output
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment files: secrets never enter history (02 §8). The names-only template stays tracked.
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+/.idea
+/.vscode/*
+!/.vscode/extensions.json
+.DS_Store
+
+# Temp
+.temp
+.tmp
