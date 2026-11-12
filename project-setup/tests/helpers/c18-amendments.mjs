@@ -9,10 +9,15 @@
 // before + neu + after the 3.0.0 slice. The rc.4 text is taken from the C17 amendments, never retyped, so the rc.4 side cannot
 // drift from what c17.test.mjs pins. Root files are keyed "@root/<path>"; every other key is relative to project-setup/.
 // Importing it reads no file and starts no process; only readRc4 reads, and only when called.
+//
+// 3.1.0 (plan docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md, section 7): the real tree now carries the 3.1.0 amendments of
+// v31-amendments.mjs on top of 3.0.0. readRc4 and toRc4Tree reverse those FIRST, verified against the pinned 3.0.0 bytes, and then the
+// unchanged 3.0.0 amendments below. The AM18 literals, the orders, AMENDED_FILES18 and FINAL_VERSION18 keep their historical meaning.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AM17, TD17, amendmentOnce as amendmentOnce17, applyOne as applyOne17, reverseOne as reverseOne17 } from './c17-amendments.mjs';
+import { AMENDED_FILES31, read30, to30Tree } from './v31-amendments.mjs';
 
 const T = (lines) => lines.map((l) => `${l}\n`).join('');
 
@@ -192,9 +197,12 @@ export function rc4Bytes(bytes, rel) {
 const REAL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const absOf = (rel) => path.resolve(rel.startsWith('@root/') ? path.join(REAL_ROOT, ...rel.slice(6).split('/')) : path.join(REAL_ROOT, 'project-setup', ...rel.split('/')));
 const REL_BY_ABS = new Map(AMENDED_FILES18.map((rel) => [absOf(rel), rel]));
-/** fs.readFileSync for the rc.4-era tests: the real tree's amended files are returned as their verified rc.4 view; every other path is read as is. Throws when a reversal does not verify. */
+// The dispatch covers the union of the 3.0.0 and the 3.1 amended files; a 3.1-only file is returned as its verified 3.0.0 bytes.
+const UNION_ABS = new Set([...AMENDED_FILES18, ...AMENDED_FILES31].map(absOf));
+/** fs.readFileSync for the rc.4-era tests: the real tree's amended files are returned as their verified rc.4 view (3.1 reversed first, then 3.0.0); every other path is read as is. Throws when a reversal does not verify. */
 export function readRc4(p) {
-  const b = fs.readFileSync(p);
+  if (!UNION_ABS.has(path.resolve(p))) return fs.readFileSync(p);
+  const b = read30(p);
   const rel = REL_BY_ABS.get(path.resolve(p));
   if (rel === undefined) return b;
   const r = reverseForFile(b.toString('utf8'), rel);
@@ -204,8 +212,9 @@ export function readRc4(p) {
 
 /** The version the 3.0.0 source tree carries. Behavior tests that install or update from the real tree expect it; the pinned rc.4 text is read through readRc4. */
 export const FINAL_VERSION18 = '3.0.0';
-/** After a copy of the real project-setup tree, makes the copy the rc.4 tree: the four amended project-setup files are reversed (verified) and the 3.0.0 notes are removed. */
+/** After a copy of the real project-setup tree, makes the copy the rc.4 tree: the 3.1 amendments are reversed first (to30Tree, which also removes the 3.1.0 notes), then the four 3.0.0-amended project-setup files are reversed (verified) and the 3.0.0 notes are removed. */
 export function toRc4Tree(skillDir) {
+  to30Tree(skillDir);
   for (const rel of AMENDED_FILES18.filter((r) => !r.startsWith('@root/'))) {
     const p = path.join(skillDir, ...rel.split('/'));
     const r = reverseForFile(fs.readFileSync(p, 'utf8'), rel);

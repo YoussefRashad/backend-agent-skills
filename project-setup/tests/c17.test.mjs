@@ -36,7 +36,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { newProseIssues, proseLineIssues, proveFenceRules } from './helpers/prose-check.mjs';
-import { FINAL_VERSION18, readRc4 } from './helpers/c18-amendments.mjs';
+import { readRc4 } from './helpers/c18-amendments.mjs';
+// 3.1.0 (plan 2026-11-11-project-setup-v3.1-bs-doc-map.md section 7): the update tests run the real tree, whose current version is
+// 3.1.0; FINAL_VERSION18 keeps its historical 3.0.0 meaning and every historical view still goes through readRc4.
+import { CURRENT_VERSION31 } from './helpers/v31-amendments.mjs';
 import {
   AM17, C17_BLOCKS, C17_LITERALS, C17_DESCRIPTORS, C17_R29_BLOCK, CORE_FROZEN_LITERALS, EVAL_NEW_LINES, FORWARD_ORDER17, REVERSAL_ORDER17, AMENDED_FILES17, PRE_C17_FILES, TD17, TODO_PRE_C17_HASH,
   amendmentOnce, applyEvalsC17, applyForFile, applyOne, applySteps, applyTodoC17, reverseEvalsC17, reverseForFile, reverseOne, reverseSteps, reverseTodoC17,
@@ -2151,7 +2154,7 @@ async function update(context) {
         return { root, extensions: ext };
       };
       const drafts = (omit = []) => { const d = {}; for (const t of U17_ALL) if (!omit.includes(t)) d[t] = CUR[t]; return d; };
-      const specOf = (id, over = {}, exts = {}) => ({ version: FINAL_VERSION18, kinds: KINDS, text: { ...EXP, ...over }, records: {}, extensions: exts });
+      const specOf = (id, over = {}, exts = {}) => ({ version: CURRENT_VERSION31, kinds: KINDS, text: { ...EXP, ...over }, records: {}, extensions: exts });
       const validateRows = async (root) => {
         const r = await validate.main(['--json'], { root, files: ['package.json', 'README.md', ...U17_ALL, U17_MANIFEST] });
         return JSON.parse(r.stdout).results;
@@ -2376,7 +2379,7 @@ async function update(context) {
         check(c && c.code === 0 && c.json && c.json.committed === true, 'the unit-only update commits', c && c.stdout.slice(0, 200));
         const m = u17ManifestOf(root);
         check(readText(u17Project(root, U17_REVIEWER)) === OLD.rc3[U17_REVIEWER] && readText(u17Project(root, U17_REVIEWER)) !== EXP[U17_REVIEWER] && readText(u17Project(root, U17_REVIEWER)).includes('git rev-parse --verify HEAD') && !readText(u17Project(root, U17_REVIEWER)).includes('git-safe.mjs head'), 'the installed reviewer is still the rc.3 text with the raw HEAD step (D1 is not closed): it is not the rc.4 text');
-        check(m && eq(m.files[U17_REVIEWER], { ownership: 'full', sha256: NH(OLD.rc3[U17_REVIEWER]) }) && eq(m.files[U17_CORE], { ownership: 'full', sha256: NH(EXP[U17_CORE]) }) && eq(m.files[U17_RDIFF], { ownership: 'full', sha256: NH(EXP[U17_RDIFF]) }) && m.skillVersion === FINAL_VERSION18, 'the manifest still describes the old reviewer and records the new core and review-diff');
+        check(m && eq(m.files[U17_REVIEWER], { ownership: 'full', sha256: NH(OLD.rc3[U17_REVIEWER]) }) && eq(m.files[U17_CORE], { ownership: 'full', sha256: NH(EXP[U17_CORE]) }) && eq(m.files[U17_RDIFF], { ownership: 'full', sha256: NH(EXP[U17_RDIFF]) }) && m.skillVersion === CURRENT_VERSION31, 'the manifest still describes the old reviewer and records the new core and review-diff');
         expectNewHead(root, 'rc.3 reviewer with the rc.4 core');
         keptRoot = root;
       });

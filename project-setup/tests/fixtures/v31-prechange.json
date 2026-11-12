@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "baseCommit": "fd7ae5406ce16fca8444bb574be35704f319ba1d",
+  "files": {
+    "SKILL.md": {
+      "sha256": "6f62732e018228e2ebe518aca9d17d075893d2b39399c79a607de818b40a3f15",
+      "bytes": 30027
+    },
+    "VERSION": {
+      "sha256": "2985be8b28d3ade858e8d8fb4bc22f565b1bf6020dff982dce141f7721b9999c",
+      "bytes": 6
+    },
+    "README.md": {
+      "sha256": "b7fbc19e9b1ac149c872a74caae2b813b957daa8f5c59f0c4acdfba382f2cc0c",
+      "bytes": 14135
+    },
+    "CHANGELOG.md": {
+      "sha256": "f5a0b5bc6c9667d8a0d6f38a7d019da59c1b8d0f8add1773eb415a4f8f1242d2",
+      "bytes": 22244
+    },
+    "references/docs-generation.md": {
+      "sha256": "cabdf9cd7df65ee9d7660abc4cf9b95eb0e3f9c1386ea069ec87d55322616503",
+      "bytes": 14130
+    },
+    "references/modes.md": {
+      "sha256": "376435f0faaa768486607c5a6ee461f0795ea6b92cb0b5a0a4d615ae67917bd7",
+      "bytes": 6515
+    },
+    "references/report.md": {
+      "sha256": "8d7d3fa6e834895a29d6df64c8768c9e85e35e6a8a68fc30bd4ca7d545056b64",
+      "bytes": 2271
+    },
+    "@root/README.md": {
+      "sha256": "d5e700cd14549b63be51eaddc0dba2dd868fd3b82197296a7d3a2ab222d06cd5",
+      "bytes": 18249
+    },
+    "@root/.ai/context/project-tree.md": {
+      "sha256": "ad472b829f1eb7be07e6f6b76051912b952f5b08931fa3df40a9db4a16a79760",
+      "bytes": 8221
+    },
+    "@root/TODO.md": {
+      "sha256": "e18aad7b0db37b6864417fd46572a77f90ff2be419949087ddc33a130d0751a2",
+      "bytes": 7555
+    }
+  },
+  "replacements": {
+    "SK31_1": {
+      "file": "SKILL.md",
+      "old": "# project-setup 3.0.0\n",
+      "oldSha256": "d6c88ce4ab56523d8e67ec126643473c6ced998fc49e5263b398d1aa79860301"
+    },
+    "VR31_1": {
+      "file": "VERSION",
+      "old": "3.0.0\n",
+      "oldSha256": "2985be8b28d3ade858e8d8fb4bc22f565b1bf6020dff982dce141f7721b9999c"
+    },
+    "RM31_1": {
+      "file": "README.md",
+      "old": "# project-setup 3.0.0 - skill source\n",
+      "oldSha256": "7dcba221e3f3190bc856347f89abaeb66851ba4642722a4cbfca6df6a7f654b0"
+    },
+    "RM31_2": {
+      "file": "README.md",
+      "old": "**Release 3.0.0.** See RELEASE-NOTES-3.0.0.md for compatibility, acceptance requirements,\nthe rc.4 host measurement results and the remaining limitations.\n",
+      "oldSha256": "0dfe0904b020a3518072157c3a5d476be802cdfcd475d2962a1489117189fe7f"
+    },
+    "RM31_4": {
+      "file": "README.md",
+      "old": "Release acceptance requires the complete strict gate below and, separately, node tests/c18.test.mjs\n(the standalone 3.0.0 final-release assertions; neither run-tests.mjs nor accept-rc1.mjs runs it).\n",
+      "oldSha256": "528031db9a1e1bb58bbe013129b1d22d8eef39504fca42800fda99962634e2b3"
+    },
+    "RM31_5": {
+      "file": "README.md",
+      "old": "requires or creates project-setup-v3.0.0 in the distribution repository.\n",
+      "oldSha256": "40afdea27cf2d5de06ddf060b83b50abcc4335b54baf33710466f619c967f3f8"
+    },
+    "RM31_6": {
+      "file": "README.md",
+      "old": "node install/release.mjs --tag project-setup-v3.0.0 --out <unused-directory>\n",
+      "oldSha256": "8d3e5500feca2d45c332f676a51f0c676505b33af3e8338bb39ae0f42a0baa21"
+    },
+    "MD31_1": {
+      "file": "references/modes.md",
+      "old": "This behavior has not been verified on a real backend-standards scaffold.\n",
+      "oldSha256": "96fd2bd5fbf168a4e021b184bc3c8f78013aa4df73cbd8dce63ab014dba95d42"
+    },
+    "RR31_1": {
+      "file": "@root/README.md",
+      "old": "`project-setup` (3.0.0, shared by Claude Code and Codex) is **not**\n",
+      "oldSha256": "49749476f6a97e32794547c47d5fca5318bdba6450ad746e0a758b7edac90110"
+    },
+    "RR31_2": {
+      "file": "@root/README.md",
+      "old": "See `project-setup/README.md` and `project-setup/RELEASE-NOTES-3.0.0.md` (compatibility,\nlimitations and the rc.4 host measurement results). A project installed\n",
+      "oldSha256": "7b4484b6ab24f6153a1fc691459470bd0a52ca29281991d783a726c58c40fc88"
+    },
+    "RR31_4": {
+      "file": "@root/README.md",
+      "old": "This installs `project-setup` 3.0.0 for both tools; update each project installed\n",
+      "oldSha256": "e1111b9cfc63e2cadafb8c37786263c99fbe86ecec2a47b4a736c65bd99805d8"
+    },
+    "RR31_5": {
+      "file": "@root/README.md",
+      "old": "The rc.4 host measurement results and limitations are in the 3.0.0 release notes.\n",
+      "oldSha256": "7132d0a9adbcd76ce02bd756960ba83630ed8514076b98c2f16b3b6b61605d43"
+    },
+    "RR31_6": {
+      "file": "@root/README.md",
+      "old": "`project-setup/RELEASE-NOTES-3.0.0.md` § \"Compatibility and rollback\").\n",
+      "oldSha256": "78f39d6277364d9011f0e091970f2ee69fdb761019129e01e3857c1b441b4964"
+    },
+    "RR31_7": {
+      "file": "@root/README.md",
+      "old": "├── project-setup/               general-purpose — shared Claude Code + Codex setup (3.0.0, own installer and tests)\n",
+      "oldSha256": "5a8c2dbdec6ef308e44427712ad2d161bd3a6f148bcc571c61cce2dc324d719a"
+    },
+    "PT31_1": {
+      "file": "@root/.ai/context/project-tree.md",
+      "old": "├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0)\n",
+      "oldSha256": "686f627df5c95c6a4166680510f4feced2490005f0926c801906b4ca21ac2d5c"
+    },
+    "PT31_2": {
+      "file": "@root/.ai/context/project-tree.md",
+      "old": "(`project-setup/VERSION` is `3.0.0`) with its own layout: `SKILL.md`,\n",
+      "oldSha256": "02c548a2503dfadd41b4cb4439c50561b4d8751300da9e3b3b3e1290c3738d7b"
+    }
+  }
+}

@@ -1,5 +1,31 @@
 # Changelog
 
+## 3.1.0
+
+On a backend-standards project, `.ai/standards/03-project-architecture.md` (03) becomes the
+documentation source of truth. Project-setup detects the layout separately from the setup mode
+(a valid stamp, or the BS CLAUDE.md version sentence with its matching 03 import, or an exact
+owner decision recorded in root AGENTS.md) and turns nine overlapping documents into
+self-sufficient pointers to named 03 sections. Backend-standards itself is unchanged.
+
+Safeguards: substantive content is inventoried and consolidated into 03 through one reviewed
+transaction before any original is replaced; declined consolidation keeps the originals and is
+reported incomplete. Malformed or conflicting signals hold activation. Pointers and changed 03
+request merged ownership, and an undrafted 03 and the instruction files activation relies on are
+declared as transaction inputs. A project where BS ran after project-setup is measured first and
+then recovered per file (CLAUDE.md, reviewer wrapper, docs-sync wrapper). Read-only agents report
+a missing destination in their output and write nothing.
+
+Canonical agents, wrappers, templates, scripts, installer and release builder are unchanged.
+Static checks: tests/bs-doc-map.test.mjs and tests/release-3.1.test.mjs. Live acceptance in both
+hosts is pending evidence (tests/live/BS-DOC-MAP-ACCEPTANCE.md).
+
+Limitations: a later BS re-sync can overwrite consolidated 03 content and PS instructions or
+wrappers; the stamp is reconfirmed before prepare but not bound atomically; no safe 03 size
+ceiling is established.
+
+See RELEASE-NOTES-3.1.0.md.
+
 ## 3.0.0
 
 Final release. The skill source is the rc.4 content; only the version number and the release

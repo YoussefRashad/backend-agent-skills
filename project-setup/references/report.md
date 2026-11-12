@@ -11,6 +11,18 @@ Use this structure. Keep it factual; every claim maps to something observed in t
 ### Decisions taken with the user
 - conflicts resolved, allow-listed commands and why, items deliberately skipped
 
+### Documentation source mapping
+- Layout: <BS-mapped / ordinary PS / pending>.
+- Provenance: <signals and approved disposition>.
+- Conversion: <complete / partial / held / not applicable>.
+| PS path | Source headings | Outcome | Content disposition or remaining action |
+- BS outcome by file: <overwrite / merge / unchanged / other, evidence>.
+- CLAUDE.md recovery and per-wrapper dispositions.
+- Agent definitions retained or replaced; incomplete instruction/agent updates.
+- Pointer/source checks performed and their limits.
+- Host routing measurements: <host, agent, version, result / not verified>.
+- Source-size, BS re-sync and stamp-binding limitations.
+
 ### Validation (validate.mjs)
 pass N / warn N / fail N; list every warn/fail and needs-update info.
 Static setup results: <summary>.
@@ -46,6 +58,11 @@ emit a copy command or read its contents.
 
 The two template bullets are conditional: copy the env-keys values step only when it reported one, and its
 missing-template step only when the template was missing. Copy them exactly; they name no value.
+
+The Documentation source mapping section is conditional: include it only when the run assessed the
+backend-standards mapping of `references/docs-generation.md`. Report ambiguity, held conversions,
+declined replacements, incomplete consolidation, missing pointers and unverified hosts there. A
+partial, held or pending outcome is never reported as complete.
 
 Never write "secure", "protected", or "no secrets" without the scope: which tool, which layer, which version,
 which paths.

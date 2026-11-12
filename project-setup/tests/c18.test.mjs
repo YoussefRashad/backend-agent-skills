@@ -9,7 +9,13 @@
 //  2. Everything else in project-setup/ except tests/ and the new notes is the rc.4 source byte for byte (one pinned tree hash).
 //  3. The 3.0.0 release notes are the pinned bytes and keep the release-note contract (ASCII, LF, no resolved IDs, the residuals named).
 //  4. The release builder, run on the real 3.0.0 tree in a synthetic repository, builds 3.0.0 (the C11b builder tests use the rc.4 view).
-// Behavior of the installer and managed update on the real tree is asserted by C11b and C14 to C17, which expect VERSION 3.0.0.
+// Behavior of the installer and managed update on the real tree is asserted by C11b and C14 to C17.
+//
+// Since 3.1.0 (plan docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md, section 7) the real tree carries the 3.1.0 amendments of
+// tests/helpers/v31-amendments.mjs on top of 3.0.0. Every assertion here reads the verified historical 3.0.0 view (read30: each 3.1 record
+// reversed at its anchor and the result equal to the pinned base-commit bytes), keeps its 3.0.0 expectations and identities, and excludes
+// only the exact RELEASE-NOTES-3.1.0.md path from the rc.4 enumeration after validating it. The release builder builds the historical
+// 3.0.0 tree from a disposable copy (to30Tree). The current 3.1.0 bytes are asserted by tests/release-3.1.test.mjs.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +23,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { AMENDED_FILES18, AM18, FINAL_VERSION18, applyForFile, readRc4, reverseForFile } from './helpers/c18-amendments.mjs';
+import { read30, to30Tree } from './helpers/v31-amendments.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(SKILL, '..');
@@ -37,6 +44,10 @@ const RC4_SHA = Object.freeze({
 const RC4_TREE_NO_TESTS = '71cd5d9c9934ef0f651cdfcf12d9dd9bbb174f6243ba3c82a0703580a08ad254';
 const RC4_TREE_FILES = 69;
 const NOTES_SHA = 'fc48e03b7dcd671dffb75c6d108ee53831b00096c25d021333f88e448c24ff28';
+// The one path 3.1.0 adds to project-setup/ outside tests/. It is excluded from the rc.4 enumeration only after it validates below.
+const NOTES31 = 'RELEASE-NOTES-3.1.0.md';
+/** The verified historical 3.0.0 text of a real-tree file (3.1 records reversed and pinned); throws when the reversal does not verify. */
+const read30Text = (p) => read30(p).toString('utf8');
 
 const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: ok === true, detail }); };
@@ -45,8 +56,8 @@ const attempt = (fn) => { try { return fn(); } catch (e) { return { threw: Strin
 // ---------------------------------------------------------------- 1. the amendment layer ----
 check('the amended file set is exactly the seven files', JSON.stringify([...AMENDED_FILES18].sort()) === JSON.stringify(Object.keys(RC4_SHA).sort()), AMENDED_FILES18);
 for (const rel of AMENDED_FILES18) {
-  const raw = attempt(() => fs.readFileSync(absOf(rel), 'utf8'));
-  if (typeof raw !== 'string') { check(`${rel}: readable`, false, raw); continue; }
+  const raw = attempt(() => read30Text(absOf(rel)));
+  if (typeof raw !== 'string') { check(`${rel}: readable as the verified 3.0.0 view`, false, raw); continue; }
   check(`${rel}: LF only, no BOM, exactly one final LF`, !raw.includes('\r') && raw.charCodeAt(0) !== 0xfeff && raw.endsWith('\n') && !raw.endsWith('\n\n'));
   const back = reverseForFile(raw, rel);
   check(`${rel}: every 3.0.0 amendment stands once at its anchor and reverses`, back.text !== null, back.failed);
@@ -62,7 +73,7 @@ for (const rel of AMENDED_FILES18) {
   const dup = ids.length > 0 ? raw.replace(AM18[ids[0]].neu, () => AM18[ids[0]].neu + AM18[ids[0]].neu) : null;
   check(`${rel}: control: a duplicated amendment text is refused`, dup !== null && dup !== raw && reverseForFile(dup, rel).text === null);
 }
-check('VERSION is exactly "3.0.0" plus LF and no version.json stamp exists', (attempt(() => fs.readFileSync(path.join(SKILL, 'VERSION'), 'latin1')) === `${FINAL_VERSION18}\n`) && !fs.existsSync(path.join(SKILL, 'version.json')) && !fs.existsSync(path.join(SKILL, 'install', 'version.json')));
+check('VERSION (historical 3.0.0 view) is exactly "3.0.0" plus LF and no version.json stamp exists', (attempt(() => read30(path.join(SKILL, 'VERSION')).toString('latin1')) === `${FINAL_VERSION18}\n`) && !fs.existsSync(path.join(SKILL, 'version.json')) && !fs.existsSync(path.join(SKILL, 'install', 'version.json')));
 
 // ------------------------------------------------- 2. the rest of the source is the rc.4 source ----
 function treeHash() {
@@ -70,7 +81,7 @@ function treeHash() {
   (function rec(d, rel) {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const r = rel === '' ? e.name : `${rel}/${e.name}`;
-      if (rel === '' && (e.name === 'tests' || e.name === 'RELEASE-NOTES-3.0.0.md')) continue;
+      if (rel === '' && (e.name === 'tests' || e.name === 'RELEASE-NOTES-3.0.0.md' || (e.name === NOTES31 && e.isFile()))) continue;
       const p = path.join(d, e.name);
       if (e.isDirectory()) rec(p, r);
       else out.push([r, sha(readRc4(p))]);
@@ -79,8 +90,10 @@ function treeHash() {
   out.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return { hash: sha(out.map(([a, b]) => `${a}\0${b}\n`).join('')), files: out.length };
 }
+const notes31 = attempt(() => fs.readFileSync(path.join(SKILL, NOTES31)));
+check(`the only excluded 3.1 path, ${NOTES31}, is a regular file titled "# project-setup 3.1.0" (validated before it is excluded)`, Buffer.isBuffer(notes31) && fs.lstatSync(path.join(SKILL, NOTES31)).isFile() && notes31.toString('utf8').startsWith('# project-setup 3.1.0\n'), Buffer.isBuffer(notes31) ? notes31.toString('utf8').split('\n')[0] : notes31);
 const tree = attempt(treeHash);
-check('project-setup/ without tests/ and the 3.0.0 notes, through the rc.4 view, is the rc.4 tree (pinned tree hash, 69 files)', tree.threw === undefined && tree.hash === RC4_TREE_NO_TESTS && tree.files === RC4_TREE_FILES, tree);
+check(`project-setup/ without tests/, the 3.0.0 notes and exactly ${NOTES31}, through the rc.4 view, is the rc.4 tree (pinned tree hash, 69 files)`, tree.threw === undefined && tree.hash === RC4_TREE_NO_TESTS && tree.files === RC4_TREE_FILES, tree);
 
 // ----------------------------------------------------------------------- 3. the release notes ----
 const notesBytes = attempt(() => fs.readFileSync(path.join(SKILL, 'RELEASE-NOTES-3.0.0.md')));
@@ -91,7 +104,7 @@ check('the notes carry no standalone 40- or 64-hex ID', !/(?<![0-9A-Fa-f])(?:[0-
 const headings = notes.split('\n').filter((l) => /^#{1,2} /.test(l));
 check('the notes have the release title and the seven sections in order', JSON.stringify(headings) === JSON.stringify(['# project-setup 3.0.0', '## Changes', '## Compatibility and rollback', '## Verification', '## Host measurements on rc.4', '## Limitations', '## Provenance and release artifacts']), headings);
 check('the notes name both unmet criteria and pending nothing', /INFO and approved with changes in two of two runs/.test(notes) && /refused to start after the parent changed into a/.test(notes) && !/Pending host measurements/.test(notes) && !/\bblock final 3\.0\.0\b/.test(notes));
-check('the changelog has the 3.0.0 entry once, first, before the rc.4 entry', (() => { const cl = attempt(() => fs.readFileSync(path.join(SKILL, 'CHANGELOG.md'), 'utf8')); return typeof cl === 'string' && cl.startsWith('# Changelog\n\n## 3.0.0\n') && cl.split('\n## 3.0.0\n').length === 2 && cl.indexOf('\n## 3.0.0\n') < cl.indexOf('\n## 3.0.0-rc.4\n'); })());
+check('the changelog (historical 3.0.0 view) has the 3.0.0 entry once, first, before the rc.4 entry', (() => { const cl = attempt(() => read30Text(path.join(SKILL, 'CHANGELOG.md'))); return typeof cl === 'string' && cl.startsWith('# Changelog\n\n## 3.0.0\n') && cl.split('\n## 3.0.0\n').length === 2 && cl.indexOf('\n## 3.0.0\n') < cl.indexOf('\n## 3.0.0-rc.4\n'); })());
 
 // ------------------------------------------------------------------ 4. release builder on 3.0.0 ----
 function releaseBuilder() {
@@ -120,6 +133,8 @@ function releaseBuilder() {
       else if (e.isFile()) fs.copyFileSync(path.join(src, e.name), path.join(to, e.name));
     }
   })(SKILL, dst, '');
+  // The disposable copy becomes the historical 3.0.0 tree: the 3.1 records reversed (verified) and only the 3.1.0 notes removed.
+  to30Tree(dst);
   must(run('git', ['add', '-A'], repo), 'git add');
   must(run('git', ['commit', '-q', '-m', 'release tree'], repo), 'git commit');
   must(run('git', ['tag', 'project-setup-v3.0.0'], repo), 'git tag');
