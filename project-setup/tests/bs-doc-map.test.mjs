@@ -1526,11 +1526,13 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 // A fixture that wants a given summary therefore sets the record with it: absent and skipped have no record (skipped adds the policy entry the real walk writes), valid and malformed have one.
 // (The old fixtures edited the summary over a file list that still held the manifest: a snapshot no run of the helper can produce.)
 const BASE_MANIFEST_RECORD = () => ({ sha256: 'e'.repeat(64), bytes: 2, lines: 1 });
+// N22: a record the capture could have written for a valid summary: the compact manifest of exactly that ownership map (bytes written out by this spec, not asked of the helper).
+const validManifestRecord = (ownership) => { const t = JSON.stringify({ files: Object.fromEntries(Object.entries(ownership).map(([k, v]) => [k, v === null ? 0 : { ownership: v }])) }); return { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 1 }; };
 function setBaseManifest(b, m) {
   const rel = H.MANIFEST_REL;
   const kind = m === undefined ? 'unrecognised' : m.state;
   b.skipped = (Array.isArray(b.skipped) ? b.skipped : []).filter((e) => e.path !== rel);
-  if (kind === 'absent' || kind === 'skipped') delete b.files[rel]; else if (b.files[rel] === undefined) b.files[rel] = BASE_MANIFEST_RECORD();
+  if (kind === 'absent' || kind === 'skipped') delete b.files[rel]; else if (b.files[rel] === undefined) b.files[rel] = kind === 'valid' && m.ownership !== null && typeof m.ownership === 'object' && !Array.isArray(m.ownership) ? validManifestRecord(m.ownership) : BASE_MANIFEST_RECORD();
   if (kind === 'skipped') b.skipped.push({ path: rel, reason: 'policy-denied' });
   if (m === undefined) delete b.manifest; else b.manifest = m;
   return b;
@@ -2567,8 +2569,10 @@ function faultFs(hooks, fn) {
   // (a summary of "absent" with the path confirmed absent; a summary with an ownership map with the path present); every other pair is not evaluable and the reason names the path, the
   // baseline side, the path state and the summary state. The expectations below are written out here, never derived from the helper.
   const M_REL = H.MANIFEST_REL;
-  const M_REC = () => ({ sha256: 'e'.repeat(64), bytes: 2, lines: 1 });
+  // N22: the record of a manifest whose summary holds M_OWN must be one the capture could have written for it (a 2-byte record beside two recorded paths is the contradiction N22 refuses), so it is
+  // the compact manifest of exactly M_OWN; the same record sits beside the summaries that are not valid, where its size is not compared with anything.
   const M_OWN = Object.fromEntries(VERIFY_POINTERS.map((p) => [p, 'merged']));
+  const M_REC = () => validManifestRecord(M_OWN);
   const M_SUMMARIES = [['absent', { state: 'absent' }], ['valid', { state: 'valid', ownership: M_OWN }], ['valid-without-ownership', { state: 'valid' }], ['skipped', { state: 'skipped' }], ['malformed', { state: 'malformed' }], ['unrecognised', undefined]];
   // [label, the state snapshotPathState gives the manifest path, its cause (null: none), what to do to a snapshot (a baseline or a hand-made one) so that it records this state]
   const M_PATHS = [
@@ -2821,6 +2825,41 @@ function faultFs(hooks, fn) {
   G(`the table drives every consult point on every side it has (${rows} rows of not-evaluable, each naming path, side and state)`, rows >= 60, rows);
 }
 
+// ============================================================== fixtures of the N22 and N23 relations (shared by the gate group and the property group) ====
+// Written out here, never derived from the helper. The decoding facts they rest on were probed in a scratch process (not part of this spec) over 8.7 million buffers on Node 24.14.1: a BOM is kept as
+// U+FEFF; each U+FFFD of a decoded text stands for one to three bytes of the file (so L - 2n <= bytes <= L, with L the text's UTF-8 length and n its U+FFFD count); text is empty exactly when the file
+// is; no lone surrogate is ever produced. The spec below re-proves the bound over a sweep of buffers and over real snapshots of fixture directories.
+const putBytes = (root, rel, bytes) => { const p = path.join(root, ...rel.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, bytes); };
+const BYTES = (...parts) => Buffer.concat(parts.map((p) => (typeof p === 'string' ? Buffer.from(p, 'utf8') : Buffer.from(p))));
+// Manifest files at the SMALLEST size the capture can summarize as valid for their ownership map (compact JSON, a one-byte value for a null ownership, the shortest literal for every key; a byte that
+// is not UTF-8 is one byte and decodes to U+FFFD). Single-character keys that need an escape are avoided on purpose. Each is a real, capturable manifest: the gate group takes a real snapshot of it.
+const MANIFEST_ORACLES = [
+  ['an empty ownership map', BYTES('{"files":{}}')],
+  ['one path with a null ownership', BYTES('{"files":{"a":0}}')],
+  ['two paths (a comma between the entries)', BYTES('{"files":{"ab":0,"cd":0}}')],
+  ['a text ownership', BYTES('{"files":{"ab":{"ownership":"merged"}}}')],
+  ['keys with escapes (newline, quote, backslash)', BYTES('{"files":{"a\\nb":0,"q\\"r\\\\s":0}}')],
+  ['a key with a control character escape', BYTES('{"files":{"a\\u0001b":0}}')],
+  ['a key with a lone surrogate escape', BYTES('{"files":{"a\\ud800b":0}}')],
+  ['a non-ASCII key (two, three and four byte characters)', BYTES('{"files":{"\u00e9\u20ac\u{1F600}":0}}')],
+  ['a key with a byte that is not UTF-8 (it decodes to U+FFFD and costs one byte)', BYTES('{"files":{"a', [0xff], 'b":0}}')],
+  ['a text ownership with a byte that is not UTF-8', BYTES('{"files":{"k":{"ownership":"m', [0xff], '"}}}')],
+];
+// The file bytes of an instruction file that decode to a text with replacement characters, with the record the capture writes for them (bytes, lines and text written out; the sha256 is the file's).
+const KEPT_TEXT_ORACLES = [
+  ['FF 0A: one invalid byte and a newline (the lower end of the bound: the byte count is smaller than the re-encoded text)', BYTES([0xff, 0x0a]), { bytes: 2, lines: 1, text: '\uFFFD\n' }],
+  ['EF BF BD 0A: a genuine U+FFFD and a newline (the upper end: the byte count equals the re-encoded text)', BYTES([0xef, 0xbf, 0xbd, 0x0a]), { bytes: 4, lines: 1, text: '\uFFFD\n' }],
+  ['E2 82 0A: a truncated three-byte sequence and a newline (between the two ends)', BYTES([0xe2, 0x82, 0x0a]), { bytes: 3, lines: 1, text: '\uFFFD\n' }],
+  ['FF FF 0A: two replacement characters', BYTES([0xff, 0xff, 0x0a]), { bytes: 3, lines: 1, text: '\uFFFD\uFFFD\n' }],
+  ['FF: a single invalid byte, one line, no newline', BYTES([0xff]), { bytes: 1, lines: 1, text: '\uFFFD' }],
+  ['ED A0 80: an encoded surrogate (three bytes, three replacement characters, no lone surrogate)', BYTES([0xed, 0xa0, 0x80]), { bytes: 3, lines: 1, text: '\uFFFD\uFFFD\uFFFD' }],
+  ['EF BB BF FF 0A: a byte order mark (kept as U+FEFF) and an invalid byte', BYTES([0xef, 0xbb, 0xbf, 0xff, 0x0a]), { bytes: 5, lines: 1, text: '\uFEFF\uFFFD\n' }],
+  ['200 letters, FF and a newline (the review\'s shape, with its true byte count)', BYTES('a'.repeat(200), [0xff, 0x0a]), { bytes: 202, lines: 1, text: `${'a'.repeat(200)}\uFFFD\n` }],
+  ['F0 9F 98 80 0A: a valid surrogate PAIR (one astral character, four bytes) and a newline: decoded text is well-formed, so it is not a lone surrogate', BYTES([0xf0, 0x9f, 0x98, 0x80, 0x0a]), { bytes: 5, lines: 1, text: '\u{1F600}\n' }],
+  ['an empty file: zero bytes, zero lines, empty text', BYTES(), { bytes: 0, lines: 0, text: '' }],
+  ['a lone CR: one byte, one line', BYTES('\r'), { bytes: 1, lines: 1, text: '\r' }],
+];
+
 // ============================================================== GROUP: the baseline gate (review pass 6, N21) ====
 // N20 and N21 were one class: a baseline FILE that contradicts itself. Every instance so far (a manifest summary against its record, a file record against a skipped entry) came from a baseline
 // that no snapshot taken by this helper can be, because captureProject writes every relation between files, skipped, manifest and size03 in one pass. The helper therefore has ONE gate,
@@ -2844,6 +2883,8 @@ function faultFs(hooks, fn) {
   // ---------------------------------------------------------------- the fixture and its consistent baseline
   const gateRoot = mkVerify('gate', { files: GATE_FILES });
   const GB = clone(H.takeSnapshot(gateRoot));
+  // The smallest manifest of the base's ownership map, as the compact JSON of exactly that map (written out by this spec: validManifestRecord).
+  const GB_MIN = validManifestRecord(GB.manifest.ownership).bytes;
   G('control: the fixture every row starts from is a real snapshot that holds each thing the gate relates (a text-less record with its NOT_STORED entry, a policy-denied file, size03, a valid manifest summary with its record) and the gate finds nothing in it', GB.skipped.some((e) => e.path === WITHHELD && e.reason === NOT_STORED) && GB.files[WITHHELD].text === undefined && GB.skipped.some((e) => e.path === DENIED && e.reason === 'policy-denied') && GB.size03 !== undefined && GB.manifest.state === 'valid' && GB.files[M] !== undefined && JSON.stringify(attempt(() => H.baselineContradictions(GB))) === '[]', { skipped: GB.skipped, reasons: attempt(() => H.baselineContradictions(GB)) });
   { const r = verify(gateRoot, { baseline: clone(GB) });
     G('control: verified against that consistent baseline the project is clean (the gate adds no reason, and the withheld-text file is compared by its hash)', clean(r), diag(r)); }
@@ -2869,6 +2910,20 @@ function faultFs(hooks, fn) {
     row('a skipped entry of an UNKNOWN reason over a record is a contradiction too (it covers the path exactly as a policy entry does)', (b) => { b.skipped.push({ path: NOTES, reason: 'mystery' }); }, 'record-skipped', [NOTES, 'mystery']);
     row('the record was kept and an entry for the manifest was added while the summary says absent', (b) => { b.manifest = { state: 'absent' }; b.skipped.push({ path: M, reason: 'policy-denied' }); }, 'record-skipped', [M]);
     row('the exception is narrow: a NOT_STORED entry keeps a record only for a file whose text the capture keeps, so one beside the record of an ordinary docs file is refused', (b) => { b.skipped.push({ path: NOTES, reason: NOT_STORED }); }, 'not-stored', [NOTES, 'never withholds']);
+    // ---- N22 (review pass 7): the manifest record is the empty file (the digest of no bytes, 0 bytes, 0 lines) while the summary is the unchanged valid ownership summary. The capture summarizes an empty
+    // manifest as malformed, so the two cannot both be true; the gate used to accept them and the verification returned no-automated-findings in both layouts.
+    row('N22: the manifest record is empty (the digest of no bytes, 0 bytes, 0 lines) beside the unchanged valid ownership summary', (b) => { b.files[M] = { sha256: sha(Buffer.alloc(0)), bytes: 0, lines: 0 }; }, 'manifest', [M, 'at least', 'empty manifest is summarized as malformed']);
+    row('N22: the manifest record is one byte, one line, beside the unchanged valid ownership summary', (b) => { b.files[M] = { sha256: 'a'.repeat(64), bytes: 1, lines: 1 }; }, 'manifest', [M, 'at least', 'its file record says 1 byte:']);
+    // ---- N23 (review pass 7): U+FFFD used to switch off every text-versus-record check, and a non-empty record with no lines was accepted. Neither shape can come from the capture's decoding of a Buffer.
+    row('N23: a non-empty record with zero lines (5 bytes, no line)', (b) => { b.files[NOTES] = { sha256: 'a'.repeat(64), bytes: 5, lines: 0 }; }, 'record', [NOTES, 'no line exactly when it has no bytes']);
+    const root23 = mkVerify('n23', { files });
+    putBytes(root23, EXTN, BYTES('a'.repeat(200), [0xff, 0x0a]));
+    const real23 = clone(H.takeSnapshot(root23));
+    const go23 = (mutate) => { const b = clone(real23); mutate(b); return verify(root23, { baseline: b, evidence: ev({ extensions: { [EXTN]: {} } }) }); };
+    G(`control (${layout}): the N23 replay fixture holds an extension of 200 letters, an invalid byte and a newline (202 bytes), its real baseline is consistent and verifies clean`, JSON.stringify(H.baselineContradictions(real23)) === '[]' && real23.files[EXTN].bytes === 202 && real23.files[EXTN].text === `${'a'.repeat(200)}\uFFFD\n` && clean(go23(() => {})), { reasons: H.baselineContradictions(real23), run: diag(go23(() => {})) });
+    replays += 1;
+    { const r = go23((b) => { b.files[EXTN].bytes = 1; });
+      G(`the review replay of N23, ${layout} layout, an extension that claims 1 byte but stores 200 letters, a replacement character and a newline, with the same text in the project: not evaluable, naming (text), ${EXTN} and the bytes it could come from (202 to 204), never no-automated-findings`, notEval(r) && hasReason(r.notEvaluable, 'text', [EXTN, 'replacement character', 'between 202 and 204 bytes']) && !clean(r), diag(r)); }
   }
 
   // ---------------------------------------------------------------- one row per invariant: a minimal violating baseline, then a control
@@ -2890,12 +2945,22 @@ function faultFs(hooks, fn) {
     ['record', 'more lines than bytes', (b) => { b.files[NOTES].lines = b.files[NOTES].bytes + 1; }, [NOTES, 'more lines']],
     ['record', 'the digest of an empty file on a record of bytes', (b) => { b.files[NOTES].sha256 = sha(Buffer.alloc(0)); }, [NOTES, 'digest of an empty file']],
     ['record', 'zero bytes with a digest that is not an empty file\'s', (b) => { b.files[NOTES].bytes = 0; b.files[NOTES].lines = 0; }, [NOTES, 'digest of an empty file']],
+    ['record', 'N23: bytes with no line (a non-empty file always has at least one)', (b) => { b.files[NOTES].lines = 0; }, [NOTES, 'no line exactly when it has no bytes']],
+    ['record', 'N23: a line with no bytes (zero bytes and the digest of an empty file, but one line)', (b) => { b.files[NOTES] = { sha256: sha(Buffer.alloc(0)), bytes: 0, lines: 1 }; }, [NOTES, 'more lines']],
     ['text', 'text held for a file whose text the capture never keeps', (b) => { b.files[NOTES].text = '# notes\n'; }, [NOTES, 'only for instruction and agent files']],
     ['text', 'secret-shaped text stored', (b) => { b.files['AGENTS.md'].text = `${CANARY}\n`; b.files['AGENTS.md'].lines = 1; }, ['AGENTS.md', 'secret-shaped']],
     ['text', 'a line count that is not the text\'s', (b) => { b.files['AGENTS.md'].lines += 1; }, ['AGENTS.md', 'lines but its text has']],
     ['text', 'a text that is not text', (b) => { b.files['AGENTS.md'].text = null; }, ['AGENTS.md', 'not text']],
     ['text', 'a text that is not the file its sha256 describes (same size, another letter)', (b) => { b.files['AGENTS.md'].text = b.files['AGENTS.md'].text.replace(/[a-z]/, 'Q'); }, ['AGENTS.md', 'does not match its own record']],
     ['text', 'a byte count that is not the text\'s', (b) => { b.files['AGENTS.md'].bytes += 1; }, ['AGENTS.md', 'does not match its own record']],
+    ['text', 'a lone surrogate (decoding leaves U+FFFD, never a surrogate); size and hash are those of its encoding, so it is the only thing wrong', (b) => { const t = '\uD800\n'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 1, text: t }; }, ['AGENTS.md', 'lone surrogate']],
+    ['text', 'a lone LOW surrogate with no high surrogate before it (size and hash are those of its encoding)', (b) => { const t = '\uDC00\n'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 1, text: t }; }, ['AGENTS.md', 'lone surrogate']],
+    ['text', 'a high surrogate at the very end of the text, with nothing after it', (b) => { const t = 'a\n\uD800'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 2, text: t }; }, ['AGENTS.md', 'lone surrogate']],
+    ['text', 'a swapped pair: a low surrogate followed by a high one', (b) => { const t = '\uDC00\uD800\n'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 1, text: t }; }, ['AGENTS.md', 'lone surrogate']],
+    ['text', 'N23: a replacement character and 1 byte for 200 letters, U+FFFD and a newline (the review\'s shape: 202 to 204 bytes can decode to it)', (b) => { b.files['AGENTS.md'] = { sha256: 'a'.repeat(64), bytes: 1, lines: 1, text: `${'a'.repeat(200)}\uFFFD\n` }; }, ['AGENTS.md', '1 replacement character', 'between 202 and 204 bytes']],
+    ['text', 'N23: a replacement character and a byte count one below the lower end (1 byte for U+FFFD and a newline, which come from 2 to 4)', (b) => { b.files['AGENTS.md'] = { sha256: 'a'.repeat(64), bytes: 1, lines: 1, text: '\uFFFD\n' }; }, ['AGENTS.md', 'between 2 and 4 bytes']],
+    ['text', 'N23: a replacement character and a byte count one above the upper end (5 bytes for U+FFFD and a newline: the old control of this table)', (b) => { b.files['AGENTS.md'] = { sha256: 'a'.repeat(64), bytes: 5, lines: 1, text: '\uFFFD\n' }; }, ['AGENTS.md', 'between 2 and 4 bytes']],
+    ['text', 'N23: two replacement characters and 2 bytes (the two cost at least one byte each, and the newline one more: 3 to 7)', (b) => { b.files['AGENTS.md'] = { sha256: 'a'.repeat(64), bytes: 2, lines: 1, text: '\uFFFD\uFFFD\n' }; }, ['AGENTS.md', '2 replacement characters', 'between 3 and 7 bytes']],
     ['text', 'an instruction file with neither text nor a NOT_STORED entry', (b) => { delete b.files['CLAUDE.md'].text; }, ['CLAUDE.md', NOT_STORED]],
     ['skipped', 'no skipped list', (b) => { delete b.skipped; }, ['skipped is missing']],
     ['skipped', 'a skipped value that is not a list', (b) => { b.skipped = {}; }, ['skipped is missing']],
@@ -2918,6 +2983,9 @@ function faultFs(hooks, fn) {
     ['manifest', 'a summary that says the manifest was skipped, with no entry that skipped it', (b) => { b.manifest = { state: 'skipped' }; }, [M, 'summary state skipped']],
     ['manifest', 'no manifest summary', (b) => { delete b.manifest; }, [M, 'summary state unrecognised']],
     ['manifest', 'a valid summary without an ownership map', (b) => { b.manifest = { state: 'valid' }; }, [M, 'summary state valid-without-ownership']],
+    ['manifest', 'N22: a valid summary beside an empty record (0 bytes, 0 lines, the digest of no bytes): an empty manifest is malformed, never valid', (b) => { b.files[M] = { sha256: sha(Buffer.alloc(0)), bytes: 0, lines: 0 }; }, [M, 'at least', 'empty manifest is summarized as malformed']],
+    ['manifest', 'N22: a valid summary of the ownership map beside a record one byte smaller than the smallest manifest that yields it', (b) => { b.files[M].bytes = GB_MIN - 1; }, [M, `at least ${GB_MIN} bytes`, `says ${GB_MIN - 1} bytes`]],
+    ['manifest', 'N22: a valid summary of an empty ownership map beside a record of 11 bytes (the least is 12: {"files":{}})', (b) => { b.manifest = { state: 'valid', ownership: {} }; b.files[M] = { sha256: 'a'.repeat(64), bytes: 11, lines: 1 }; }, [M, 'at least 12 bytes', '0 recorded paths']],
     ['manifest', 'a malformed summary (consistent with its record, but a baseline cannot compare it)', (b) => { b.manifest = { state: 'malformed' }; }, [M, 'summary state malformed']],
     ['ownership', 'an ownership that is neither text nor null', (b) => { b.manifest.ownership['docs/database.md'] = 5; }, ['docs/database.md', 'neither text nor null']],
     ['size03', 'size03 without a record of 03', (b) => { delete b.files[O3]; }, [O3, 'size03 is recorded']],
@@ -2934,16 +3002,37 @@ function faultFs(hooks, fn) {
     const b = clone(GB); const t = attempt(() => mutate(b)); const unit = attempt(() => H.baselineContradictions(b)); const r = verify(gateRoot, { baseline: b });
     G(`N21 table, ${id}: ${label} -> the gate names (${id}) and ${names.join(', ')}, and the verification is not evaluable with that reason (no check runs)`, t === undefined && Array.isArray(unit) && hasReason(unit, id, names) && notEval(r) && hasReason(r.notEvaluable, id, names) && r.findings.length === 0 && r.checked.length === 0, { threw: t, unit, run: diag(r) });
   }
-  G(`N21 table: ${rowRuns} violating baselines over ${IDS.length} invariants, at least two for each of the larger ones`, IDS.join() === 'identity,files,record,text,skipped,not-stored,record-skipped,manifest,ownership,size03' && rowRuns >= 46, { rowRuns, IDS });
+  G(`N21 table: ${rowRuns} violating baselines over ${IDS.length} invariants, at least two for each of the larger ones`, IDS.join() === 'identity,files,record,text,skipped,not-stored,record-skipped,manifest,ownership,size03' && rowRuns >= 56, { rowRuns, IDS });
   // Completeness: every invariant id the gate can name is a row of the table (an invariant added to the helper without a row fails here).
   { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')); const gate = src.slice(src.indexOf('export function baselineContradictions('), src.indexOf('\n}\n', src.indexOf('export function baselineContradictions(')));
     const named = [...new Set([...[...gate.matchAll(/\bbad\('([a-z0-9-]+)'/g)].map((m) => m[1]), ...(/consistent snapshot \(manifest\)/.test(gate) ? ['manifest'] : [])])];
-    G('N21 table: every invariant id the gate source can emit has a row, and every row names an id the gate emits', named.length >= 10 && named.every((n) => IDS.includes(n)) && IDS.every((n) => named.includes(n)), { named, IDS }); }
+    G('N21 table: every invariant id the gate source can emit has a row, and every row names an id the gate emits', named.length >= 10 && named.every((n) => IDS.includes(n)) && IDS.every((n) => named.includes(n)), { named, IDS });
+    // The same completeness per CALL SITE (N22 and N23 were relations inside ids that already had rows, so an id-level check could not see them missing): every bad(...) call of the gate is listed here by the id
+    // and a phrase of its reason, the phrase is in the gate source, and a row of that id names it. A relation added to the gate without a row, or a row retired, fails here. (The site that has no row, "the baseline is
+    // not an object", is covered by the junk-input test below, which hands the gate a non-object.)
+    const SITES = [
+      ['identity', 'the baseline is not an object', null], ['identity', 'it is not a schema 1 bs-doc-map snapshot', 'schema 1'],
+      ['files', 'files is missing or is not an object', 'files is missing'], ['files', 'is not a relative path inside the explicit inventory', 'README.md'], ['files', 'are one file on a case-insensitive file system', 'Notes.md'],
+      ['skipped', 'skipped is missing or is not a list', 'skipped is missing'], ['skipped', 'is not { path, reason } with text values', 'entry'], ['skipped', 'is not a relative path', '/abs/x.md'], ['skipped', 'which the capture never writes', 'mystery'], ['skipped', 'is listed twice', 'twice'],
+      ['record', 'has no record object', NOTES], ['record', 'has no valid sha256', 'sha256'], ['record', 'has a bytes or lines value that is not a non-negative integer', 'bytes or lines'], ['record', 'records more lines', 'more lines'],
+      ['record', 'no line exactly when it has no bytes', 'no line exactly when it has no bytes'], ['record', 'the digest of an empty file', 'digest of an empty file'],
+      ['text', 'has a text that is not text', 'not text'], ['text', 'holds text, which the capture keeps only for instruction and agent files', 'only for instruction and agent files'], ['text', 'holds secret-shaped text', 'secret-shaped'],
+      ['text', 'lines but its text has', 'lines but its text has'], ['text', 'holds a text with a lone surrogate', 'lone surrogate'], ['text', 'holds a text that does not match its own record', 'does not match its own record'],
+      ['text', 'replacement character', 'between 2 and 4 bytes'], ['text', 'with neither text nor a ${NOT_STORED} entry', NOT_STORED],
+      ['not-stored', 'holds its text and is also listed as', 'holds its text'], ['not-stored', 'but has no file record', 'no file record'], ['not-stored', 'so it never withholds this one', 'never withholds'],
+      ['record-skipped', 'the capture neither records nor walks what it skips', NOTES], ['ownership', 'neither text nor null', 'neither text nor null'],
+      ['manifest', 'which needs a manifest of at least', 'at least'],
+      ['size03', 'size03 is recorded but the baseline holds no file record', 'size03 is recorded'], ['size03', 'size03 does not match the file record', 'does not match'], ['size03', 'which the capture writes with that record', 'no size03'],
+    ];
+    const sites = (gate.match(/\bbad\('/g) ?? []).length;
+    G(`N21 table: the gate has ${sites} bad(...) call sites and each of the ${SITES.length} listed here is in the source and is named by a row of its id (or by the junk-input test); no call site is unlisted`, sites === SITES.length && SITES.every(([id, phrase, rowName]) => gate.includes(phrase) && gate.includes(`bad('${id}'`) && (rowName === null || ROWS.some((r) => r[0] === id && r[3].some((n) => String(n).includes(rowName))))), { sites, listed: SITES.length, missing: SITES.filter(([id, phrase, rowName]) => !gate.includes(phrase) || (rowName !== null && !ROWS.some((r) => r[0] === id && r[3].some((n) => String(n).includes(rowName))))).map((s) => s.slice(0, 2)) }); }
   // The controls: a neighbouring baseline the capture can produce is NOT refused (the table above would be trivially satisfied by a gate that refuses everything).
   const CONTROLS = [
     ['the base itself', () => {}],
     ['an empty record: zero bytes, zero lines and the digest of no bytes', (b) => { b.files[NOTES] = { sha256: sha(Buffer.alloc(0)), bytes: 0, lines: 0 }; }],
-    ['a text that holds a replacement character (the capture wrote it for a byte that is not UTF-8) is not compared with the record\'s hash or size', (b) => { b.files['AGENTS.md'] = { sha256: 'f'.repeat(64), bytes: 5, lines: 1, text: '\uFFFD\n' }; }],
+    // (N23: the control that stood here, 5 bytes for the text U+FFFD and a newline, was not capturable: those bytes re-encode to 4 and each U+FFFD stands for at most three, so the file is 2 to 4 bytes.
+    // The replacement characters are controlled below by REAL snapshots of the bytes that decode to them, KEPT_TEXT_ORACLES.)
+    ['a text that holds a replacement character, with a hash the gate cannot rebuild: only the byte bound and the line count are compared (2 bytes, the lower end, for U+FFFD and a newline)', (b) => { b.files['AGENTS.md'] = { sha256: 'f'.repeat(64), bytes: 2, lines: 1, text: '\uFFFD\n' }; }],
     ['a text with a byte order mark and CRLF line ends, hashed and measured as it is', (b) => { const t = '\uFEFFa\r\nb\r\n'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 2, text: t }; }],
     ['one character per line: lines equal to bytes', (b) => { b.files[NOTES] = { sha256: 'b'.repeat(64), bytes: 2, lines: 2 }; }],
     ['a skipped directory with nothing recorded at or below it', (b) => { b.skipped.push({ path: 'docs/other-private', reason: 'policy-denied' }); }],
@@ -2962,6 +3051,63 @@ function faultFs(hooks, fn) {
     const b = clone(GB); mutate(b); const unit = attempt(() => H.baselineContradictions(b)); const r = verify(gateRoot, { baseline: b });
     G(`N21 control: ${label} is a baseline the capture can produce: the gate finds nothing, and the verification is not stopped by it`, JSON.stringify(unit) === '[]' && gateReasons(r).length === 0, { unit, reasons: gateReasons(r) });
   }
+  // N23 controls: for each byte string, the record a REAL snapshot writes (a throwaway project, takeSnapshot) is exactly the record written out in KEPT_TEXT_ORACLES, so the control is capturable by
+  // construction, and a baseline that holds it is not refused. These replace the old control that stood at 5 bytes for U+FFFD and a newline.
+  for (const [label, buf, want] of KEPT_TEXT_ORACLES) {
+    const proj = liveProj('n23-ctl', {}); putBytes(proj, 'AGENTS.md', buf);
+    const real = clone(H.takeSnapshot(proj)).files['AGENTS.md'];
+    const expected = { sha256: sha(buf), ...want };
+    const b = clone(GB); b.files['AGENTS.md'] = clone(real);
+    const unit = attempt(() => H.baselineContradictions(b)); const r = verify(gateRoot, { baseline: b });
+    G(`N23 control: ${label}: the record a real snapshot writes for these bytes is the one written out in this spec, and a baseline that holds it is not refused`, JSON.stringify(real) === JSON.stringify(expected) && JSON.stringify(unit) === '[]' && gateReasons(r).length === 0, { real, expected, unit, reasons: gateReasons(r) });
+  }
+  // N22 controls: a REAL snapshot of each oracle manifest (the smallest file for its ownership map) is summarized as valid, its record is exactly the oracle's size, the gate accepts it, and a record one byte
+  // smaller is refused naming the size. The first half proves the bound is reachable (the gate is not refusing what the capture produces); the second that it is no looser than the oracle.
+  for (const [label, buf] of MANIFEST_ORACLES) {
+    const proj = liveProj('n22-ctl', { 'AGENTS.md': '# a\n' }); putBytes(proj, M, buf);
+    const snap = clone(H.takeSnapshot(proj));
+    const atBound = clone(GB); atBound.files[M] = clone(snap.files[M]); atBound.manifest = clone(snap.manifest);
+    const below = clone(atBound); below.files[M].bytes -= 1;
+    const u0 = attempt(() => H.baselineContradictions(atBound)); const u1 = attempt(() => H.baselineContradictions(below));
+    G(`N22 control: ${label} (${buf.length} bytes): a real snapshot summarizes it as valid with a record of exactly that size, the gate accepts it, and a record one byte smaller is refused naming at least ${buf.length} bytes`, snap.manifest.state === 'valid' && snap.files[M].bytes === buf.length && JSON.stringify(u0) === '[]' && Array.isArray(u1) && u1.length === 1 && hasReason(u1, 'manifest', [M, `at least ${buf.length} bytes`, `says ${buf.length - 1} byte`]), { state: snap.manifest.state, bytes: snap.files[M].bytes, u0, u1 });
+  }
+  // Manifests above the bound are real too: whitespace, other keys, a repeated key (two entries in the text, one in the summary).
+  for (const [label, buf] of [['a repeated key', BYTES('{"files":{"ab":0,"ab":0}}')], ['padding and another key', BYTES(' { "schema" : 3 , "files" : { "ab" : 0 } }\n')], ['the pretty-printed manifest of a real run', BYTES(manifestJson({ 'docs/database.md': { ownership: 'merged' } }))], ['a BOM-free manifest with CRLF line ends', BYTES('{\r\n  "files": {\r\n    "ab": null\r\n  }\r\n}\r\n')]]) {
+    const proj = liveProj('n22-above', { 'AGENTS.md': '# a\n' }); putBytes(proj, M, buf);
+    const snap = clone(H.takeSnapshot(proj)); const b = clone(GB); b.files[M] = clone(snap.files[M]); b.manifest = clone(snap.manifest);
+    G(`N22 control: ${label} (${buf.length} bytes) is valid above the bound: a real snapshot of it is accepted`, snap.manifest.state === 'valid' && JSON.stringify(attempt(() => H.baselineContradictions(b))) === '[]', { state: snap.manifest.state, reasons: attempt(() => H.baselineContradictions(b)) });
+  }
+  // The bound is the exact minimum, over a sweep of manifests built by this spec as BYTES (not through the helper's parse): random ownership maps (keys with escapes, quotes, non-ASCII, astral, lone
+  // surrogates and a byte that is not UTF-8; null and text values) written in their shortest form have exactly the size minValidManifestBytes states, and any padding has more.
+  { let s = 0x2545f491; const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s; };
+    const CH = ['a', 'Z', '0', '/', '.', ' ', '"', '\\', '\n', '\t', '\u0001', '\u007f', '\u00e9', '\u20ac', '\u2028', '\uFEFF', '\u{1F600}', '\ud800', '\udc00', '\uFFFD'];
+    const lit = (str) => BYTES('"', ...[...str].map((c) => (c === '\uFFFD' ? [0xff] : JSON.stringify(c).slice(1, -1))), '"');
+    const rs = (max) => { let o = ''; const n = rnd() % (max + 1); for (let i = 0; i < n; i += 1) o += CH[rnd() % CH.length]; return o; };
+    let exact = 0; let nonEmpty = 0; const off = [];
+    for (let i = 0; i < 3000; i += 1) {
+      const own = {}; const n = rnd() % 5;
+      for (let j = 0; j < n; j += 1) { let k = rs(4); if (Object.prototype.hasOwnProperty.call(own, k)) k += `#${j}`; own[k] = rnd() % 3 === 0 ? rs(3) : null; }
+      const entries = Object.entries(own).map(([k, v]) => BYTES(lit(k), ':', v === null ? '0' : BYTES('{"ownership":', lit(v), '}')));
+      const buf = BYTES('{"files":{', ...entries.flatMap((e, idx) => (idx === 0 ? [e] : [',', e])), '}}');
+      const want = H.minValidManifestBytes(own);
+      if (Object.keys(own).length > 0) nonEmpty += 1;
+      if (want === buf.length) exact += 1; else if (off.length < 3) off.push({ own, bytes: buf.length, want });
+    }
+    G('N22: over 3000 random ownership maps written as bytes in their shortest form, the size the gate requires is exactly that size: reached, never exceeded (so the record of the real file is never below it)', exact === 3000 && nonEmpty > 1500, { exact, nonEmpty, off }); }
+  // The decoding bound over every short buffer of a biased alphabet (11^1..11^4 buffers; invalid bytes, truncated sequences, a lead byte, NUL, CR, LF): the record a decode of the buffer gives, written with this
+  // spec's own line count, is never refused. (The capture does exactly this: buf.toString('utf8'), sha256(buf), buf.length.)
+  { const ALPHA = [0x00, 0x0a, 0x0d, 0x41, 0x80, 0xbf, 0xc2, 0xe2, 0xef, 0xf0, 0xff];
+    const lc = (t0) => { const t = t0.replace(/\r\n?/g, '\n'); return t === '' ? 0 : t.split('\n').length - (t.endsWith('\n') ? 1 : 0); };
+    const b = clone(GB); let n = 0; const refused = []; let withFffd = 0; let atLow = 0; let atHigh = 0;
+    const visit = (arr) => {
+      const buf = Buffer.from(arr); const text = buf.toString('utf8'); const f = text.split('\uFFFD').length - 1; const L = Buffer.byteLength(text, 'utf8');
+      b.files['AGENTS.md'] = { sha256: sha(buf), bytes: buf.length, lines: lc(text), text };
+      n += 1; if (f > 0) { withFffd += 1; if (buf.length === L - 2 * f) atLow += 1; if (buf.length === L) atHigh += 1; }
+      const u = H.baselineContradictions(b); if (u.length > 0 && refused.length < 3) refused.push({ hex: buf.toString('hex'), u });
+    };
+    const walk = (depth, arr) => { if (arr.length > 0) visit(arr); if (depth === 0) return; for (const x of ALPHA) walk(depth - 1, [...arr, x]); };
+    walk(4, []);
+    G(`N23: the record of every one of ${n} short buffers (decoded as the capture decodes them, ${withFffd} with replacement characters, ${atLow} at the lower end of the bound and ${atHigh} at the upper) is accepted by the gate`, n === 11 + 121 + 1331 + 14641 && refused.length === 0 && atLow > 1000 && atHigh >= 10, { n, refused, withFffd, atLow, atHigh }); }
   // The gate decides from the baseline alone and never throws, whatever it is given.
   { const JUNK = [undefined, null, 0, 7, 'x', true, [], [1], {}, { files: 5, skipped: 5, manifest: 5, size03: 5 }, { files: [], skipped: [null], manifest: [] }, { files: { 'docs/a.md': null }, skipped: [[]], manifest: { state: 'valid', ownership: [] } }, { files: { 'docs/a.md': { sha256: {}, bytes: {}, lines: {}, text: {} } }, skipped: [{ path: {}, reason: {} }], manifest: { state: 'valid', ownership: { x: {} } }, size03: [] }, { files: Object.create(null), skipped: Object.create(null) }, JSON.parse('{"files":{"__proto__":{"sha256":1}},"skipped":[{"path":"__proto__","reason":"policy-denied"}]}')];
     const out = JUNK.map((j) => attempt(() => H.baselineContradictions(j)));
@@ -2975,7 +3121,24 @@ function faultFs(hooks, fn) {
     const S = { files: { 'docs/a.md': {}, 'docs/p/b.md': {}, 'AGENTS.md': {} }, skipped: [{ path: 'docs/a.md', reason: 'policy-denied' }, { path: 'docs/p', reason: 'policy-denied' }, { path: 'AGENTS.md', reason: NOT_STORED }] };
     G('N21, snapshotPathState: a record that the same snapshot also skipped (direct, or by a directory above it) is unavailable (skipped), naming the entry, never present; the NOT_STORED reason keeps its record present', st(S, 'docs/a.md').state === 'unavailable' && st(S, 'docs/a.md').cause === 'skipped' && /docs\/a\.md/.test(st(S, 'docs/a.md').why) && st(S, 'docs/p/b.md').cause === 'skipped' && /docs\/p/.test(st(S, 'docs/p/b.md').why) && st(S, 'AGENTS.md').state === 'present', [st(S, 'docs/a.md'), st(S, 'docs/p/b.md'), st(S, 'AGENTS.md')]);
     G('N21, snapshotPathState: with no usable skipped list a record stays present (the gate refuses such a baseline before any check; a list that cannot be read cannot contradict a record)', ['x', undefined, [{ path: 1 }]].every((sk) => st({ files: S.files, skipped: sk }, 'docs/a.md').state === 'present')); }
-  G(`N21 replays: ${replays} runs over both layouts`, replays === 2 * 8, replays);
+  // The limit (the maintainer's decision of 2026-11-12: fix N22 and N23 and say what the gate cannot do, so this class stops producing new blockers). The helper assumes a baseline it took itself; it refuses
+  // the contradictions it knows and cannot prove a hand-edited baseline genuine. The footer prints it after every outcome, in words that carry no verdict, and the acceptance document lists it.
+  { const LIM = H.KNOWN_LIMITATIONS.filter((l) => /assumes the baseline is a snapshot it took itself/.test(l));
+    const doc = rd(path.join(TESTS, 'live', 'BS-DOC-MAP-ACCEPTANCE.md')).replace(/\s+/g, ' ');
+    const from = doc.indexOf('Known limitations (the helper prints them after every outcome):'); const to = doc.indexOf('## 5. Exact prompts');
+    const sentence = 'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.';
+    G('the limit is one entry of the helper\'s limitations: it assumes a baseline it took itself, refuses the contradictions it knows and cannot prove that a hand-edited baseline is genuine, with no verdict word', LIM.length === 1 && LIM[0] === sentence && !FORBIDDEN.test(LIM[0]), LIM);
+    G('the report prints the limit after every outcome (not evaluable, findings, no automated findings), as a bullet of the footer', ['not-evaluable', 'findings', 'no-automated-findings'].every((outcome) => H.formatVerify({ outcome, findings: outcome === 'findings' ? [{ name: 'x' }] : [], notEvaluable: outcome === 'not-evaluable' ? ['x'] : [], checked: outcome === 'no-automated-findings' ? [{ name: 'x' }] : [] }, false).split('\n').includes(`  - ${sentence}`)));
+    G('the acceptance document lists the same limit in its known-limitations list, in section 4 (the bullet matches the helper\'s entry in substance)', from > 0 && to > from && doc.slice(from, to).includes(sentence), { from, to }); }
+  // Source pins of N22 and N23: the bound helpers are pure (they read nothing), the gate compares the manifest record with the summary's own ownership map, and the text bound is stated from the text.
+  { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs'));
+    const fnBody = (name) => { const i = src.indexOf(name); if (i < 0) return ''; const end = src.indexOf('\n}\n', i); return end > i ? src.slice(i, end) : ''; };
+    const lineOf = (name) => { const i = src.indexOf(name); return i < 0 ? '' : src.slice(i, src.indexOf('\n', i)); };
+    const pure = (s) => s.length > 40 && !/\b(?:fs|readPermitted|lstatChain|readFileSync|lstatSync|process)\b/.test(s);
+    const gateSrc = fnBody('export function baselineContradictions(');
+    G('source pin: minValidManifestBytes and jsonStringMin are pure (no file system, no process state), and the gate uses minValidManifestBytes on the summary\'s ownership map against the manifest record\'s bytes', pure(fnBody('export function minValidManifestBytes(')) && pure(lineOf('const jsonStringMin =')) && /minValidManifestBytes\(baseline\.manifest\.ownership\)/.test(gateSrc) && /mrec\.bytes < need/.test(gateSrc), { gate: gateSrc.length });
+    G('source pin: the text bound of the gate is stated from the text itself: its UTF-8 length, its count of replacement characters, and both ends (bytes above L, and below L - 2n), and a lone surrogate has its own reason', /rec\.bytes > textBytes \|\| rec\.bytes < textBytes - 2 \* fffd/.test(gateSrc) && /LONE_SURROGATE\.test\(rec\.text\)/.test(gateSrc) && /\(rec\.bytes === 0\) !== \(rec\.lines === 0\)/.test(gateSrc), { gate: gateSrc.length }); }
+  G(`N21, N22 and N23 replays: ${replays} runs over both layouts (8 of N21, 2 of N22, 2 of N23: the extension that claims 1 byte, and the 5-byte record with no line)`, replays === 2 * 12, replays);
 }
 
 // ============================================================== GROUP: advisory contract (amendment 1) ====
@@ -3092,6 +3255,12 @@ function faultFs(hooks, fn) {
     ['an ownership record that is not an object, and one without an ownership string', () => liveProj('pr-man-odd', { 'AGENTS.md': '# a\n', [H.MANIFEST_REL]: `${JSON.stringify({ files: { a: null, b: {}, c: { ownership: 7 }, d: { ownership: 'merged' } } })}\n` })],
     ['empty files, files without a trailing newline, CRLF and CR line ends, a byte order mark', () => { const r = liveProj('pr-eol', { 'docs/empty.md': '', 'docs/nonl.md': 'no newline', 'docs/crlf.md': 'a\r\nb\r\n', 'docs/cr.md': 'a\rb\r', 'AGENTS.md': 'a\r\nb\r\nc', 'CLAUDE.md': '\n\n\n', '.ai/agents/bom.md': '\uFEFF# bom\n' }); return r; }],
     ['bytes that are not UTF-8 in a file whose text is kept (the text holds replacement characters, and its lines are the text\'s)', () => { const r = liveProj('pr-bytes', {}); writeBytes(r, 'AGENTS.md', Buffer.from([0xff, 0x0a, 0xc3, 0x28, 0x0a, 0xe2, 0x82])); writeBytes(r, 'docs/bin.md', Buffer.from([0x00, 0xff, 0x0a])); writeBytes(r, 'CLAUDE.md', Buffer.from([0x80])); return r; }],
+    // N22: every oracle manifest, a REAL file at the smallest size valid for its ownership map: the gate must accept the snapshot of each (the bound is never above what the capture records).
+    ...MANIFEST_ORACLES.map(([label, buf]) => [`N22: a manifest at the smallest size that is valid for its map: ${label}`, () => { const r = liveProj('pr-min', { 'AGENTS.md': '# a\n' }); writeBytes(r, H.MANIFEST_REL, buf); return r; }]),
+    ['N22: an empty manifest file (zero bytes: the capture summarizes it as malformed, never valid)', () => liveProj('pr-man-empty', { 'AGENTS.md': '# a\n', [H.MANIFEST_REL]: '' })],
+    // N23: every kept-text oracle, as REAL instruction files (invalid bytes, a genuine U+FFFD, a truncated sequence, an encoded surrogate, a BOM, an empty file, a lone CR).
+    ...KEPT_TEXT_ORACLES.map(([label, buf]) => [`N23: an instruction file of bytes whose text is kept: ${label}`, () => { const r = liveProj('pr-kept', {}); writeBytes(r, 'AGENTS.md', buf); return r; }]),
+    ['N23: agent and nested instruction files whose text holds replacement characters beside an empty one', () => { const r = liveProj('pr-kept-many', {}); writeBytes(r, '.claude/agents/a.md', Buffer.from([0xef, 0xbb, 0xbf, 0xff, 0x0a])); writeBytes(r, '.ai/agents/b.md', Buffer.from([0xf0, 0x90, 0x80, 0x0a, 0xc0, 0x0a])); writeBytes(r, 'src/a/CLAUDE.md', Buffer.from([0xff, 0xff, 0xff])); writeBytes(r, 'src/a/AGENTS.md', Buffer.alloc(0)); return r; }],
     ['a full mapped fixture (03, a valid manifest, pointers, both wrappers)', () => mkVerify('pr-full')],
     ['the ordinary layout (no 03, no manifest, no pointers)', () => mkVerify('pr-ord', { files: { [H.BS_03_REL]: null, [H.MANIFEST_REL]: null, ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, null])) } })],
   ];

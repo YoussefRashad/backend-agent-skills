@@ -194,6 +194,8 @@ Known limitations (the helper prints them after every outcome):
   fact copied into a pointer.
 - `validate.mjs --json` results, drift output and host routing are recorded by the maintainer; the
   helper does not run them.
+- The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it
+  knows, but cannot prove that a hand-edited baseline is genuine.
 
 ## 5. Exact prompts
 

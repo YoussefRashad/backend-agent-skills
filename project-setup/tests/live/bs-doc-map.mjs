@@ -1026,25 +1026,49 @@ const SKIPPED_REASONS = Object.freeze(['policy-denied', NOT_STORED]);
 const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
 // The digest of a file with no bytes: the capture hashes the bytes it read, so a record of 0 bytes holds exactly this and no other record does.
 const EMPTY_SHA256 = sha256(Buffer.alloc(0));
+// A string decoded from bytes holds no lone surrogate: toString('utf8') writes U+FFFD for everything that is not UTF-8 (an encoded surrogate, ED A0 80, is not UTF-8), so the capture cannot produce one.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+// The least bytes a JSON string literal of this text takes, quotes included. A character costs what JSON.stringify writes for it (its UTF-8 length raw, or the short escape JSON forbids raw: a
+// control character, a quote, a backslash, a lone surrogate), except U+FFFD, which costs ONE byte: a byte that is not UTF-8 decodes to it, so a literal may take fewer bytes than its text re-encodes to.
+const jsonStringMin = (s) => { let n = 2; for (const ch of s) n += ch === '\uFFFD' ? 1 : Buffer.byteLength(JSON.stringify(ch), 'utf8') - 2; return n; };
+/**
+ * The least size, in bytes, of a manifest file that summarizeManifest reads as `valid` with this ownership map (N22). The capture summarizes the very bytes it records, so a record cannot be smaller
+ * than the smallest JSON that yields the summary: `{"files":{}}` is 12 bytes (an empty manifest is `malformed`, never `valid`), every recorded path adds its key literal, a colon, a comma between entries and a
+ * value, which is one byte (`0`) for a null ownership and `{"ownership":"..."}` (14 bytes and the literal) for a text one. Whitespace, other keys and escapes only add bytes, so this is a bound the capture
+ * never breaks and a compact manifest reaches exactly. Pure: it reads nothing.
+ */
+export function minValidManifestBytes(ownership) {
+  const keys = Object.keys(ownership);
+  let n = 12 + Math.max(0, keys.length - 1);
+  for (const k of keys) { const v = ownership[k]; n += jsonStringMin(k) + 1 + (typeof v === 'string' ? 14 + jsonStringMin(v) : 1); }
+  return n;
+}
 /**
  * THE BASELINE GATE (review pass 6, N21; the maintainer's decision of 2026-11-12: fix the class, not the instance). N20 and N21 were one class: a baseline FILE that contradicts itself (a file
  * record, a manifest summary and a skipped entry that say different things about one path). No snapshot this helper takes can do that, because captureProject writes every relation below in
  * one pass, so a baseline that breaks one was edited by hand or damaged, and no check may choose between its halves. Returns the reasons (an empty list is a consistent baseline); inputProblems runs
  * it once, before any check, and any reason makes the verification not evaluable. Each reason names the invariant in brackets and the path or paths, and the helper never reads a path to decide it.
- * The invariants are exactly the relations captureProject / takeSnapshot guarantee, nothing more (the order of keys and entries, and the sha256 or bytes of a text that holds a replacement character, are NOT guaranteed and not checked):
+ * The invariants are exactly the relations captureProject / takeSnapshot guarantee, nothing more (the order of keys and entries, and the sha256 of a text that holds a replacement character, are NOT guaranteed and not checked):
  *   identity       schema is 1 and tool is "bs-doc-map" (the fields takeSnapshot writes);
  *   files          files is an object; every key is a relative path the walk covers (inInventory), and no two keys are one file under case folding (win32);
- *   record         every record is { sha256: 64 lowercase hex, bytes and lines: non-negative integers with lines <= bytes, text?: text }, and bytes is 0 exactly when sha256 is the digest of no bytes;
- *   text           text is held only for the files keepsText names, never when it holds secret-shaped content, and its line count is the record's lines; a text with no replacement character
- *                  (U+FFFD, which is what the capture's decoding writes for a byte that is not UTF-8) is exactly what the capture decoded, so it hashes to the record's sha256 and measures its bytes;
+ *   record         every record is { sha256: 64 lowercase hex, bytes and lines: non-negative integers with lines <= bytes, text?: text }, bytes is 0 exactly when sha256 is the digest of no bytes,
+ *                  and bytes is 0 exactly when lines is 0 (any non-empty text has a line: lineCount, and a Buffer of at least one byte decodes to at least one character, a BOM included);
+ *   text           text is held only for the files keepsText names, never when it holds secret-shaped content, and its line count is the record's lines; it is well-formed UTF-16 (decoding never leaves a
+ *                  lone surrogate); a text with no replacement character (U+FFFD, which is what the capture's decoding writes for a byte that is not UTF-8) is exactly what the capture decoded, so it hashes
+ *                  to the record's sha256 and measures its bytes; a text WITH one cannot be rebuilt (the hash is not checked), but each replacement character stands for one to three bytes of the file (the
+ *                  decoder replaces each maximal ill-formed subpart, and a genuine U+FFFD is three), so with L the text's UTF-8 length and n its replacement characters, L - 2n <= bytes <= L (probed
+ *                  over 8.7 million buffers on Node 24.14.1; a BOM is kept as U+FEFF, never stripped, so it costs nothing here);
  *                  a keepsText record without text is one the capture withheld, which the skipped list must say (not-stored);
  *   skipped        skipped is a list of { path: a relative path, reason: policy-denied | NOT_STORED }, no path twice (case folded on win32);
  *   not-stored     a NOT_STORED entry names a path that has a record without text and for which keepsText holds (the capture hashes the file and only withholds its text);
  *   record-skipped no file record is at, or below, a skipped entry of any other reason (the capture neither records nor walks what it skips);
  *   manifest       the manifest summary agrees with the baseline's own record and skipped list for MANIFEST_REL (reconcileManifest, N20) and is one baselineManifestProblem can use (N18);
+ *                  a valid summary needs a record of at least minValidManifestBytes(its ownership map) bytes (N22: an empty manifest is summarized as malformed, never valid);
  *   ownership      the ownership map of a valid summary holds only text or null (summarizeManifest);
  *   size03         size03 exists exactly when the file record of BS_03_REL does, and holds that record's bytes and lines.
  * It never throws, whatever it is given.
+ * THE LIMIT (maintainer's decision of 2026-11-12, KNOWN_LIMITATIONS): the helper assumes the baseline is a snapshot it took itself. The gate refuses the contradictions it knows; it cannot prove that a
+ * hand-edited baseline is genuine, because every field a hand edit would have to keep consistent is a field the editor can also write. A relation not listed above is not a promise that it holds.
  */
 export function baselineContradictions(baseline) {
   const out = [];
@@ -1080,6 +1104,7 @@ export function baselineContradictions(baseline) {
       if (typeof rec.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(rec.sha256)) bad('record', `${rel} has no valid sha256 (64 lowercase hexadecimal digits)`);
       if (!isCount(rec.bytes) || !isCount(rec.lines)) bad('record', `${rel} has a bytes or lines value that is not a non-negative integer`);
       else if (rec.lines > rec.bytes) bad('record', `${rel} records more lines (${rec.lines}) than bytes (${rec.bytes})`);
+      else if ((rec.bytes === 0) !== (rec.lines === 0)) bad('record', `${rel} records ${rec.bytes} bytes and ${rec.lines} lines, but a file has no line exactly when it has no bytes (the capture counts a line in every non-empty text, one made only of replacement characters included)`);
       if (isCount(rec.bytes) && typeof rec.sha256 === 'string' && (rec.bytes === 0) !== (rec.sha256 === EMPTY_SHA256)) bad('record', `${rel} records ${rec.bytes} bytes but a sha256 that ${rec.bytes === 0 ? 'is not' : 'is'} the digest of an empty file`);
       if (rec.text !== undefined) {
         if (typeof rec.text !== 'string') bad('text', `${rel} has a text that is not text`);
@@ -1087,7 +1112,12 @@ export function baselineContradictions(baseline) {
           if (!keepsText(rel)) bad('text', `${rel} holds text, which the capture keeps only for instruction and agent files`);
           if (SECRET_SHAPED.some((re) => re.test(rec.text))) bad('text', `${rel} holds secret-shaped text, which the capture withholds (${NOT_STORED})`);
           if (isCount(rec.lines) && lineCount(rec.text) !== rec.lines) bad('text', `${rel} records ${rec.lines} lines but its text has ${lineCount(rec.text)}`);
-          if (!rec.text.includes('\uFFFD') && (sha256(Buffer.from(rec.text, 'utf8')) !== rec.sha256 || Buffer.byteLength(rec.text, 'utf8') !== rec.bytes)) bad('text', `${rel} holds a text that does not match its own record: it hashes to ${sha256(Buffer.from(rec.text, 'utf8'))} and measures ${Buffer.byteLength(rec.text, 'utf8')} bytes, the record says ${JSON.stringify(rec.sha256)} and ${JSON.stringify(rec.bytes)}`);
+          if (LONE_SURROGATE.test(rec.text)) bad('text', `${rel} holds a text with a lone surrogate, which no decoding of bytes leaves (it writes U+FFFD for what is not UTF-8)`);
+          const textBytes = Buffer.byteLength(rec.text, 'utf8');
+          const fffd = rec.text.split('\uFFFD').length - 1;
+          // N23: a replacement character ends the exact reconstruction (the hash), not the bound: each one stands for one to three bytes of the file and re-encodes to three.
+          if (fffd === 0) { const h = sha256(Buffer.from(rec.text, 'utf8')); if (h !== rec.sha256 || textBytes !== rec.bytes) bad('text', `${rel} holds a text that does not match its own record: it hashes to ${h} and measures ${textBytes} bytes, the record says ${JSON.stringify(rec.sha256)} and ${JSON.stringify(rec.bytes)}`); }
+          else if (isCount(rec.bytes) && (rec.bytes > textBytes || rec.bytes < textBytes - 2 * fffd)) bad('text', `${rel} holds a text with ${fffd} replacement character${fffd === 1 ? '' : 's'} that measures ${textBytes} bytes as UTF-8, but its record says ${rec.bytes} bytes: each replacement character stands for one to three bytes of the file, so a file that decodes to that text holds between ${textBytes - 2 * fffd} and ${textBytes} bytes`);
         }
         if (notStored.has(rel)) bad('not-stored', `${rel} holds its text and is also listed as ${NOT_STORED}`);
       } else if (keepsText(rel) && !notStored.has(rel)) bad('text', `${rel} is an instruction or agent file with neither text nor a ${NOT_STORED} entry: the capture keeps the text of every such file it does not withhold`);
@@ -1109,6 +1139,13 @@ export function baselineContradictions(baseline) {
   if (isRecord(baseline.manifest) && baseline.manifest.state === 'valid' && isRecord(baseline.manifest.ownership)) {
     const odd = Object.entries(baseline.manifest.ownership).filter(([, v]) => v !== null && typeof v !== 'string').map(([k]) => k);
     if (odd.length > 0) bad('ownership', `the manifest summary holds an ownership that is neither text nor null for ${odd.slice(0, 5).join(', ')}`);
+    // N22: the summary and the record describe the same bytes, so the record cannot be smaller than the smallest manifest that yields this summary (and an empty manifest, 0 bytes, is malformed).
+    const mrec = files !== null && hasOwn(files, MANIFEST_REL) && isRecord(files[MANIFEST_REL]) ? files[MANIFEST_REL] : undefined;
+    if (mrec !== undefined && isCount(mrec.bytes)) {
+      const need = minValidManifestBytes(baseline.manifest.ownership);
+      const n = Object.keys(baseline.manifest.ownership).length;
+      if (mrec.bytes < need) bad('manifest', `${MANIFEST_REL} has a valid summary of ${n} recorded path${n === 1 ? '' : 's'}, which needs a manifest of at least ${need} bytes, but its file record says ${mrec.bytes} byte${mrec.bytes === 1 ? '' : 's'}${mrec.bytes === 0 ? ' (an empty manifest is summarized as malformed, never valid)' : ''}: the capture summarizes the very bytes it records, so the two cannot both be true`);
+    }
   }
   const r03 = files !== null && hasOwn(files, BS_03_REL) && isRecord(files[BS_03_REL]) ? files[BS_03_REL] : undefined;
   if (baseline.size03 !== undefined) {
@@ -1726,6 +1763,7 @@ export const KNOWN_LIMITATIONS = Object.freeze([
   'The helper cannot judge factual accuracy against code, nor whether the inventory in the evidence is independent and covers every fact.',
   'Checks that look for something that must not be there read raw text and may over-report a commented copy: the duplicate root-start rule, routing or navigation text in a layout that is not mapped, and a fact copied into a pointer.',
   'validate.mjs --json results, drift output and host routing are recorded by the maintainer; the helper does not run them.',
+  'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.',
 ]);
 /**
  * The report. One "OUTCOME <name>" line states which of the three outcomes it is, and nothing else is a result. Lines that echo evidence or project content are the
