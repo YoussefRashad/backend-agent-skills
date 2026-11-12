@@ -940,6 +940,8 @@ export const snapshotJson = (snap) => `${JSON.stringify(snap, null, 2)}\n`;
 // snapshot proves coverage with what it already records (files and the skipped list) and the helper's own inventory definition (inInventory, the one captureProject walks).
 // A snapshot may hold a SECOND record of a path: the manifest ownership summary of MANIFEST_REL. It is trusted only where it agrees with the path state of the same snapshot
 // (reconcileManifest, baselineManifestProblem; N20): a summary of "absent" or "valid" over a path that is skipped or contradicts it is not evaluable, never a shortcut around the state.
+// That is one instance of a class (N20, N21): a baseline FILE that contradicts itself. baselineContradictions (below) states every relation a snapshot of this helper holds between its own
+// fields, once, and inputProblems runs it before any check, so the state function above may assume a consistent baseline (and stays fail-closed when it is not).
 /**
  * Whether the explicit inventory covers a path: SNAPSHOT_FILES, every accepted file below SNAPSHOT_DIRS (recursively, never below node_modules or .git) and the AGENTS.md / CLAUDE.md files
  * below src. captureProject walks with the same constants, so this and the walk cannot drift apart unnoticed (the spec compares them over a fixture). A path outside it is never
@@ -957,19 +959,22 @@ export function inInventory(rel) {
 const skipCovers = (entryPath, rel) => entryPath !== '' && (fold(rel) === fold(entryPath) || fold(rel).startsWith(`${fold(entryPath)}/`));
 /**
  * The state of one path as ONE snapshot (the baseline or the current one) records it: { state: 'present' } | { state: 'absent' } | { state: 'unavailable', cause, why }.
- * cause is 'no-record' | 'alias' | 'unprovable' | 'skipped' | 'outside-inventory'. A record is present. No record is absent only when the skipped list is usable, nothing in it
- * (other than the reason that keeps a file's record, NOT_STORED) equals the path or is a directory above it, and the inventory covers the path.
+ * cause is 'no-record' | 'alias' | 'unprovable' | 'skipped' | 'outside-inventory'. A record is present, unless the same snapshot also skipped that path or a directory above it for any
+ * reason other than the one that keeps a file's record (NOT_STORED): no snapshot this helper takes holds both (baselineContradictions refuses such a baseline before any check runs, N21),
+ * so this is the fail-closed answer for a snapshot that reaches here anyway, never "present". No record is absent only when the skipped list is usable, nothing in it (other than
+ * NOT_STORED) equals the path or is a directory above it, and the inventory covers the path.
  */
 export function snapshotPathState(snapshot, rel) {
   if (snapshot === null || typeof snapshot !== 'object' || snapshot.files === null || typeof snapshot.files !== 'object') return { state: 'unavailable', cause: 'no-record', why: 'is not in a snapshot that records files' };
-  if (hasOwn(snapshot.files, rel)) return { state: 'present' };
+  const skipped = snapshot.skipped;
+  const usableSkipped = Array.isArray(skipped) && skipped.every((x) => x !== null && typeof x === 'object' && typeof x.path === 'string' && typeof x.reason === 'string');
+  const hit = usableSkipped ? skipped.find((x) => x.reason !== NOT_STORED && skipCovers(x.path, rel)) : undefined;
+  if (hasOwn(snapshot.files, rel)) return hit === undefined ? { state: 'present' } : { state: 'unavailable', cause: 'skipped', why: `has a record, but the same snapshot also skipped ${hit.path} (${hit.reason}), which is that path or a directory above it, so the two cannot both be true` };
   // The snapshot keys keep the spelling the walk saw. Where the file system is case-insensitive (win32) a record under another case is the SAME file, so the absence of this spelling
   // proves nothing: unavailable (alias). Elsewhere fold is the identity and no other key can match.
   const alias = Object.keys(snapshot.files).find((k) => fold(k) === fold(rel));
   if (alias !== undefined) return { state: 'unavailable', cause: 'alias', why: `has no record under that spelling, but the snapshot holds ${alias}, which a case-insensitive file system treats as the same file` };
-  const skipped = snapshot.skipped;
-  if (!Array.isArray(skipped) || !skipped.every((x) => x !== null && typeof x === 'object' && typeof x.path === 'string' && typeof x.reason === 'string')) return { state: 'unavailable', cause: 'unprovable', why: 'has no record, and the snapshot has no usable list of skipped paths, so it cannot prove that the path was covered and empty' };
-  const hit = skipped.find((x) => x.reason !== NOT_STORED && skipCovers(x.path, rel));
+  if (!usableSkipped) return { state: 'unavailable', cause: 'unprovable', why: 'has no record, and the snapshot has no usable list of skipped paths, so it cannot prove that the path was covered and empty' };
   if (hit !== undefined) return { state: 'unavailable', cause: 'skipped', why: `has no record because the snapshot skipped ${hit.path} (${hit.reason}), so what it held is unknown` };
   if (!inInventory(rel)) return { state: 'unavailable', cause: 'outside-inventory', why: 'has no record and lies outside the explicit inventory the snapshot covers, so it was never looked at' };
   return { state: 'absent' };
@@ -1015,6 +1020,102 @@ export function baselineManifestProblem(baseline) {
     : ps.state === 'unavailable' ? `the path ${ps.why}, so a summary of ${summary} cannot be trusted`
       : `the baseline's file record says the path is ${ps.state} but its summary says ${summary}, so the two cannot both be true`;
   return `the baseline has no usable manifest ownership summary for ${MANIFEST_REL} (baseline side: unavailable, ${cause}; path state ${ps.state}, summary state ${summary}): ${detail} (retake the baseline with this helper)`;
+}
+// The reasons the capture gives for a skipped entry: the policy (or a .env name) denied the path, or the file is recorded and only its text is withheld (NOT_STORED).
+const SKIPPED_REASONS = Object.freeze(['policy-denied', NOT_STORED]);
+const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
+// The digest of a file with no bytes: the capture hashes the bytes it read, so a record of 0 bytes holds exactly this and no other record does.
+const EMPTY_SHA256 = sha256(Buffer.alloc(0));
+/**
+ * THE BASELINE GATE (review pass 6, N21; the maintainer's decision of 2026-11-12: fix the class, not the instance). N20 and N21 were one class: a baseline FILE that contradicts itself (a file
+ * record, a manifest summary and a skipped entry that say different things about one path). No snapshot this helper takes can do that, because captureProject writes every relation below in
+ * one pass, so a baseline that breaks one was edited by hand or damaged, and no check may choose between its halves. Returns the reasons (an empty list is a consistent baseline); inputProblems runs
+ * it once, before any check, and any reason makes the verification not evaluable. Each reason names the invariant in brackets and the path or paths, and the helper never reads a path to decide it.
+ * The invariants are exactly the relations captureProject / takeSnapshot guarantee, nothing more (the order of keys and entries, and the sha256 or bytes of a text that holds a replacement character, are NOT guaranteed and not checked):
+ *   identity       schema is 1 and tool is "bs-doc-map" (the fields takeSnapshot writes);
+ *   files          files is an object; every key is a relative path the walk covers (inInventory), and no two keys are one file under case folding (win32);
+ *   record         every record is { sha256: 64 lowercase hex, bytes and lines: non-negative integers with lines <= bytes, text?: text }, and bytes is 0 exactly when sha256 is the digest of no bytes;
+ *   text           text is held only for the files keepsText names, never when it holds secret-shaped content, and its line count is the record's lines; a text with no replacement character
+ *                  (U+FFFD, which is what the capture's decoding writes for a byte that is not UTF-8) is exactly what the capture decoded, so it hashes to the record's sha256 and measures its bytes;
+ *                  a keepsText record without text is one the capture withheld, which the skipped list must say (not-stored);
+ *   skipped        skipped is a list of { path: a relative path, reason: policy-denied | NOT_STORED }, no path twice (case folded on win32);
+ *   not-stored     a NOT_STORED entry names a path that has a record without text and for which keepsText holds (the capture hashes the file and only withholds its text);
+ *   record-skipped no file record is at, or below, a skipped entry of any other reason (the capture neither records nor walks what it skips);
+ *   manifest       the manifest summary agrees with the baseline's own record and skipped list for MANIFEST_REL (reconcileManifest, N20) and is one baselineManifestProblem can use (N18);
+ *   ownership      the ownership map of a valid summary holds only text or null (summarizeManifest);
+ *   size03         size03 exists exactly when the file record of BS_03_REL does, and holds that record's bytes and lines.
+ * It never throws, whatever it is given.
+ */
+export function baselineContradictions(baseline) {
+  const out = [];
+  const bad = (id, detail) => out.push(`the baseline is not a consistent snapshot (${id}): ${detail} (retake the baseline with this helper)`);
+  if (!isRecord(baseline)) { bad('identity', 'the baseline is not an object'); return out; }
+  if (baseline.schema !== 1 || baseline.tool !== 'bs-doc-map') bad('identity', 'it is not a schema 1 bs-doc-map snapshot');
+  const files = isRecord(baseline.files) ? baseline.files : null;
+  if (files === null) bad('files', 'files is missing or is not an object');
+  // skipped: the well-formed entries are kept for the relations below (an entry of an unknown reason still covers a path, as snapshotPathState reads it).
+  const entries = [];
+  if (!Array.isArray(baseline.skipped)) bad('skipped', 'skipped is missing or is not a list');
+  else {
+    const seen = new Map();
+    baseline.skipped.forEach((e, i) => {
+      if (!isRecord(e) || typeof e.path !== 'string' || typeof e.reason !== 'string') { bad('skipped', `entry ${i} is not { path, reason } with text values`); return; }
+      if (!validRel(e.path)) { bad('skipped', `${JSON.stringify(e.path)} is not a relative path`); return; }
+      if (!SKIPPED_REASONS.includes(e.reason)) bad('skipped', `${e.path} has the reason ${JSON.stringify(e.reason)}, which the capture never writes (${SKIPPED_REASONS.join(' or ')})`);
+      const k = fold(e.path);
+      if (seen.has(k)) bad('skipped', `${e.path} is listed twice${seen.get(k) === e.path ? '' : ` (as ${seen.get(k)}; a case-insensitive file system treats the two spellings as one path)`}`);
+      else seen.set(k, e.path);
+      entries.push(e);
+    });
+  }
+  const notStored = new Set(entries.filter((e) => e.reason === NOT_STORED).map((e) => e.path));
+  if (files !== null) {
+    const seen = new Map();
+    for (const [rel, rec] of Object.entries(files)) {
+      if (!inInventory(rel)) bad('files', `${JSON.stringify(rel)} is not a relative path inside the explicit inventory the snapshot walks, so no capture could have recorded it`);
+      const k = fold(rel);
+      if (seen.has(k)) bad('files', `${rel} and ${seen.get(k)} are one file on a case-insensitive file system, and a capture records a file once`);
+      else seen.set(k, rel);
+      if (!isRecord(rec)) { bad('record', `${rel} has no record object`); continue; }
+      if (typeof rec.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(rec.sha256)) bad('record', `${rel} has no valid sha256 (64 lowercase hexadecimal digits)`);
+      if (!isCount(rec.bytes) || !isCount(rec.lines)) bad('record', `${rel} has a bytes or lines value that is not a non-negative integer`);
+      else if (rec.lines > rec.bytes) bad('record', `${rel} records more lines (${rec.lines}) than bytes (${rec.bytes})`);
+      if (isCount(rec.bytes) && typeof rec.sha256 === 'string' && (rec.bytes === 0) !== (rec.sha256 === EMPTY_SHA256)) bad('record', `${rel} records ${rec.bytes} bytes but a sha256 that ${rec.bytes === 0 ? 'is not' : 'is'} the digest of an empty file`);
+      if (rec.text !== undefined) {
+        if (typeof rec.text !== 'string') bad('text', `${rel} has a text that is not text`);
+        else {
+          if (!keepsText(rel)) bad('text', `${rel} holds text, which the capture keeps only for instruction and agent files`);
+          if (SECRET_SHAPED.some((re) => re.test(rec.text))) bad('text', `${rel} holds secret-shaped text, which the capture withholds (${NOT_STORED})`);
+          if (isCount(rec.lines) && lineCount(rec.text) !== rec.lines) bad('text', `${rel} records ${rec.lines} lines but its text has ${lineCount(rec.text)}`);
+          if (!rec.text.includes('\uFFFD') && (sha256(Buffer.from(rec.text, 'utf8')) !== rec.sha256 || Buffer.byteLength(rec.text, 'utf8') !== rec.bytes)) bad('text', `${rel} holds a text that does not match its own record: it hashes to ${sha256(Buffer.from(rec.text, 'utf8'))} and measures ${Buffer.byteLength(rec.text, 'utf8')} bytes, the record says ${JSON.stringify(rec.sha256)} and ${JSON.stringify(rec.bytes)}`);
+        }
+        if (notStored.has(rel)) bad('not-stored', `${rel} holds its text and is also listed as ${NOT_STORED}`);
+      } else if (keepsText(rel) && !notStored.has(rel)) bad('text', `${rel} is an instruction or agent file with neither text nor a ${NOT_STORED} entry: the capture keeps the text of every such file it does not withhold`);
+    }
+  }
+  for (const p of notStored) {
+    if (files === null || !hasOwn(files, p)) bad('not-stored', `${p} is listed as ${NOT_STORED} but has no file record (the capture hashes the file and only withholds its text)`);
+    else if (!keepsText(p)) bad('not-stored', `${p} is listed as ${NOT_STORED}, but the capture keeps text only for instruction and agent files, so it never withholds this one`);
+  }
+  if (files !== null) {
+    for (const e of entries) {
+      if (e.reason === NOT_STORED) continue;
+      const under = Object.keys(files).filter((rel) => skipCovers(e.path, rel));
+      if (under.length > 0) bad('record-skipped', `${e.path} was skipped (${e.reason}), yet the baseline also holds ${under.length === 1 ? 'a file record' : `${under.length} file records`} at or below it (${under.slice(0, 8).join(', ')}${under.length > 8 ? ', ...' : ''}): the capture neither records nor walks what it skips, so the two cannot both be true`);
+    }
+  }
+  const mp = baselineManifestProblem(baseline);
+  if (mp !== null) out.push(`the baseline is not a consistent snapshot (manifest): ${mp}`);
+  if (isRecord(baseline.manifest) && baseline.manifest.state === 'valid' && isRecord(baseline.manifest.ownership)) {
+    const odd = Object.entries(baseline.manifest.ownership).filter(([, v]) => v !== null && typeof v !== 'string').map(([k]) => k);
+    if (odd.length > 0) bad('ownership', `the manifest summary holds an ownership that is neither text nor null for ${odd.slice(0, 5).join(', ')}`);
+  }
+  const r03 = files !== null && hasOwn(files, BS_03_REL) && isRecord(files[BS_03_REL]) ? files[BS_03_REL] : undefined;
+  if (baseline.size03 !== undefined) {
+    if (r03 === undefined) bad('size03', `size03 is recorded but the baseline holds no file record of ${BS_03_REL}, and the capture writes size03 only with that record`);
+    else if (!isRecord(baseline.size03) || baseline.size03.bytes !== r03.bytes || baseline.size03.lines !== r03.lines) bad('size03', `size03 does not match the file record of ${BS_03_REL} (${JSON.stringify(baseline.size03)} against ${r03.bytes} bytes and ${r03.lines} lines)`);
+  } else if (r03 !== undefined) bad('size03', `the baseline holds the file record of ${BS_03_REL} but no size03, which the capture writes with that record`);
+  return out;
 }
 
 // ------------------------------------------------------------- init (workspaces) ----
@@ -1325,12 +1426,10 @@ export function inputProblems({ project, baseline, evidence, expectPartial = fal
   const p = [...projectRootProblems(project)];
   if (!isRecord(baseline)) p.push('the baseline snapshot is missing or not an object');
   else {
-    if (baseline.schema !== 1 || baseline.tool !== 'bs-doc-map') p.push('the baseline is not a schema 1 bs-doc-map snapshot');
     if (!isRecord(baseline.files) || Object.keys(baseline.files).length === 0) p.push('the baseline records no files (an empty baseline cannot show any collateral change)');
-    else if (!Object.values(baseline.files).every((r) => isRecord(r) && typeof r.sha256 === 'string' && /^[0-9a-f]{64}$/.test(r.sha256))) p.push('a baseline file record has no valid sha256');
-    // N20: the manifest summary is a second record of MANIFEST_REL, so it is trusted only where it agrees with the baseline's own file record and skipped list for that path.
-    const mp = baselineManifestProblem(baseline);
-    if (mp !== null) p.push(mp);
+    // N20, N21: the ONE gate on the baseline file. Every relation a snapshot of this helper holds between its own fields (the identity, the records, the text, the skipped list, the manifest
+    // summary against its path, size03) is checked here, before any check runs, so a baseline that contradicts itself is never read by choosing one of its halves.
+    p.push(...baselineContradictions(baseline));
   }
   if (!isRecord(evidence)) { p.push('the scenario evidence is missing or not an object'); return p; }
   const unknown = Object.keys(evidence).filter((k) => !EVIDENCE_KEYS.includes(k));
@@ -1472,7 +1571,7 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
   const baseSha = (rel) => ownOf(baseline.files, rel).sha256;
   // The ownership the baseline manifest recorded for a path: inputProblems has already refused a baseline whose manifest summary is not 'absent' with the manifest path confirmed
   // absent (no manifest, so no record) or 'valid' with the path present (an ownership map that lists every record), reconciled with the baseline's own file record and skipped
-  // list of that path (N20), so a missing key here is a confirmed absence of the record.
+  // list of that path (N20, and the rest of the baseline's self-consistency, N21: baselineContradictions), so a missing key here is a confirmed absence of the record.
   const baseOwner = (rel) => ownerOf(baseline.manifest, rel);
   // ==== END path-state accessors ====
   const notEvaluableByReads = () => notEvaluableResult([...unavailable], expectPartial);

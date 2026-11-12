@@ -1535,6 +1535,12 @@ function setBaseManifest(b, m) {
   if (m === undefined) delete b.manifest; else b.manifest = m;
   return b;
 }
+// N21: a baseline is one snapshot, so a fixture that removes a path from it removes everything the capture ties to that record (the baseline gate, baselineContradictions, refuses the rest):
+// the record itself, the NOT_STORED entry of a file whose text was withheld, and size03 when the record is 03's. dirOf-style removal: every record at or below `rel` goes (a skipped directory).
+function dropBaseRecord(b, rel, { below = false } = {}) {
+  for (const k of Object.keys(b.files)) if (k === rel || (below && k.startsWith(`${rel}/`))) { delete b.files[k]; if (k === H.BS_03_REL) delete b.size03; if (Array.isArray(b.skipped)) b.skipped = b.skipped.filter((e) => !(e.path === k && e.reason === 'secret-shaped text not stored')); }
+  return b;
+}
 {
   const G = grp('Verify (R3)');
   const ok = verify(mkVerify('v-ok'));
@@ -1633,7 +1639,7 @@ function setBaseManifest(b, m) {
     const base = clone(H.takeSnapshot(root));
     setBaseManifest(base, o.baseManifest ?? { state: 'valid', ownership: { ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, 'merged'])), ...(o.baseline03 === undefined ? {} : { [H.BS_03_REL]: o.baseline03 }) } });
     if (o.changed) base.files[H.BS_03_REL].sha256 = SHA_OTHER;
-    if (o.baseWithout03) delete base.files[H.BS_03_REL];
+    if (o.baseWithout03) dropBaseRecord(base, H.BS_03_REL);
     if (o.drop03) fs.rmSync(path.join(root, H.BS_03_REL));
     return verify(root, { baseline: base });
   };
@@ -2656,7 +2662,10 @@ function faultFs(hooks, fn) {
     G('source pin: the activation signals are read through need() (a pointer-directory file the policy denies is then a recorded state, not a deliberate skip), and the accessors ask snapshotPathState', /collectSignals\(root, \{ readFile: need \}\)/.test(body) && /snapshotPathState\(/.test(src.slice(from, end)) && /need\(MANIFEST_REL\)/.test(body));
     // N20: the baseline manifest summary is consulted in the input gate as a whole snapshot (its file record and skipped list as well), never as the bare summary object.
     const ip = src.indexOf('export function inputProblems('); const ipBody = src.slice(ip, src.indexOf('\n}\n', ip));
-    G('source pin: inputProblems reconciles the baseline manifest summary with the baseline snapshot itself (baselineManifestProblem(baseline)), not with the bare summary', ip > 0 && /baselineManifestProblem\(baseline\)/.test(ipBody) && !/baselineManifestProblem\(baseline\.manifest\)/.test(ipBody), { ip }); }
+    G('source pin: inputProblems runs the ONE baseline gate, baselineContradictions(baseline), exactly once and before it looks at the evidence, and has no baseline check of its own besides the empty-files message', ip > 0 && (ipBody.match(/baselineContradictions\(baseline\)/g) ?? []).length === 1 && ipBody.indexOf('baselineContradictions(baseline)') < ipBody.indexOf('isRecord(evidence)') && !/baselineManifestProblem|snapshotPathState|reconcileManifest|baseline\.(?:skipped|manifest|size03|schema|tool)\b/.test(ipBody), { ip });
+    // N20, N21: the gate reconciles the baseline manifest summary with the baseline snapshot itself (baselineManifestProblem(baseline)), never with the bare summary, and the whole gate is pure: no file system access.
+    const bc = src.indexOf('export function baselineContradictions('); const bcBody = src.slice(bc, src.indexOf('\n}\n', bc));
+    G('source pin: baselineContradictions reconciles the manifest summary with the baseline snapshot itself (baselineManifestProblem(baseline)), not with the bare summary, and reads no path (no fs, no readPermitted, no lstat)', bc > 0 && /baselineManifestProblem\(baseline\)/.test(bcBody) && !/baselineManifestProblem\(baseline\.manifest\)/.test(bcBody) && !/\b(?:fs|readPermitted|lstatChain|readFileSync|lstatSync)\b/.test(bcBody), { bc }); }
 
   // -------------------------------------------------------------- controls: confirmed absence and plain presence still behave as before
   const base0 = run();
@@ -2666,9 +2675,9 @@ function faultFs(hooks, fn) {
   { const r = run({ baseline: (b) => { delete b.files['.ai/context/glossary.md']; } });
     G('control: a pointer created by the run (the baseline confirms it did not exist: inside the inventory, nothing skipped) is judged on the current side only and is clean', clean(r) && r.checked.some((x) => x.detail === '.ai/context/glossary.md'), diag(r)); }
   { const r = run({ baseline: (b) => { delete b.files['.ai/context/glossary.md']; delete b.skipped; } });
-    G('control: the baseline is consulted only where a check decides on it, so a created pointer is still clean when the baseline has no usable skipped list (nothing compares the baseline with a pointer)', clean(r), diag(r)); }
-  { const r = run({ files: { [H.BS_03_REL]: FILLED03, [H.MANIFEST_REL]: manifestJson(Object.fromEntries([...VERIFY_POINTERS.map((p) => [p, { ownership: 'merged' }]), [H.BS_03_REL, { ownership: 'merged' }]])) }, baseline: (b) => { delete b.files[H.BS_03_REL]; } });
-    const f = run({ baseline: (b) => { delete b.files[H.BS_03_REL]; } });
+    G('changed with N21 (a changed outcome): a baseline with no skipped list is not evaluable even when no check consults a skipped path (the old control stayed clean here, a created pointer being compared with nothing); the capture always writes the list, so a baseline without it is not a snapshot and the gate refuses it whole', notEval(r, /\(skipped\): skipped is missing or is not a list/), diag(r)); }
+  { const r = run({ files: { [H.BS_03_REL]: FILLED03, [H.MANIFEST_REL]: manifestJson(Object.fromEntries([...VERIFY_POINTERS.map((p) => [p, { ownership: 'merged' }]), [H.BS_03_REL, { ownership: 'merged' }]])) }, baseline: (b) => { dropBaseRecord(b, H.BS_03_REL); } });
+    const f = run({ baseline: (b) => { dropBaseRecord(b, H.BS_03_REL); } });
     G('control: a 03 the baseline confirms did not exist counts as changed (a new source): its ownership must be merged, clean when it is, a finding when it is not', clean(r) && f.outcome === 'findings' && findingNames(f).some((n) => /^03 changed/.test(n)), { r: diag(r), f: diag(f) }); }
   { const r = run({ evidence: { extensions: { '.ai/agents/none.project.md': {} } } });
     G('control: an extension absent on both sides (inside the inventory) is a confirmed absence and, with nothing approved, is clean', clean(r), diag(r)); }
@@ -2722,7 +2731,8 @@ function faultFs(hooks, fn) {
     ['a listed full document outside the inventory', 'notes/guide.md', { files: { 'notes/guide.md': '# guide\n' }, evidence: { fullDocuments: ['notes/guide.md'] } }],
     ['a nested AGENTS.md outside src', 'pkg/a/AGENTS.md', { files: { 'pkg/a/AGENTS.md': '# a\n', 'pkg/a/CLAUDE.md': '@AGENTS.md\n' }, evidence: { nested: [{ dir: 'pkg/a' }] } }],
     ['a nested CLAUDE.md outside src', 'pkg/a/CLAUDE.md', { files: { 'pkg/a/AGENTS.md': '# a\n', 'pkg/a/CLAUDE.md': '@AGENTS.md\n' }, evidence: { nested: [{ dir: 'pkg/a' }] } }],
-    ['an extension outside the inventory, with a baseline record built by hand so that only the current side is unavailable', OUT_EXT, { files: { [OUT_EXT]: 'x\n' }, evidence: { extensions: { [OUT_EXT]: {} } }, baseline: (b) => { b.files[OUT_EXT] = { sha256: 'a'.repeat(64), bytes: 2, lines: 1, text: 'x\n' }; } }],
+    // (N21: no baseline can hold a record outside the inventory, so the baseline side of this path is unavailable as well; the rows assert the CURRENT side's reason, which is the one under test.)
+    ['an extension outside the inventory', OUT_EXT, { files: { [OUT_EXT]: 'x\n' }, evidence: { extensions: { [OUT_EXT]: {} } } }],
   ];
   for (const [label, rel, o] of OUTSIDE) {
     row(`current side, ${label}, a read that fails with EACCES`, run({ ...o, fault: (root) => ({ read: (p) => { if (same(p, at(root, rel))) throw eacces(); } }) }), rel, 'current', 'unreadable');
@@ -2736,14 +2746,11 @@ function faultFs(hooks, fn) {
 
   // -------------------------------------------------------------- BASELINE side: every consult point x every unavailable state
   const dirOf = (p) => path.posix.dirname(p);
+  // N21: a baseline is ONE consistent snapshot (baselineContradictions), so a variant removes everything the capture ties to the record (dropBaseRecord) and a skipped directory removes every record at
+  // or below it. The variants the gate now refuses before any check (an unknown reason, a missing or malformed skipped list: "unprovable") are rows of the gate's own table, "N21 table" below.
   const VARIANTS = [
-    ['skipped by the policy', 'skipped', (p) => (b) => { delete b.files[p]; b.skipped.push({ path: p, reason: 'policy-denied' }); }],
-    ['skipped for an unknown reason', 'skipped', (p) => (b) => { delete b.files[p]; b.skipped.push({ path: p, reason: 'mystery' }); }],
-    ['below a skipped directory', 'skipped', (p) => (b) => { delete b.files[p]; b.skipped.push({ path: dirOf(p), reason: 'policy-denied' }); }],
-    ['with no skipped list to prove coverage', 'unprovable', (p) => (b) => { delete b.files[p]; delete b.skipped; }],
-    ['with a skipped list that is not a list', 'unprovable', (p) => (b) => { delete b.files[p]; b.skipped = {}; }],
-    ['with a skipped entry that has no path', 'unprovable', (p) => (b) => { delete b.files[p]; b.skipped = [{ reason: 'policy-denied' }]; }],
-    ['with a skipped entry that has no reason', 'unprovable', (p) => (b) => { delete b.files[p]; b.skipped = [{ path: 'docs/other.md' }]; }],
+    ['skipped by the policy', 'skipped', (p) => (b) => { dropBaseRecord(b, p); b.skipped.push({ path: p, reason: 'policy-denied' }); }],
+    ['below a skipped directory', 'skipped', (p) => (b) => { dropBaseRecord(b, dirOf(p), { below: true }); b.skipped.push({ path: dirOf(p), reason: 'policy-denied' }); }],
   ];
   const BASE_POINTS = [
     ['an extension that exists unchanged', EXT, {}, { evidence: { extensions: { [EXT]: {} } } }],
@@ -2810,7 +2817,165 @@ function faultFs(hooks, fn) {
     G('the review replay of N18 through the real mechanics: absent baseline manifest, a newly present files-only manifest the project policy denies, an ordinary layout: not evaluable naming the manifest, never no-automated-findings', names(r, H.MANIFEST_REL, 'current', 'denied') && !clean(r), diag(r));
     const b = run({ ordinary: true, files: { [H.MANIFEST_REL]: manifestJson({}), [POLICY_REL]: policyWith([{ glob: H.MANIFEST_REL, kind: 'project' }]) } });
     G('N18, baseline side, with a real baseline: a manifest the baseline policy skipped leaves a skipped summary, which is not evaluable in an ordinary layout', names(b, H.MANIFEST_REL, 'baseline', 'skipped') && !clean(b), diag(b)); }
-  G(`the table drives every consult point on every side it has (${rows} rows of not-evaluable, each naming path, side and state)`, rows >= 85, rows);
+  // (87 rows before N21; the 25 rows of an unknown skipped reason or an unusable skipped list moved to the gate's own table, which refuses those baselines before any consult.)
+  G(`the table drives every consult point on every side it has (${rows} rows of not-evaluable, each naming path, side and state)`, rows >= 60, rows);
+}
+
+// ============================================================== GROUP: the baseline gate (review pass 6, N21) ====
+// N20 and N21 were one class: a baseline FILE that contradicts itself. Every instance so far (a manifest summary against its record, a file record against a skipped entry) came from a baseline
+// that no snapshot taken by this helper can be, because captureProject writes every relation between files, skipped, manifest and size03 in one pass. The helper therefore has ONE gate,
+// baselineContradictions, which inputProblems runs before any check; a contradiction makes the verification not evaluable and its reason names the invariant and the path(s).
+// This group proves: the replays of N21 (both layouts), one row per invariant with a minimal violating baseline and a control, that the gate reads no path and never throws, and that every
+// invariant the gate can name has a row. The expectations are written out here, never derived from the helper.
+{
+  const G = grp('Baseline gate (N21)');
+  const CANARY = `PROJECT_SETUP_CANARY_${'0123456789abcdef'.repeat(2).slice(0, 24)}`;
+  const NOT_STORED = 'secret-shaped text not stored';
+  const NOTES = 'docs/notes.md'; const WITHHELD = '.ai/agents/withheld.project.md'; const DENIED = 'docs/private/x.md'; const EXTN = '.ai/agents/reviewer.project.md';
+  const M = H.MANIFEST_REL; const O3 = H.BS_03_REL;
+  const REC = () => ({ sha256: 'a'.repeat(64), bytes: 1, lines: 1 });
+  const GATE_FILES = { [NOTES]: '# notes\n', [WITHHELD]: `# withheld\n${CANARY}\n`, [POLICY_REL]: policyWith([{ glob: 'docs/private/*', kind: 'project' }]), [DENIED]: 'private\n', 'src/wallet/AGENTS.md': '# wallet\n', [EXTN]: 'ext\n' };
+  const ORD_FILES = { 'AGENTS.md': renderAgents(false), 'CLAUDE.md': `${PS_CLAUDE_TEMPLATE}\n${USER_LINE}\n`, [O3]: null, [M]: null, ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, null])) };
+  const ORD_EVID = (o = {}) => EVID({ layout: 'ordinary', pointers: [], fullDocuments: [], claude: { bsImports: [], bsVersionSentence: null, userLines: [USER_LINE] }, ...o });
+  const gateReasons = (r) => r.notEvaluable.filter((x) => /not a consistent snapshot/.test(String(x)));
+  // A reason satisfies a row when it names the invariant in brackets and every string of `names` (a path, a word of the contradiction).
+  const hasReason = (reasons, id, names) => reasons.some((x) => { const s = String(x); return s.includes(`(${id})`) && names.every((n) => s.includes(n)); });
+
+  // ---------------------------------------------------------------- the fixture and its consistent baseline
+  const gateRoot = mkVerify('gate', { files: GATE_FILES });
+  const GB = clone(H.takeSnapshot(gateRoot));
+  G('control: the fixture every row starts from is a real snapshot that holds each thing the gate relates (a text-less record with its NOT_STORED entry, a policy-denied file, size03, a valid manifest summary with its record) and the gate finds nothing in it', GB.skipped.some((e) => e.path === WITHHELD && e.reason === NOT_STORED) && GB.files[WITHHELD].text === undefined && GB.skipped.some((e) => e.path === DENIED && e.reason === 'policy-denied') && GB.size03 !== undefined && GB.manifest.state === 'valid' && GB.files[M] !== undefined && JSON.stringify(attempt(() => H.baselineContradictions(GB))) === '[]', { skipped: GB.skipped, reasons: attempt(() => H.baselineContradictions(GB)) });
+  { const r = verify(gateRoot, { baseline: clone(GB) });
+    G('control: verified against that consistent baseline the project is clean (the gate adds no reason, and the withheld-text file is compared by its hash)', clean(r), diag(r)); }
+
+  // ---------------------------------------------------------------- the replays of N21 (the reviewer's probes), both layouts
+  // The baseline's own file record says a path exists, and its own skipped list says the same path (or a directory above it) was skipped by the policy. A file record outranked the entry, and
+  // with a valid manifest summary reconciliation reported "consistent": verification returned no-automated-findings in both layouts. Each replay is a REAL baseline with ONE entry added.
+  let replays = 0;
+  for (const ordinary of [false, true]) {
+    const layout = ordinary ? 'ORDINARY' : 'mapped';
+    const files = { ...GATE_FILES, ...(ordinary ? ORD_FILES : {}), [M]: manifestJson(Object.fromEntries(ordinary ? [] : VERIFY_POINTERS.map((p) => [p, { ownership: 'merged' }]))) };
+    const root = mkVerify('n21', { files });
+    const ev = (o = {}) => (ordinary ? ORD_EVID(o) : EVID(o));
+    const real = clone(H.takeSnapshot(root));
+    const go = (mutate, evOver = {}) => { const b = clone(real); mutate(b); return verify(root, { baseline: b, evidence: ev(evOver) }); };
+    const row = (label, mutate, id, names, evOver = {}) => { replays += 1; const r = go(mutate, evOver); G(`the review replay of N21, ${layout} layout, ${label}: not evaluable, naming the invariant (${id}) and ${names.join(', ')}, never no-automated-findings`, notEval(r) && hasReason(r.notEvaluable, id, names) && !clean(r), diag(r)); };
+    G(`control (${layout}): the real baseline of the replay fixture is consistent (it holds the manifest record with a valid summary, and a file whose text the capture withheld: a record without text beside its NOT_STORED entry, the one skipped reason that keeps a record) and verifies clean`, JSON.stringify(H.baselineContradictions(real)) === '[]' && real.files[M] !== undefined && real.manifest.state === 'valid' && real.skipped.some((e) => e.path === WITHHELD && e.reason === NOT_STORED) && real.files[WITHHELD].text === undefined && clean(go(() => {})), { reasons: H.baselineContradictions(real), run: diag(go(() => {})) });
+    row('the manifest has a record and a valid summary, and the baseline also skipped it by the policy (direct)', (b) => { b.skipped.push({ path: M, reason: 'policy-denied' }); }, 'record-skipped', [M]);
+    row('the manifest has a record and a valid summary, and the baseline also skipped a directory above it (.ai)', (b) => { b.skipped.push({ path: '.ai', reason: 'policy-denied' }); }, 'record-skipped', ['.ai', M]);
+    row('an extension has a record and the baseline also skipped it by the policy (direct)', (b) => { b.skipped.push({ path: EXTN, reason: 'policy-denied' }); }, 'record-skipped', [EXTN], { extensions: { [EXTN]: {} } });
+    row('an extension has a record and the baseline also skipped a directory above it (.ai/agents)', (b) => { b.skipped.push({ path: '.ai/agents', reason: 'policy-denied' }); }, 'record-skipped', ['.ai/agents', EXTN], { extensions: { [EXTN]: {} } });
+    row('an ordinary file only the collateral comparison reads has a record and the baseline also skipped it', (b) => { b.skipped.push({ path: NOTES, reason: 'policy-denied' }); }, 'record-skipped', [NOTES]);
+    row('a skipped entry of an UNKNOWN reason over a record is a contradiction too (it covers the path exactly as a policy entry does)', (b) => { b.skipped.push({ path: NOTES, reason: 'mystery' }); }, 'record-skipped', [NOTES, 'mystery']);
+    row('the record was kept and an entry for the manifest was added while the summary says absent', (b) => { b.manifest = { state: 'absent' }; b.skipped.push({ path: M, reason: 'policy-denied' }); }, 'record-skipped', [M]);
+    row('the exception is narrow: a NOT_STORED entry keeps a record only for a file whose text the capture keeps, so one beside the record of an ordinary docs file is refused', (b) => { b.skipped.push({ path: NOTES, reason: NOT_STORED }); }, 'not-stored', [NOTES, 'never withholds']);
+  }
+
+  // ---------------------------------------------------------------- one row per invariant: a minimal violating baseline, then a control
+  const WIN = process.platform === 'win32';
+  const ROWS = [
+    ['identity', 'schema is not 1', (b) => { b.schema = 2; }, ['schema 1']],
+    ['identity', 'tool is not bs-doc-map', (b) => { b.tool = 'other'; }, ['schema 1']],
+    ['files', 'files is not an object', (b) => { b.files = []; }, ['files is missing']],
+    ['files', 'a record for a path outside the inventory', (b) => { b.files['README.md'] = REC(); }, ['README.md']],
+    ['files', 'a key that is not a relative path', (b) => { b.files['../escape.md'] = REC(); }, ['../escape.md']],
+    ['files', 'a prototype key', (b) => { Object.defineProperty(b.files, '__proto__', { value: REC(), enumerable: true, configurable: true, writable: true }); }, ['__proto__']],
+    ['files', 'two keys that are one file under case folding (win32)', (b) => { b.files['docs/Notes.md'] = REC(); }, ['docs/Notes.md', NOTES], WIN],
+    ['record', 'a record that is not an object', (b) => { b.files[NOTES] = 'x'; }, [NOTES]],
+    ['record', 'a sha256 that is not 64 lowercase hexadecimal digits', (b) => { b.files[NOTES].sha256 = 'A'.repeat(64); }, [NOTES, 'sha256']],
+    ['record', 'a sha256 that is too short', (b) => { b.files[NOTES].sha256 = 'a'.repeat(63); }, [NOTES, 'sha256']],
+    ['record', 'bytes that is negative', (b) => { b.files[NOTES].bytes = -1; }, [NOTES, 'bytes or lines']],
+    ['record', 'lines that is not an integer', (b) => { b.files[NOTES].lines = 1.5; }, [NOTES, 'bytes or lines']],
+    ['record', 'bytes that is text', (b) => { b.files[NOTES].bytes = '9'; }, [NOTES, 'bytes or lines']],
+    ['record', 'more lines than bytes', (b) => { b.files[NOTES].lines = b.files[NOTES].bytes + 1; }, [NOTES, 'more lines']],
+    ['record', 'the digest of an empty file on a record of bytes', (b) => { b.files[NOTES].sha256 = sha(Buffer.alloc(0)); }, [NOTES, 'digest of an empty file']],
+    ['record', 'zero bytes with a digest that is not an empty file\'s', (b) => { b.files[NOTES].bytes = 0; b.files[NOTES].lines = 0; }, [NOTES, 'digest of an empty file']],
+    ['text', 'text held for a file whose text the capture never keeps', (b) => { b.files[NOTES].text = '# notes\n'; }, [NOTES, 'only for instruction and agent files']],
+    ['text', 'secret-shaped text stored', (b) => { b.files['AGENTS.md'].text = `${CANARY}\n`; b.files['AGENTS.md'].lines = 1; }, ['AGENTS.md', 'secret-shaped']],
+    ['text', 'a line count that is not the text\'s', (b) => { b.files['AGENTS.md'].lines += 1; }, ['AGENTS.md', 'lines but its text has']],
+    ['text', 'a text that is not text', (b) => { b.files['AGENTS.md'].text = null; }, ['AGENTS.md', 'not text']],
+    ['text', 'a text that is not the file its sha256 describes (same size, another letter)', (b) => { b.files['AGENTS.md'].text = b.files['AGENTS.md'].text.replace(/[a-z]/, 'Q'); }, ['AGENTS.md', 'does not match its own record']],
+    ['text', 'a byte count that is not the text\'s', (b) => { b.files['AGENTS.md'].bytes += 1; }, ['AGENTS.md', 'does not match its own record']],
+    ['text', 'an instruction file with neither text nor a NOT_STORED entry', (b) => { delete b.files['CLAUDE.md'].text; }, ['CLAUDE.md', NOT_STORED]],
+    ['skipped', 'no skipped list', (b) => { delete b.skipped; }, ['skipped is missing']],
+    ['skipped', 'a skipped value that is not a list', (b) => { b.skipped = {}; }, ['skipped is missing']],
+    ['skipped', 'an entry that is text', (b) => { b.skipped.push('docs/x.md'); }, ['entry']],
+    ['skipped', 'an entry without a path', (b) => { b.skipped.push({ reason: 'policy-denied' }); }, ['entry']],
+    ['skipped', 'an entry without a reason', (b) => { b.skipped.push({ path: 'docs/other.md' }); }, ['entry']],
+    ['skipped', 'an entry whose path is not a relative path', (b) => { b.skipped.push({ path: '/abs/x.md', reason: 'policy-denied' }); }, ['/abs/x.md']],
+    ['skipped', 'an entry of an unknown reason', (b) => { b.skipped.push({ path: 'docs/m.md', reason: 'mystery' }); }, ['docs/m.md', 'mystery']],
+    ['skipped', 'a path listed twice', (b) => { b.skipped.push({ path: DENIED, reason: 'policy-denied' }); }, [DENIED, 'twice']],
+    ['skipped', 'two spellings of one path under case folding (win32)', (b) => { b.skipped.push({ path: 'DOCS/PRIVATE/X.MD', reason: 'policy-denied' }); }, ['DOCS/PRIVATE/X.MD', 'twice'], WIN],
+    ['not-stored', 'a NOT_STORED entry without a file record', (b) => { b.skipped.push({ path: 'docs/ghost.md', reason: NOT_STORED }); }, ['docs/ghost.md', 'no file record']],
+    ['not-stored', 'a NOT_STORED entry beside a record that holds its text', (b) => { b.skipped.push({ path: 'AGENTS.md', reason: NOT_STORED }); }, ['AGENTS.md', 'holds its text']],
+    ['not-stored', 'a NOT_STORED entry for a record of a file whose text the capture never keeps', (b) => { b.skipped.push({ path: NOTES, reason: NOT_STORED }); }, [NOTES, 'never withholds']],
+    ['record-skipped', 'a record at a path the baseline also skipped (policy-denied)', (b) => { b.skipped.push({ path: NOTES, reason: 'policy-denied' }); }, [NOTES]],
+    ['record-skipped', 'a record below a directory the baseline also skipped', (b) => { b.skipped.push({ path: 'docs', reason: 'policy-denied' }); }, ['docs', NOTES]],
+    ['record-skipped', 'a record at a path skipped for an unknown reason', (b) => { b.skipped.push({ path: NOTES, reason: 'mystery' }); }, [NOTES, 'mystery']],
+    ['record-skipped', 'a record under another case of a skipped directory (win32)', (b) => { b.skipped.push({ path: 'DOCS', reason: 'policy-denied' }); }, ['DOCS', NOTES], WIN],
+    ['manifest', 'a summary of absent beside a record of the manifest', (b) => { b.manifest = { state: 'absent' }; }, [M, 'summary state absent', 'path state present']],
+    ['manifest', 'a summary with an ownership map and no record of the manifest', (b) => { delete b.files[M]; }, [M, 'summary state valid', 'path state absent']],
+    ['manifest', 'a summary that says the manifest was skipped, with no entry that skipped it', (b) => { b.manifest = { state: 'skipped' }; }, [M, 'summary state skipped']],
+    ['manifest', 'no manifest summary', (b) => { delete b.manifest; }, [M, 'summary state unrecognised']],
+    ['manifest', 'a valid summary without an ownership map', (b) => { b.manifest = { state: 'valid' }; }, [M, 'summary state valid-without-ownership']],
+    ['manifest', 'a malformed summary (consistent with its record, but a baseline cannot compare it)', (b) => { b.manifest = { state: 'malformed' }; }, [M, 'summary state malformed']],
+    ['ownership', 'an ownership that is neither text nor null', (b) => { b.manifest.ownership['docs/database.md'] = 5; }, ['docs/database.md', 'neither text nor null']],
+    ['size03', 'size03 without a record of 03', (b) => { delete b.files[O3]; }, [O3, 'size03 is recorded']],
+    ['size03', 'a size03 that is not the record\'s', (b) => { b.size03.bytes += 1; }, [O3, 'does not match']],
+    ['size03', 'a size03 whose lines are not the record\'s', (b) => { b.size03.lines += 1; }, [O3, 'does not match']],
+    ['size03', 'a size03 that is not an object', (b) => { b.size03 = 5; }, [O3, 'does not match']],
+    ['size03', 'a record of 03 and no size03', (b) => { delete b.size03; }, [O3, 'no size03']],
+  ];
+  const IDS = [...new Set(ROWS.map((r) => r[0]))];
+  let rowRuns = 0;
+  for (const [id, label, mutate, names, enabled = true] of ROWS) {
+    if (!enabled) { skip(`N21 table (${id}): ${label}`, 'the file system of this host is case-sensitive (fold is the identity)'); continue; }
+    rowRuns += 1;
+    const b = clone(GB); const t = attempt(() => mutate(b)); const unit = attempt(() => H.baselineContradictions(b)); const r = verify(gateRoot, { baseline: b });
+    G(`N21 table, ${id}: ${label} -> the gate names (${id}) and ${names.join(', ')}, and the verification is not evaluable with that reason (no check runs)`, t === undefined && Array.isArray(unit) && hasReason(unit, id, names) && notEval(r) && hasReason(r.notEvaluable, id, names) && r.findings.length === 0 && r.checked.length === 0, { threw: t, unit, run: diag(r) });
+  }
+  G(`N21 table: ${rowRuns} violating baselines over ${IDS.length} invariants, at least two for each of the larger ones`, IDS.join() === 'identity,files,record,text,skipped,not-stored,record-skipped,manifest,ownership,size03' && rowRuns >= 46, { rowRuns, IDS });
+  // Completeness: every invariant id the gate can name is a row of the table (an invariant added to the helper without a row fails here).
+  { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')); const gate = src.slice(src.indexOf('export function baselineContradictions('), src.indexOf('\n}\n', src.indexOf('export function baselineContradictions(')));
+    const named = [...new Set([...[...gate.matchAll(/\bbad\('([a-z0-9-]+)'/g)].map((m) => m[1]), ...(/consistent snapshot \(manifest\)/.test(gate) ? ['manifest'] : [])])];
+    G('N21 table: every invariant id the gate source can emit has a row, and every row names an id the gate emits', named.length >= 10 && named.every((n) => IDS.includes(n)) && IDS.every((n) => named.includes(n)), { named, IDS }); }
+  // The controls: a neighbouring baseline the capture can produce is NOT refused (the table above would be trivially satisfied by a gate that refuses everything).
+  const CONTROLS = [
+    ['the base itself', () => {}],
+    ['an empty record: zero bytes, zero lines and the digest of no bytes', (b) => { b.files[NOTES] = { sha256: sha(Buffer.alloc(0)), bytes: 0, lines: 0 }; }],
+    ['a text that holds a replacement character (the capture wrote it for a byte that is not UTF-8) is not compared with the record\'s hash or size', (b) => { b.files['AGENTS.md'] = { sha256: 'f'.repeat(64), bytes: 5, lines: 1, text: '\uFFFD\n' }; }],
+    ['a text with a byte order mark and CRLF line ends, hashed and measured as it is', (b) => { const t = '\uFEFFa\r\nb\r\n'; b.files['AGENTS.md'] = { sha256: sha(Buffer.from(t, 'utf8')), bytes: Buffer.byteLength(t, 'utf8'), lines: 2, text: t }; }],
+    ['one character per line: lines equal to bytes', (b) => { b.files[NOTES] = { sha256: 'b'.repeat(64), bytes: 2, lines: 2 }; }],
+    ['a skipped directory with nothing recorded at or below it', (b) => { b.skipped.push({ path: 'docs/other-private', reason: 'policy-denied' }); }],
+    ['a record that merely shares a name prefix with a skipped directory (docs/private-notes.md beside a skipped docs/pri: a directory covers only what is below it)', (b) => { b.skipped.push({ path: 'docs/pri', reason: 'policy-denied' }); b.files['docs/private-notes.md'] = REC(); }],
+    ['a skipped file below a walked directory that is not an accepted extension (a .env style name)', (b) => { b.skipped.push({ path: 'docs/.env.local', reason: 'policy-denied' }); }],
+    ['an instruction file whose text was withheld: no text, with its NOT_STORED entry', (b) => { b.files['AGENTS.md'] = { sha256: 'c'.repeat(64), bytes: 40, lines: 2 }; b.skipped.push({ path: 'AGENTS.md', reason: NOT_STORED }); }],
+    ['03 removed together with its size03', (b) => { delete b.files[O3]; delete b.size03; }],
+    ['no manifest at all: no record and a summary of absent', (b) => { delete b.files[M]; b.manifest = { state: 'absent' }; }],
+    ['an ownership map with a null for a record that has none', (b) => { b.manifest.ownership['docs/database.md'] = null; }],
+    ['a nested instruction file below src, with its text and the line count of that text', (b) => { b.files['src/a/b/CLAUDE.md'] = { sha256: sha(Buffer.from('x\n\n', 'utf8')), bytes: 3, lines: 2, text: 'x\n\n' }; }],
+    ['skipped entries in any order', (b) => { b.skipped.reverse(); }],
+    ['record keys in any order', (b) => { b.files = Object.fromEntries(Object.entries(b.files).reverse()); }],
+    ['a skipped directory under src with no record below it', (b) => { b.skipped.push({ path: 'src/vendor', reason: 'policy-denied' }); }],
+  ];
+  for (const [label, mutate] of CONTROLS) {
+    const b = clone(GB); mutate(b); const unit = attempt(() => H.baselineContradictions(b)); const r = verify(gateRoot, { baseline: b });
+    G(`N21 control: ${label} is a baseline the capture can produce: the gate finds nothing, and the verification is not stopped by it`, JSON.stringify(unit) === '[]' && gateReasons(r).length === 0, { unit, reasons: gateReasons(r) });
+  }
+  // The gate decides from the baseline alone and never throws, whatever it is given.
+  { const JUNK = [undefined, null, 0, 7, 'x', true, [], [1], {}, { files: 5, skipped: 5, manifest: 5, size03: 5 }, { files: [], skipped: [null], manifest: [] }, { files: { 'docs/a.md': null }, skipped: [[]], manifest: { state: 'valid', ownership: [] } }, { files: { 'docs/a.md': { sha256: {}, bytes: {}, lines: {}, text: {} } }, skipped: [{ path: {}, reason: {} }], manifest: { state: 'valid', ownership: { x: {} } }, size03: [] }, { files: Object.create(null), skipped: Object.create(null) }, JSON.parse('{"files":{"__proto__":{"sha256":1}},"skipped":[{"path":"__proto__","reason":"policy-denied"}]}')];
+    const out = JUNK.map((j) => attempt(() => H.baselineContradictions(j)));
+    G('N21: the gate never throws and always answers with a non-empty list of reasons for a baseline that is not a snapshot (undefined, null, numbers, text, arrays, wrong shapes, prototype keys)', out.every((o) => Array.isArray(o) && o.length > 0 && o.every((x) => typeof x === 'string')), out.map((o) => (Array.isArray(o) ? o.length : o))); }
+  // A snapshot of a different project state is not a contradiction merely because the manifest is not USABLE: a malformed or policy-denied manifest is a consistent snapshot whose summary a baseline cannot use (N18).
+  { const mal = liveProj('n21-mal', { 'AGENTS.md': '# a\n', [M]: '{nope' }); const den = liveProj('n21-den', { 'AGENTS.md': '# a\n', [M]: manifestJson({}), [POLICY_REL]: policyWith([{ glob: M, kind: 'project' }]) });
+    const g = [mal, den].map((r) => H.baselineContradictions(H.takeSnapshot(r)));
+    G('N21: a real snapshot of a malformed manifest and one of a policy-denied manifest hold exactly one reason each, the unusable summary of N18 (consistent, but not a baseline a check can compare), and no other', g.every((x) => x.length === 1 && /\(manifest\)/.test(x[0]) && /baseline side: unavailable/.test(x[0])) && /summary state malformed/.test(g[0][0]) && /summary state skipped/.test(g[1][0]), g); }
+  // The state function stays fail-closed for a snapshot that reaches it anyway (the current side is captured in-process and the baseline goes through the gate, so this is defence in depth).
+  { const st = (s, rel) => attempt(() => H.snapshotPathState(s, rel));
+    const S = { files: { 'docs/a.md': {}, 'docs/p/b.md': {}, 'AGENTS.md': {} }, skipped: [{ path: 'docs/a.md', reason: 'policy-denied' }, { path: 'docs/p', reason: 'policy-denied' }, { path: 'AGENTS.md', reason: NOT_STORED }] };
+    G('N21, snapshotPathState: a record that the same snapshot also skipped (direct, or by a directory above it) is unavailable (skipped), naming the entry, never present; the NOT_STORED reason keeps its record present', st(S, 'docs/a.md').state === 'unavailable' && st(S, 'docs/a.md').cause === 'skipped' && /docs\/a\.md/.test(st(S, 'docs/a.md').why) && st(S, 'docs/p/b.md').cause === 'skipped' && /docs\/p/.test(st(S, 'docs/p/b.md').why) && st(S, 'AGENTS.md').state === 'present', [st(S, 'docs/a.md'), st(S, 'docs/p/b.md'), st(S, 'AGENTS.md')]);
+    G('N21, snapshotPathState: with no usable skipped list a record stays present (the gate refuses such a baseline before any check; a list that cannot be read cannot contradict a record)', ['x', undefined, [{ path: 1 }]].every((sk) => st({ files: S.files, skipped: sk }, 'docs/a.md').state === 'present')); }
+  G(`N21 replays: ${replays} runs over both layouts`, replays === 2 * 8, replays);
 }
 
 // ============================================================== GROUP: advisory contract (amendment 1) ====
@@ -2904,8 +3069,62 @@ function faultFs(hooks, fn) {
   G('the exit codes are exactly: not-evaluable 3, findings 1, no-automated-findings 0, and nothing else is an outcome', JSON.stringify(H.OUTCOME_EXIT) === JSON.stringify({ 'not-evaluable': 3, findings: 1, 'no-automated-findings': 0 }) && JSON.stringify(H.VERIFY_OUTCOMES) === JSON.stringify(['not-evaluable', 'findings', 'no-automated-findings']) && Object.isFrozen(H.OUTCOME_EXIT));
 }
 
+// ============================================================== GROUP: no legitimate snapshot is refused by the baseline gate (N21, property) ====
+// The gate is only safe if it never refuses what the capture produces. Two sources, both real snapshots of real directories: explicit shapes (every thing the capture records or skips, in the
+// edge states it has), and EVERY fixture directory this spec created before this point (several hundred projects in every state the other groups put them in; a directory the capture refuses, a
+// link, or a policy it cannot establish, has no snapshot and is not counted). Each snapshot is checked as taken and after the JSON round trip a baseline file makes. The only reason the gate may
+// give for a real snapshot is the unusable manifest summary of N18 (a malformed or policy-denied manifest is a consistent snapshot a check cannot compare), and exactly when that rule says so.
+{
+  const G = grp('Baseline gate: real snapshots (N21)');
+  const CANARY = `PROJECT_SETUP_CANARY_${'0123456789abcdef'.repeat(2).slice(0, 24)}`;
+  const POLICY = policyWith([{ glob: 'docs/private/*', kind: 'project' }, { glob: 'docs/denied.md', kind: 'project' }]);
+  const writeBytes = (root, rel, bytes) => { const p = path.join(root, ...rel.split('/')); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, bytes); };
+  const SHAPES = [
+    ['a project with one file', () => liveProj('pr-one', { 'AGENTS.md': '# a\n' })],
+    ['an empty project', () => liveProj('pr-empty', {})],
+    ['instruction files whose text is withheld (secret-shaped) beside ones that keep it', () => liveProj('pr-secret', { 'AGENTS.md': `# a\n${CANARY}\n`, 'CLAUDE.md': '@AGENTS.md\n', '.ai/agents/x.project.md': `k ${CANARY}`, '.claude/agents/y.md': 'y\n', 'src/a/AGENTS.md': `${CANARY}\n` })],
+    ['a policy-denied directory, a policy-denied file, and a .env file', () => liveProj('pr-denied', { [POLICY_REL]: POLICY, 'docs/private/x.md': 'p\n', 'docs/denied.md': 'd\n', 'docs/.env': 'K=V\n', 'docs/ok.md': 'ok\n', '.env': 'K=V\n', 'src/.env.local': 'K=V\n' })],
+    ['nested instruction pairs below src, and node_modules and .git entries the walk ignores', () => liveProj('pr-nested', { 'src/a/AGENTS.md': '# a\n', 'src/a/CLAUDE.md': '@AGENTS.md\n', 'src/a/b/c/AGENTS.md': '# c\n', 'src/node_modules/AGENTS.md': 'x\n', 'docs/node_modules/x.md': 'x\n', 'docs/.git/x.md': 'x\n', 'src/a.ts': 'x\n' })],
+    ['extensions in upper case, every accepted extension, and a deep path', () => liveProj('pr-ext', { 'docs/X.MD': '# x\n', '.ai/context/x.JSON': '{}\n', '.ai/context/y.toml': 'a = 1\n', '.ai/tools/z.mjs': 'export {};\n', '.codex/agents/c.toml': 'a = 1\n', 'docs/deep/er/est/x.md': '# x\n', 'docs/a.txt': 'not accepted\n' })],
+    ['03 with its size03, a valid manifest', () => liveProj('pr-03', { [H.BS_03_REL]: '# 03\n\nbody\n', [H.MANIFEST_REL]: manifestJson({ [H.BS_03_REL]: { ownership: 'merged' } }) })],
+    ['a malformed manifest', () => liveProj('pr-man-bad', { 'AGENTS.md': '# a\n', [H.MANIFEST_REL]: '{nope' })],
+    ['a manifest the policy denies', () => liveProj('pr-man-den', { 'AGENTS.md': '# a\n', [H.MANIFEST_REL]: manifestJson({}), [POLICY_REL]: policyWith([{ glob: H.MANIFEST_REL, kind: 'project' }]) })],
+    ['an ownership record that is not an object, and one without an ownership string', () => liveProj('pr-man-odd', { 'AGENTS.md': '# a\n', [H.MANIFEST_REL]: `${JSON.stringify({ files: { a: null, b: {}, c: { ownership: 7 }, d: { ownership: 'merged' } } })}\n` })],
+    ['empty files, files without a trailing newline, CRLF and CR line ends, a byte order mark', () => { const r = liveProj('pr-eol', { 'docs/empty.md': '', 'docs/nonl.md': 'no newline', 'docs/crlf.md': 'a\r\nb\r\n', 'docs/cr.md': 'a\rb\r', 'AGENTS.md': 'a\r\nb\r\nc', 'CLAUDE.md': '\n\n\n', '.ai/agents/bom.md': '\uFEFF# bom\n' }); return r; }],
+    ['bytes that are not UTF-8 in a file whose text is kept (the text holds replacement characters, and its lines are the text\'s)', () => { const r = liveProj('pr-bytes', {}); writeBytes(r, 'AGENTS.md', Buffer.from([0xff, 0x0a, 0xc3, 0x28, 0x0a, 0xe2, 0x82])); writeBytes(r, 'docs/bin.md', Buffer.from([0x00, 0xff, 0x0a])); writeBytes(r, 'CLAUDE.md', Buffer.from([0x80])); return r; }],
+    ['a full mapped fixture (03, a valid manifest, pointers, both wrappers)', () => mkVerify('pr-full')],
+    ['the ordinary layout (no 03, no manifest, no pointers)', () => mkVerify('pr-ord', { files: { [H.BS_03_REL]: null, [H.MANIFEST_REL]: null, ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, null])) } })],
+  ];
+  const seen = { snapshots: 0, withheld: 0, denied: 0, size03: 0, valid: 0, absent: 0, malformed: 0, skipped: 0, unusable: 0, bad: [] };
+  const judge = (label, root) => {
+    const snap = attempt(() => H.takeSnapshot(root));
+    if (snap.threw !== undefined) return false;
+    for (const [how, s] of [['as taken', snap], ['after the JSON round trip', JSON.parse(JSON.stringify(snap))]]) {
+      const reasons = attempt(() => H.baselineContradictions(s));
+      const usable = attempt(() => H.baselineManifestProblem(s)) === null;
+      const okReasons = Array.isArray(reasons) && (usable ? reasons.length === 0 : reasons.length === 1 && /^the baseline is not a consistent snapshot \(manifest\)/.test(reasons[0]));
+      if (!okReasons) seen.bad.push({ label, how, reasons });
+    }
+    seen.snapshots += 1;
+    if (snap.skipped.some((e) => e.reason === 'secret-shaped text not stored')) seen.withheld += 1;
+    if (snap.skipped.some((e) => e.reason === 'policy-denied')) seen.denied += 1;
+    if (snap.size03 !== undefined) seen.size03 += 1;
+    if (snap.manifest.state === 'valid') seen.valid += 1; else if (snap.manifest.state === 'absent') seen.absent += 1; else if (snap.manifest.state === 'malformed') seen.malformed += 1; else if (snap.manifest.state === 'skipped') seen.skipped += 1;
+    if (attempt(() => H.baselineManifestProblem(snap)) !== null) seen.unusable += 1;
+    return true;
+  };
+  let shapesTaken = 0;
+  for (const [label, make] of SHAPES) { const root = make(); const ok = judge(label, root); if (ok) shapesTaken += 1; else seen.bad.push({ label, how: 'no snapshot' }); }
+  const swept = fs.readdirSync(LIVE, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(LIVE, e.name));
+  const before = seen.snapshots;
+  for (const dir of swept) judge(path.basename(dir), dir);
+  G(`every explicit shape (${SHAPES.length}) yields a snapshot the gate finds consistent: nothing, or only the unusable manifest summary of N18, as taken and after the JSON round trip`, shapesTaken === SHAPES.length && seen.bad.length === 0, seen.bad.slice(0, 3));
+  G(`the ${seen.snapshots - before} real snapshots of the fixtures this spec created are all consistent too (a legitimate snapshot never becomes not evaluable because of the gate)`, seen.snapshots - before >= 150 && seen.bad.length === 0, { swept: swept.length, taken: seen.snapshots - before, bad: seen.bad.slice(0, 3) });
+  G('the property is not vacuous: the snapshots held withheld text, policy-denied entries, size03, and every manifest state (absent, valid, malformed, skipped), and some of them were unusable baselines (N18) with exactly one reason', seen.withheld >= 2 && seen.denied >= 2 && seen.size03 >= 5 && seen.valid >= 5 && seen.absent >= 5 && seen.malformed >= 1 && seen.skipped >= 1 && seen.unusable >= 2, { ...seen, bad: undefined });
+}
+
 // ============================================================== run and report ====
-const SKIPPED = results.filter((r) => r.skip === true).length;
+const SKIPPED =results.filter((r) => r.skip === true).length;
 let failedCount = 0;
 for (const r of results) {
   if (r.skip === true) { console.log(`SKIP  ${r.name} (${r.detail})`); continue; }
