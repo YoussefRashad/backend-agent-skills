@@ -39,8 +39,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import childProcess, { spawnSync } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as H from './live/bs-doc-map.mjs';
 import { parseBlocks, upsertBlock } from '../scripts/blocks.mjs';
 import { checkManifest } from '../scripts/schemas.mjs';
@@ -901,6 +902,27 @@ const consolidate = (o = {}) => H.checkConsolidation({ doc03Text: o.doc03Text ??
   G('a fact that appears in 03 only as a substring of a different statement is still matched by its full token (no partial credit for half a fact)', consolidate({ doc03Text: build03(['tx-1']) + '\ntransfer debits and credits\n' }).some((x) => x.id === 'tx-1'));
 }
 
+// ============================================================== static scans of the live helper's code (shared by the groups below) ====
+// The helper's non-comment code: block comments and whole-line // comments are removed. A TRAILING comment (code, then //) and every string stay in what is scanned (plan addendum A2 H6).
+const helperCode = (s) => String(s).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+const FORBIDDEN_HELPER = [/--global\b/, /--system\b/, /safe\.directory/, /install\.mjs/, /\.claude\/skills|\.agents\/skills/, /\bwriteFileSync\([^)]*\.claude/, /rollback/];
+const forbiddenHelperHits = (src) => { const code = helperCode(src); return FORBIDDEN_HELPER.filter((re) => re.test(code)).map(String); };
+// Code with trailing comments removed as well (a comment that says what the code does not do is not the code): the scan for the command-local hook override reads this.
+const codeOnly = (s) => helperCode(s).replace(/(^|[^:'"`\\])\/\/[^\n]*$/gm, '$1');
+/**
+ * What breaks the command-local hook override of runSeed (plan B5, addendum A1): HUSKY set or named in code, an assignment to (or deletion from, or Object.assign into) process.env, Git configuration
+ * written for hooks (a config call that names hooksPath), or core.hooksPath anywhere but as the "core.hooksPath=" value of a -c option. [] means none of those.
+ */
+const hookScopeProblems = (src) => {
+  const code = codeOnly(src);
+  const p = [];
+  if (/HUSKY/.test(code)) p.push('HUSKY is named in code');
+  if (/process\.env(?:\.[A-Za-z_]\w*|\[[^\]]*\])\s*(?:\|\||&&|\?\?)?=(?!=)/.test(code) || /delete\s+process\.env/.test(code) || /Object\.assign\(\s*process\.env/.test(code)) p.push('the process environment is mutated');
+  if (/['"`]config['"`][^;\n]{0,120}hooksPath|hooksPath[^;\n]{0,120}['"`]config['"`]/.test(code)) p.push('Git configuration is written for hooks');
+  if (/core\.hooksPath(?!=)/.test(code)) p.push('core.hooksPath is used other than as the value of a -c option (core.hooksPath=<dir>)');
+  return p;
+};
+
 // ============================================================== GROUP: BS outcome and recovery ====
 const USER_LINE = 'Team note: run npm run lint before pushing.';
 const BS_IMPORTS = BS_CLAUDE().split('\n').filter((l) => /^@\S+/.test(l));
@@ -963,11 +985,18 @@ const recoverClaude = (text) => H.checkClaudeRecovery({ text, templateText: PS_C
   }
   G('an unknown disposition is rejected', has(ar({ name: 'reviewer', disposition: 'whatever', text: WRAPPER.reviewer }), 'disposition'));
   G('the wrappers are judged separately: reviewer take-new complete while docs-sync keep is incomplete', ar({ name: 'reviewer', disposition: 'take-new', text: WRAPPER.reviewer, report: { incomplete: false } }).length === 0 && ar({ name: 'docs-sync', disposition: 'keep', text: BS_AGENT['docs-sync'], retainedBytes: BS_AGENT['docs-sync'], report: { incomplete: true, invokedDefinition: '.claude/agents/docs-sync.md' } }).length === 0 && has(ar({ name: 'docs-sync', disposition: 'take-new', text: BS_AGENT['docs-sync'], report: {} }), 'wrapper-not-canonical'));
+  // Changed with the 3.1.0 helper batch (plan addendum A2 H6): the scan is the same one, now a function so that its reach over trailing comments and strings can be proved on in-memory sources.
   G('the live helper never installs, switches or restores a skill copy, grants Git trust, or pre-restores PS files (static scan of its code)', (() => {
-    const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')).replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
-    const bad = [/--global\b/, /--system\b/, /safe\.directory/, /install\.mjs/, /\.claude\/skills|\.agents\/skills/, /\bwriteFileSync\([^)]*\.claude/, /rollback/].filter((re) => re.test(src));
-    return bad.length === 0 ? true : bad.map(String);
+    const bad = forbiddenHelperHits(rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')));
+    return bad.length === 0 ? true : bad;
   })());
+  // H6: the word "rollback" is rejected in non-comment code, in strings and in TRAILING comments (a comment after code stays in what is scanned); only a whole-line or block comment is exempt.
+  G('H6 control: the scan rejects the word "rollback" in code, in a string and in a trailing comment, and a clean source passes', forbiddenHelperHits('function rollbackSeed() {}').includes(String(/rollback/)) && forbiddenHelperHits("const m = 'rollback';").includes(String(/rollback/)) && forbiddenHelperHits('const x = 1; // rollback the commit').includes(String(/rollback/)) && forbiddenHelperHits('const x = 1; // keep the state').length === 0 && forbiddenHelperHits('return seedRefusal("commit", "the case commit failed");').length === 0);
+  G('H6 control: a whole-line comment and a block comment that name the word are not scanned (documentation may say what the helper does not do)', forbiddenHelperHits('// no rollback here\nconst x = 1;').length === 0 && forbiddenHelperHits('/* rollback */\nconst x = 1;').length === 0);
+  G('H6 control: the scan still rejects each other forbidden action (global or system Git configuration, safe.directory, the installer, the skill directories, a write into .claude)', ['git config --global x', "['--system']", "'safe.directory'", "run('install.mjs')", "'.claude/skills'", "writeFileSync(p + '.claude/x', t)"].every((s) => forbiddenHelperHits(s).length > 0));
+  // B5 (A1, A2 H2): the hook override is command-local. The helper never sets HUSKY, never mutates its own process environment, never writes Git configuration for hooks, and passes core.hooksPath only as a -c option value.
+  G('B5 control: the hook-scope scan rejects HUSKY, a process.env assignment, a written hooksPath and a bare core.hooksPath, and accepts the command-local form', hookScopeProblems("process.env.HUSKY = '0';").length > 0 && hookScopeProblems("const s = 'HUSKY=0';").length > 0 && hookScopeProblems("process.env['X'] = '1';").length > 0 && hookScopeProblems('delete process.env.HOME;').length > 0 && hookScopeProblems("Object.assign(process.env, { A: '1' });").length > 0 && hookScopeProblems("git(p, env, ['config', 'core.hooksPath', d]);").length > 0 && hookScopeProblems("git(p, env, ['config', '--local', 'core.hooksPath=x']);").length > 0 && hookScopeProblems("const k = 'core.hooksPath';").length > 0 && hookScopeProblems("git(p, env, ['-c', `core.hooksPath=${d}`, 'commit', '-q']);").length === 0 && hookScopeProblems("const e = {}; for (const [k, v] of Object.entries(process.env)) e[k] = v;").length === 0 && hookScopeProblems("// HUSKY=0 would skip hooks\nconst x = 1;").length === 0 && hookScopeProblems('const x = 1; // HUSKY=0 is not used and core.hooksPath stays as it is').length === 0);
+  G('B5: the helper source uses a command-local core.hooksPath= override and none of the forbidden hook-scope forms (no HUSKY, no process.env mutation, no written Git hook configuration)', (() => { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')); const p = hookScopeProblems(src); return p.length === 0 && /core\.hooksPath=/.test(helperCode(src)) ? true : { problems: p, hasOverride: /core\.hooksPath=/.test(helperCode(src)) }; })());
 }
 
 // ============================================================== GROUP: root and local instructions ====
@@ -1392,23 +1421,54 @@ const POLICY_REL = '.ai/security-paths.json';
 }
 
 // ============================================================== GROUP: seed (R2, R6) ====
+// Options (the 3.1.0 helper batch added the last five; every default is the old behavior): email (the local identity's address), files / without (the committed scaffold), scenario: false (no scenario.json),
+// meta (the scenario.json object, default the ps-first record), rawMeta (its exact text), name (the project directory, default "service"), identity: 'local' (default) | 'global' (the identity sits in the
+// fixture's own fixture-gitconfig, which is the isolated "global" configuration, and NOT in the repository) | 'none' (no identity anywhere: the scaffold commit gets one from -c options only).
 function mkSeedFixture(label, o = {}) {
   const parent = liveDir(label);
-  const proj = path.join(parent, 'service');
+  const proj = path.join(parent, o.name ?? 'service');
   fs.mkdirSync(proj);
-  if (o.scenario !== false) fs.writeFileSync(path.join(parent, 'scenario.json'), `${JSON.stringify({ schema: 1, tool: 'bs-doc-map', scenario: 'ps-first', project: 'service', versions: null })}\n`);
-  fs.writeFileSync(path.join(parent, 'fixture-gitconfig'), '');
+  if (o.scenario !== false) fs.writeFileSync(path.join(parent, 'scenario.json'), o.rawMeta ?? `${JSON.stringify(o.meta ?? { schema: 1, tool: 'bs-doc-map', scenario: 'ps-first', project: 'service', versions: null })}\n`);
+  const identity = o.identity ?? 'local';
+  fs.writeFileSync(path.join(parent, 'fixture-gitconfig'), identity === 'global' ? `[user]\n\tname = ${H.FIXTURE_NAME}\n\temail = ${o.email ?? H.FIXTURE_EMAIL}\n` : '');
   const env = H.isolatedGitEnv(path.join(parent, 'fixture-gitconfig'));
   const g = (...args) => { const r = spawnSync('git', args, { cwd: proj, env, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 }); return { code: r.status, out: String(r.stdout ?? ''), err: String(r.stderr ?? '').trim() }; };
   g('init', '-q');
-  for (const [k, v] of [['user.name', H.FIXTURE_NAME], ['user.email', o.email ?? H.FIXTURE_EMAIL], ['commit.gpgsign', 'false'], ['core.autocrlf', 'false']]) g('config', '--local', k, v);
+  const cfg = [['commit.gpgsign', 'false'], ['core.autocrlf', 'false'], ...(identity === 'local' ? [['user.name', H.FIXTURE_NAME], ['user.email', o.email ?? H.FIXTURE_EMAIL]] : [])];
+  for (const [k, v] of cfg) g('config', '--local', k, v);
   const files = { '.gitignore': 'node_modules/\n', 'package.json': '{}\n', 'AGENTS.md': '# agents\n', 'CLAUDE.md': '@AGENTS.md\n', '.ai/context/old-name.md': 'an old document with enough text to be detected as a rename\nline two\nline three\nline four\n', 'docs/gone.md': 'gone one\n', 'docs/gone2.md': 'gone two\n', 'src/app.ts': 'export {};\n', ...(o.files ?? {}) };
   for (const k of o.without ?? []) delete files[k];
   for (const [rel, text] of Object.entries(files)) putF(proj, rel, text);
   g('add', '-A');
-  if (g('commit', '-qm', 'fixture: scaffold').code !== 0) throw new Error('cannot commit the seed fixture');
-  return { parent, proj, g, head: () => g('rev-parse', 'HEAD').out.trim(), porcelain: () => g('status', '--porcelain', '-z', '-uall').out };
+  if (g(...(identity === 'none' ? ['-c', 'user.name=scaffold', '-c', 'user.email=scaffold@example.invalid'] : []), 'commit', '-qm', 'fixture: scaffold').code !== 0) throw new Error('cannot commit the seed fixture');
+  return { parent, proj, g, gitconfig: path.join(parent, 'fixture-gitconfig'), head: () => g('rev-parse', 'HEAD').out.trim(), porcelain: () => g('status', '--porcelain', '-z', '-uall').out };
 }
+// B3: the documented invariant, EXACTLY the seven-line unit of the frozen plan (its trailing blank line included). ONE constant: acceptance section 6 must carry it byte for byte (procedure contract
+// group), and every successful reviewer seed of this spec installs it, so there is no second, abbreviated fixture rule.
+const LOCK_ORDER_LINES = [
+  '### Lock order',
+  '',
+  'Any operation that changes two wallet balances MUST run in one database transaction, lock both',
+  'wallet rows (`SELECT ... FOR UPDATE`) in ascending wallet-id order before reading either balance,',
+  'and write both balances inside that transaction. A balance read outside the lock and written back',
+  'loses a concurrent update; locking in caller order deadlocks two opposite transfers.',
+  '',
+];
+const LOCK_ORDER_BLOCK = `${LOCK_ORDER_LINES.join('\n')}\n`;
+/** The BS 03 template with the documented subsection under "## 8. Cache, locks and queues", after the section's own text and before section 9. */
+const with03Invariant = (t) => { const text = H.normalizeEol(t); const k = '---\n\n## 9. Outbound integrations'; const i = text.indexOf(k); if (i < 0) throw new Error('the 03 template has no section 9 divider'); return `${text.slice(0, i)}${LOCK_ORDER_BLOCK}${text.slice(i)}`; };
+// The application bytes of the seed, written out here (never read from the helper): plan B3 and B5 keep them as they are, whatever a hook would do to them.
+const SEED_BYTES = Object.freeze({
+  'docs-sync': Object.freeze({
+    'src/bs-doc-map-fixture/error-filter.ts': "export function toClientError(code: string): { statusCode: number; message: string } {\n  if (code === 'WALLET_LOCKED') return { statusCode: 423, message: 'wallet.locked' };\n  return { statusCode: 500, message: 'internal.error' };\n}\n",
+    'src/bs-doc-map-fixture/feature-flag.ts': "export const FEATURE_TRANSFER_LIMIT_NAME = 'FIXTURE_TRANSFER_LIMIT';\nexport function transferLimit(read: (name: string) => string | undefined): number {\n  return Number(read(FEATURE_TRANSFER_LIMIT_NAME) ?? '1000');\n}\n",
+  }),
+  reviewer: Object.freeze({
+    'src/bs-doc-map-fixture/wallet-transfer.ts': "export async function transfer(db: { balance(id: string): Promise<number>; setBalance(id: string, v: number): Promise<void> }, from: string, to: string, amount: number): Promise<void> {\n  const a = await db.balance(from);\n  const b = await db.balance(to);\n  await db.setBalance(from, a - amount);\n  await db.setBalance(to, b + amount);\n}\n",
+  }),
+});
+// B3: the refusal of the reviewer seed when 03 does not record the invariant, exactly as the frozen plan words it ("Change only the baseline refusal detail to").
+const BASELINE_REFUSAL = 'The baseline 03 must already record the project lock-order invariant ("Lock order"). See BS-DOC-MAP-ACCEPTANCE.md §6: the maintainer adds and reviews the exact invariant, normally committing it before seeding; seed can commit a reviewed uncommitted 03 edit into its post-setup baseline. The helper never writes documentation.';
 {
   const G = grp('Seed (R2, R6)');
   const seed = (fx, caseName = 'docs-sync') => H.runSeed({ project: fx.proj, caseName });
@@ -1469,14 +1529,368 @@ function mkSeedFixture(label, o = {}) {
   }
   { const fx = mkSeedFixture('seed-rev'); const before = snapshotOf(fx); const r = seed(fx, 'reviewer');
     G('the reviewer case still needs the lock-order invariant in the baseline 03 (the helper never writes documentation)', r.ok === false && r.refusal.code === 'baseline' && same(fx, before), r);
-    const fx2 = mkSeedFixture('seed-rev2', { files: { [H.BS_03_REL]: `${BS03}\nLock order: wallet before ledger.\n` } }); const r2 = seed(fx2, 'reviewer');
-    G('the reviewer case seeds once the baseline 03 records the invariant, adding only its named file', r2.ok === true && r2.files.length === 1 && r2.files[0] === 'src/bs-doc-map-fixture/wallet-transfer.ts' && fx2.porcelain() === '', r2); }
+    // Changed with the 3.1.0 helper batch (B3): the abbreviated "Lock order: wallet before ledger." setup is replaced by the documented block, the one test constant that acceptance section 6 must also carry.
+    const fx2 = mkSeedFixture('seed-rev2', { files: { [H.BS_03_REL]: with03Invariant(BS03) } }); const r2 = seed(fx2, 'reviewer');
+    G('the reviewer case seeds once the baseline 03 records the documented Lock order block (the exact seven-line unit), adding only its named file', r2.ok === true && r2.files.length === 1 && r2.files[0] === 'src/bs-doc-map-fixture/wallet-transfer.ts' && fx2.porcelain() === '', r2); }
   { const fx = mkSeedFixture('seed-misc'); const before = snapshotOf(fx);
     G('a relative project, an unknown case, an unrecognized directory and a repository without the fixture identity are each refused untouched', H.runSeed({ project: 'service', caseName: 'docs-sync' }).refusal.code === 'relative' && H.runSeed({ project: fx.proj, caseName: 'nope' }).refusal.code === 'bad-case' && H.runSeed({ project: liveDir('seed-none'), caseName: 'docs-sync' }).refusal.code === 'unrecognized' && H.runSeed({ project: mkSeedFixture('seed-email', { email: 'someone@example.com' }).proj, caseName: 'docs-sync' }).refusal.code === 'unrecognized' && same(fx, before)); }
   { const fx = mkSeedFixture('seed-cli'); const c = captureIo(); const code = H.main(['seed', '--project', fx.proj, '--case', 'docs-sync'], c.io);
     G('the seed command prints BASE, HEAD and RANGE and exits 0 on success', code === 0 && c.o.length === 3 && /^BASE [0-9a-f]{40}$/.test(c.o[0]) && /^HEAD [0-9a-f]{40}$/.test(c.o[1]) && c.o[2] === `RANGE ${c.o[0].slice(5)}..${c.o[1].slice(5)}`, { code, out: c.o });
     const fx2 = mkSeedFixture('seed-cli2'); putF(fx2.proj, 'src/app.ts', 'changed\n'); const c2 = captureIo(); const code2 = H.main(['seed', '--project', fx2.proj, '--case', 'docs-sync'], c2.io);
     G('the seed command exits 2 with REFUSED on a refusal', code2 === 2 && c2.e.some((l) => /^REFUSED dirty: /.test(l)) && c2.o.length === 0, { code2, err: c2.e }); }
+}
+
+// ============================================================== GROUPS: the 3.1.0 helper batch, seed (B3 prerequisite, B5 identity, B5 hook isolation) ====
+// Plan docs/plans/2026-11-15-project-setup-v3.1-helper-batch.md (frozen; its addenda A1 to A3 win over the plan text). Every negative case asserts the intended refusal code, never only "refused".
+const LEGACY_META = Object.freeze({ schema: 1, tool: 'bs-doc-map', scenario: 'bs-new', project: null, versions: Object.freeze({ node: process.version, nestCommon: null, nestCli: null }) });
+const NAMED_FILES = (caseName) => Object.keys(SEED_BYTES[caseName]).sort();
+// The module-level `same` is declared further down (it is not initialized when these groups run), so the new groups carry their own path comparison: case-insensitive on Windows.
+const samePath = (a, b) => (process.platform === 'win32' ? String(a).toLowerCase() === String(b).toLowerCase() : a === b);
+const showAt = (fx, rev, rel) => fx.g('show', `${rev}:${rel}`).out;
+const namesIn = (fx, range) => fx.g('diff', '--name-only', range).out.split('\n').map((s) => s.trim()).filter(Boolean).sort();
+// The state a refused seed must leave exactly as it was: HEAD, index and worktree (the porcelain), the scenario record and the fixture's own configuration.
+const seedState = (fx) => ({ head: fx.head(), por: fx.porcelain(), meta: readF(fx.parent, 'scenario.json'), cfg: readF(fx.parent, 'fixture-gitconfig') });
+const seedSame = (fx, b) => fx.head() === b.head && fx.porcelain() === b.por && readF(fx.parent, 'scenario.json') === b.meta && readF(fx.parent, 'fixture-gitconfig') === b.cfg;
+// Files seed must never rewrite (instructions, wrappers, an extension, the policy, 03): their bytes before and after.
+const GUARDED = Object.freeze({ '.claude/agents/reviewer.md': WRAPPER.reviewer, '.claude/agents/docs-sync.md': WRAPPER['docs-sync'], '.ai/agents/reviewer.project.md': 'ext\n', [POLICY_REL]: policyWith(PRIVATE_DENY) });
+const guardedBytes = (fx) => Object.fromEntries([...Object.keys(GUARDED), 'AGENTS.md', 'CLAUDE.md', H.BS_03_REL].map((p) => [p, readF(fx.proj, p)]));
+const SEED_REL_DIR = 'src/bs-doc-map-fixture';
+// Observes ONE call of the seed: every Git invocation (name, arguments, and for a hooks override the content of the directory at the moment Git is started), every mkdtempSync (prefix and result),
+// every rmdirSync and rmSync. The helper imports spawnSync by name, so the live binding is refreshed with syncBuiltinESMExports after each patch, and again after the restore.
+function observeSeed(fn) {
+  const calls = []; const made = []; const rmdirs = []; const rmsyncs = [];
+  const orig = { spawnSync: childProcess.spawnSync, mkdtempSync: fs.mkdtempSync, rmdirSync: fs.rmdirSync, rmSync: fs.rmSync };
+  childProcess.spawnSync = function observedSpawnSync(cmd, args, ...rest) {
+    if (cmd === 'git' && Array.isArray(args)) {
+      const o = args.find((a) => typeof a === 'string' && a.startsWith('core.hooksPath='));
+      const rec = { args: [...args], hooksValue: o === undefined ? null : o.slice('core.hooksPath='.length), dirEntries: null };
+      if (rec.hooksValue !== null) { try { rec.dirEntries = fs.readdirSync(rec.hooksValue); } catch (e) { rec.dirEntries = `unreadable: ${e.code ?? e.message}`; } }
+      calls.push(rec);
+    }
+    return orig.spawnSync.call(this, cmd, args, ...rest);
+  };
+  fs.mkdtempSync = function observedMkdtemp(prefix, ...rest) { const d = orig.mkdtempSync.call(this, prefix, ...rest); made.push({ prefix: String(prefix), dir: String(d) }); return d; };
+  fs.rmdirSync = function observedRmdir(p, ...rest) { rmdirs.push({ p: String(p), rest }); return orig.rmdirSync.call(this, p, ...rest); };
+  fs.rmSync = function observedRm(p, ...rest) { rmsyncs.push({ p: String(p), rest }); return orig.rmSync.call(this, p, ...rest); };
+  syncBuiltinESMExports();
+  try { return { value: fn(), calls, made, rmdirs, rmsyncs }; } finally {
+    childProcess.spawnSync = orig.spawnSync; fs.mkdtempSync = orig.mkdtempSync; fs.rmdirSync = orig.rmdirSync; fs.rmSync = orig.rmSync;
+    syncBuiltinESMExports();
+  }
+}
+/** A project that sits one directory below the Git root (the repository is at the fixture parent), with the legacy bs-new record beside it: not the root of its own repository. */
+function mkNestedFixture(label) {
+  const parent = liveDir(label);
+  const proj = path.join(parent, 'service');
+  fs.mkdirSync(proj);
+  fs.writeFileSync(path.join(parent, 'scenario.json'), `${JSON.stringify(LEGACY_META)}\n`);
+  fs.writeFileSync(path.join(parent, 'fixture-gitconfig'), '');
+  const env = H.isolatedGitEnv(path.join(parent, 'fixture-gitconfig'));
+  const g = (...args) => { const r = spawnSync('git', args, { cwd: parent, env, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 }); return { code: r.status, out: String(r.stdout ?? ''), err: String(r.stderr ?? '').trim() }; };
+  g('init', '-q');
+  for (const [k, v] of [['user.name', H.FIXTURE_NAME], ['user.email', H.FIXTURE_EMAIL], ['commit.gpgsign', 'false'], ['core.autocrlf', 'false']]) g('config', '--local', k, v);
+  putF(proj, 'AGENTS.md', '# agents\n');
+  g('add', '-A');
+  if (g('commit', '-qm', 'fixture: scaffold').code !== 0) throw new Error('cannot commit the nested fixture');
+  return { parent, proj, g, head: () => g('rev-parse', 'HEAD').out.trim(), porcelain: () => g('status', '--porcelain', '-z', '-uall').out };
+}
+
+// ============================================================== GROUP: B3 the reviewer prerequisite is documented, exact and actionable ====
+{
+  const G = grp('B3 reviewer prerequisite');
+  const seed = (fx, c = 'reviewer') => H.runSeed({ project: fx.proj, caseName: c });
+  G('the test constant is the seven-line unit of the plan, its trailing blank line included (plain heading, no scope paragraph, no seeded file name)', LOCK_ORDER_LINES.length === 7 && LOCK_ORDER_BLOCK.split('\n').length === 8 && LOCK_ORDER_BLOCK.endsWith('transfers.\n\n') && LOCK_ORDER_BLOCK.startsWith('### Lock order\n\nAny operation that changes two wallet balances MUST') && /ascending wallet-id order/.test(LOCK_ORDER_BLOCK) && !/wallet-transfer|bs-doc-map-fixture|synthetic|fixture/i.test(LOCK_ORDER_BLOCK));
+  G('the 03 helper installs the unit under "## 8. Cache, locks and queues", after the section text and before section 9, and changes nothing else', (() => { const t = with03Invariant(BS03); const n = H.normalizeEol(BS03); const i8 = t.indexOf('## 8. Cache, locks and queues'); const iu = t.indexOf(LOCK_ORDER_BLOCK); const i9 = t.indexOf('## 9. Outbound integrations'); return i8 >= 0 && iu > i8 && i9 > iu && t.replace(LOCK_ORDER_BLOCK, '') === n && t.split(LOCK_ORDER_BLOCK).length === 2; })());
+  // The refusal: code unchanged, detail exactly the plan's text, nothing touched. Every way the prerequisite can be absent.
+  for (const [label, files] of [
+    ['no 03 at all', {}],
+    ['a 03 that does not record the invariant (the marker is absent)', { [H.BS_03_REL]: BS03 }],
+    ['a 03 that only has the marker in another case ("lock order"; the marker check is case-sensitive)', { [H.BS_03_REL]: `${BS03}\nlock order is a topic\n` }],
+    ['a 03 the project policy denies (an unreadable 03 is not a recorded invariant)', { [H.BS_03_REL]: with03Invariant(BS03), [POLICY_REL]: policyWith([{ glob: H.BS_03_REL, kind: 'project' }]) }],
+  ]) {
+    const fx = mkSeedFixture('b3-refuse', { files }); const before = seedState(fx); const b03 = readF(fx.proj, H.BS_03_REL); const r = seed(fx);
+    G(`the reviewer seed refuses with code baseline and the exact documented detail when there is ${label}`, r.ok === false && r.refusal.code === 'baseline' && r.refusal.detail === BASELINE_REFUSAL, r.refusal);
+    G(`that refusal (${label}) leaves HEAD, index, worktree, scenario record, configuration and the bytes of 03 unchanged, and writes nothing`, seedSame(fx, before) && readF(fx.proj, H.BS_03_REL) === b03 && !existsF(fx.proj, SEED_REL_DIR), { r: r.refusal, por: fx.porcelain() });
+  }
+  G('the refusal text names section 6 of the acceptance document, the maintainer who adds and reviews the invariant, both baseline paths (commit before seeding; a reviewed uncommitted edit folded into the post-setup baseline) and that the helper never writes documentation', (() => { const d = BASELINE_REFUSAL; return /BS-DOC-MAP-ACCEPTANCE\.md §6/.test(d) && /the maintainer adds and reviews the exact invariant/.test(d) && /normally committing it before seeding/.test(d) && /seed can commit a reviewed uncommitted 03 edit into its post-setup baseline/.test(d) && /The helper never writes documentation\.$/.test(d) && /\("Lock order"\)/.test(d); })());
+  { const fx = mkSeedFixture('b3-cli'); const c = captureIo(); const code = H.main(['seed', '--project', fx.proj, '--case', 'reviewer'], c.io);
+    G('the seed command prints REFUSED baseline with the documented detail on stderr, exits 2 and prints nothing on stdout', code === 2 && c.o.length === 0 && c.e.length === 1 && c.e[0] === `REFUSED baseline: ${BASELINE_REFUSAL}`, { code, out: c.o, err: c.e }); }
+  { const fx = mkSeedFixture('b3-marker', { files: { [H.BS_03_REL]: '# 03\n\nLock order\n' } }); const r = seed(fx);
+    G('the helper checks only the readable 03 Lock order marker: a 03 holding just those two words is accepted (the exact text and the returned baseline are the maintainer\'s check, not the helper\'s)', r.ok === true && r.files.length === 1, r); }
+  // Committed-first path: the reviewed invariant is committed with the fixture identity before seed runs.
+  { const fx = mkSeedFixture('b3-committed', { files: { [H.BS_03_REL]: with03Invariant(BS03), ...GUARDED } }); const before = fx.head(); const guarded = guardedBytes(fx); const r = seed(fx);
+    G('committed-first: the returned base is the prior commit (no baseline commit is made) and it contains the exact subsection', r.ok === true && r.base === before && showAt(fx, r.base, H.BS_03_REL).includes(LOCK_ORDER_BLOCK) && showAt(fx, r.base, H.BS_03_REL) === with03Invariant(BS03) && fx.g('log', '--format=%s', `${before}..${r.head}`).out.trim() === 'fixture: reviewer change', r);
+    G('committed-first: the reviewer range changes only src/bs-doc-map-fixture/wallet-transfer.ts, with the seed bytes, and the worktree is clean', r.ok === true && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(['src/bs-doc-map-fixture/wallet-transfer.ts']) && showAt(fx, r.head, 'src/bs-doc-map-fixture/wallet-transfer.ts') === SEED_BYTES.reviewer['src/bs-doc-map-fixture/wallet-transfer.ts'] && fx.porcelain() === '', r);
+    G('committed-first: seed rewrites no instruction, wrapper, extension, policy or 03 (the bytes of AGENTS.md, CLAUDE.md, both wrappers, the extension, the policy and 03 are the ones before)', JSON.stringify(guardedBytes(fx)) === JSON.stringify(guarded), guardedBytes(fx));
+    const again = seed(fx); const after = seedState(fx);
+    G('a repeated reviewer seed refuses the occupied target (code dirty, "already exists") and changes nothing', again.ok === false && again.refusal.code === 'dirty' && /already exists/.test(again.refusal.detail) && after.head === r.head && fx.porcelain() === '', again); }
+  // Uncommitted path: a reviewed, uncommitted 03 edit is folded into the post-setup baseline commit, and the application change follows in its own commit.
+  { const fx = mkSeedFixture('b3-uncommitted', { files: { [H.BS_03_REL]: BS03, ...GUARDED } }); putF(fx.proj, H.BS_03_REL, with03Invariant(BS03)); const before = fx.head(); const guarded = guardedBytes(fx); const r = seed(fx);
+    G('uncommitted: the returned base is the post-setup baseline commit (not the prior one) and it contains the exact subsection, which the prior commit did not', r.ok === true && r.base !== before && fx.g('log', '--format=%s', `${before}..${r.base}`).out.trim() === 'fixture: post-setup baseline' && showAt(fx, r.base, H.BS_03_REL) === with03Invariant(BS03) && showAt(fx, r.base, H.BS_03_REL).includes(LOCK_ORDER_BLOCK) && !showAt(fx, before, H.BS_03_REL).includes(LOCK_ORDER_BLOCK), r);
+    G('uncommitted: the range after the baseline excludes the documentation change and changes only wallet-transfer.ts, with the seed bytes; the worktree is clean', r.ok === true && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(['src/bs-doc-map-fixture/wallet-transfer.ts']) && showAt(fx, r.head, 'src/bs-doc-map-fixture/wallet-transfer.ts') === SEED_BYTES.reviewer['src/bs-doc-map-fixture/wallet-transfer.ts'] && fx.porcelain() === '', r);
+    G('uncommitted: seed rewrites no instruction, wrapper, extension or policy, and 03 keeps the reviewed bytes', JSON.stringify(guardedBytes(fx)) === JSON.stringify(guarded) && readF(fx.proj, H.BS_03_REL) === with03Invariant(BS03), guardedBytes(fx)); }
+  { const fx = mkSeedFixture('b3-dirty-first', { files: { [H.BS_03_REL]: with03Invariant(BS03) } }); putF(fx.proj, 'src/app.ts', 'changed\n'); const before = seedState(fx); const r = seed(fx);
+    G('a reviewer seed over unrelated dirty state refuses with dirty before it looks at the baseline, and changes nothing', r.ok === false && r.refusal.code === 'dirty' && seedSame(fx, before), r); }
+}
+
+// ============================================================== GROUP: B5 legacy bs-new identity and the seed guards ====
+{
+  const G = grp('B5 fixture identity');
+  const seed = (fx, c = 'docs-sync') => H.runSeed({ project: fx.proj, caseName: c });
+  const legacy = (label, o = {}) => mkSeedFixture(label, { meta: LEGACY_META, ...o });
+  const dropKey = (k) => { const m = { ...LEGACY_META }; delete m[k]; return m; };
+  // The recognized shape, in every seed case and both baseline routes.
+  { const fx = legacy('b5-ok-docs'); const meta = readF(fx.parent, 'scenario.json'); const before = fx.head(); const r = seed(fx);
+    G('the legacy bs-new fixture (explicit project: null, directory service) seeds docs-sync: the range holds exactly the two named files, the worktree is clean and scenario.json is not rewritten', r.ok === true && r.base === before && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(NAMED_FILES('docs-sync')) && fx.porcelain() === '' && readF(fx.parent, 'scenario.json') === meta, r); }
+  { const fx = legacy('b5-ok-rev1', { files: { [H.BS_03_REL]: with03Invariant(BS03) } }); const meta = readF(fx.parent, 'scenario.json'); const before = fx.head(); const r = seed(fx, 'reviewer');
+    G('the legacy bs-new fixture seeds the reviewer case when the reviewed invariant is already committed: base is the prior commit and the range holds only wallet-transfer.ts', r.ok === true && r.base === before && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(NAMED_FILES('reviewer')) && showAt(fx, r.base, H.BS_03_REL).includes(LOCK_ORDER_BLOCK) && readF(fx.parent, 'scenario.json') === meta, r); }
+  { const fx = legacy('b5-ok-rev2', { files: { [H.BS_03_REL]: BS03 } }); putF(fx.proj, H.BS_03_REL, with03Invariant(BS03)); const meta = readF(fx.parent, 'scenario.json'); const before = fx.head(); const r = seed(fx, 'reviewer');
+    G('the legacy bs-new fixture seeds the reviewer case over a reviewed uncommitted 03 edit: base is the post-setup baseline commit holding the exact subsection, and the range holds only wallet-transfer.ts', r.ok === true && r.base !== before && showAt(fx, r.base, H.BS_03_REL) === with03Invariant(BS03) && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(NAMED_FILES('reviewer')) && readF(fx.parent, 'scenario.json') === meta, r); }
+  // Existing matching-name fixtures still work (the old condition is untouched).
+  { const fx = mkSeedFixture('b5-match-ps'); const r = seed(fx); G('an existing matching-name fixture (ps-first, project "service") still seeds', r.ok === true, r); }
+  { const fx = mkSeedFixture('b5-match-other', { name: 'other', meta: { schema: 1, tool: 'bs-doc-map', scenario: 'ps-first', project: 'other', versions: null } }); const r = seed(fx); G('an existing matching-name fixture of another directory name (project "other") still seeds, so the legacy rule did not replace the matching-name rule', r.ok === true, r); }
+  { const fx = mkSeedFixture('b5-match-bsnew', { meta: { ...LEGACY_META, project: 'service' } }); const r = seed(fx); G('a bs-new record whose project is the text "service" (the matching-name condition) still seeds', r.ok === true, r); }
+  // Each field of the exact shape wrong, one at a time: refused as unrecognized, nothing touched, metadata not rewritten.
+  const WRONG_META = [
+    ['schema 2', { ...LEGACY_META, schema: 2 }], ['schema as the text "1"', { ...LEGACY_META, schema: '1' }], ['no schema field', dropKey('schema')],
+    ['another tool', { ...LEGACY_META, tool: 'other' }], ['tool in another case', { ...LEGACY_META, tool: 'BS-DOC-MAP' }], ['no tool field', dropKey('tool')],
+    ['scenario ps-first with a null project', { ...LEGACY_META, scenario: 'ps-first' }], ['scenario bs-existing with a null project', { ...LEGACY_META, scenario: 'bs-existing' }], ['scenario BS-NEW (another case)', { ...LEGACY_META, scenario: 'BS-NEW' }], ['an unknown scenario', { ...LEGACY_META, scenario: 'other' }], ['no scenario field', dropKey('scenario')],
+    ['no project property at all (absent is not an explicit null)', dropKey('project')], ['an empty-text project', { ...LEGACY_META, project: '' }], ['the text "null" as the project', { ...LEGACY_META, project: 'null' }], ['the number 0 as the project', { ...LEGACY_META, project: 0 }], ['false as the project', { ...LEGACY_META, project: false }], ['a project that names another directory', { ...LEGACY_META, project: 'other' }],
+  ];
+  for (const [label, meta] of WRONG_META) {
+    const fx = mkSeedFixture('b5-bad-meta', { meta }); const before = seedState(fx); const r = seed(fx);
+    G(`legacy recognition refuses ${label}: code unrecognized, nothing written, scenario.json untouched`, r.ok === false && r.refusal.code === 'unrecognized' && seedSame(fx, before) && !existsF(fx.proj, SEED_REL_DIR), r.refusal ?? r);
+  }
+  for (const name of ['service2', 'Service', 'SERVICE', 'svc', 'services', 'my-service']) {
+    const fx = mkSeedFixture('b5-bad-name', { meta: LEGACY_META, name }); const before = seedState(fx); const r = seed(fx);
+    G(`the null record is recognized only for the directory named exactly service: "${name}" is refused (unrecognized), untouched`, r.ok === false && r.refusal.code === 'unrecognized' && seedSame(fx, before), r.refusal ?? r);
+  }
+  // Where the record is, and what it is.
+  for (const [label, o] of [['missing metadata (no scenario.json beside the project)', { scenario: false }], ['metadata that is not JSON', { rawMeta: '{nope' }], ['metadata that is the JSON value null', { rawMeta: 'null\n' }], ['metadata that is an array', { rawMeta: '[]\n' }], ['metadata that is a JSON string', { rawMeta: '"bs-doc-map"\n' }], ['an empty metadata file', { rawMeta: '' }]]) {
+    const fx = mkSeedFixture('b5-meta-shape', o); const before = seedState(fx); const r = seed(fx);
+    G(`legacy recognition refuses ${label}: code unrecognized, nothing written`, r.ok === false && r.refusal.code === 'unrecognized' && seedSame(fx, before), r.refusal ?? r);
+  }
+  { const fx = mkSeedFixture('b5-meta-grand', { scenario: false }); const grand = path.join(path.dirname(fx.parent), `scenario-${path.basename(fx.parent)}.json`); const before = seedState(fx);
+    fs.writeFileSync(path.join(path.dirname(fx.parent), 'scenario.json'), `${JSON.stringify(LEGACY_META)}\n`); const r = seed(fx);
+    fs.rmSync(path.join(path.dirname(fx.parent), 'scenario.json'), { force: true });
+    G('alternate parent metadata is refused: a legacy record in the grandparent directory (not beside the project) does not recognize it', r.ok === false && r.refusal.code === 'unrecognized' && seedSame(fx, before) && grand.length > 0, r.refusal ?? r); }
+  { const fx = mkSeedFixture('b5-meta-inside', { scenario: false }); putF(fx.proj, 'scenario.json', `${JSON.stringify(LEGACY_META)}\n`); const before = seedState(fx); const r = seed(fx);
+    G('a legacy record inside the project directory (not beside it) does not recognize the fixture', r.ok === false && r.refusal.code === 'unrecognized' && seedSame(fx, before), r.refusal ?? r); }
+  // The guards every other seed keeps, applied to the legacy shape (each refuses with its own code, nothing touched).
+  const GUARDS = [
+    ['no repository-local identity (the identity is only in the isolated global configuration)', { identity: 'global' }, () => {}, 'unrecognized', /identity/],
+    ['no identity anywhere', { identity: 'none' }, () => {}, 'unrecognized', /identity/],
+    ['a repository-local identity that is not the fixture one', { email: 'someone@example.com' }, () => {}, 'unrecognized', /identity/],
+    ['a project that is not a Git repository (no .git)', {}, (fx) => fs.rmSync(path.join(fx.proj, '.git'), { recursive: true, force: true }), 'unrecognized', /root of its own Git repository|git status failed/],
+    ['a malformed project policy', { files: { [POLICY_REL]: '{nope' } }, () => {}, 'policy', /policy/],
+    ['a seed target the policy denies', { files: { [POLICY_REL]: policyWith([{ glob: 'src/bs-doc-map-fixture/*', kind: 'project' }]) } }, () => {}, 'forbidden', /policy-denied/],
+    ['an unrelated modification', {}, (fx) => putF(fx.proj, 'src/app.ts', 'changed\n'), 'dirty', /unrelated dirty state: src\/app\.ts/],
+    ['an unrelated untracked file', {}, (fx) => putF(fx.proj, 'scratch.txt', 'x\n'), 'dirty', /scratch\.txt/],
+    ['an occupied seed target', { files: { 'src/bs-doc-map-fixture/error-filter.ts': 'existing\n' } }, () => {}, 'dirty', /already exists/],
+    ['a regular file where the seed directory belongs', { files: { 'src/bs-doc-map-fixture': 'a file\n' } }, () => {}, 'not-directory', /not a directory/],
+    ['an unmerged (conflicted) path', {}, (fx) => { fx.g('checkout', '-q', '-b', 'side'); putF(fx.proj, 'AGENTS.md', '# side\n'); fx.g('commit', '-qam', 'side'); fx.g('checkout', '-q', '-'); putF(fx.proj, 'AGENTS.md', '# main\n'); fx.g('commit', '-qam', 'main'); fx.g('merge', 'side'); }, 'dirty', /unmerged/],
+    // H7: git status --porcelain -uall lists the FILE inside .remember/ (it never lists an empty directory), so the fixture places a file in it. No host-output exemption exists: it is unrelated dirty state.
+    ['host output: an untracked file inside .remember/ (no host-output exemption)', {}, (fx) => putF(fx.proj, '.remember/now.md', 'host notes\n'), 'dirty', /\.remember\/now\.md/],
+    ['host output: a second untracked file inside .remember/ beside the first (every one is reported, none is ignored)', {}, (fx) => { putF(fx.proj, '.remember/now.md', 'a\n'); putF(fx.proj, '.remember/today-2026-11-15.md', 'b\n'); }, 'dirty', /\.remember\//],
+  ];
+  for (const [label, o, mutate, code, detailRe] of GUARDS) {
+    const fx = legacy('b5-guard', o); mutate(fx); const before = seedState(fx); const r = seed(fx);
+    // seedSame compares HEAD, the porcelain (a new or changed file would show in it), the scenario record and the fixture's own configuration with their state before the call.
+    G(`legacy shape plus ${label}: refused with code ${code}, nothing touched`, r.ok === false && r.refusal.code === code && detailRe.test(r.refusal.detail) && seedSame(fx, before) && !existsF(fx.proj, `${SEED_REL_DIR}/wallet-transfer.ts`), r.refusal ?? r);
+  }
+  // R4 (plan:523, addendum H4): an identity that exists only in the ENVIRONMENT of the seed process is no identity. The seed runs as a CHILD process (the real command) that is handed the four
+  // identity variables with fixture values; this test process's own environment is never touched and no user-level or system Git configuration is read (the fixture's own fixture-gitconfig is the
+  // isolated "global" one, and it is empty). Both recognition routes are covered: the legacy bs-new record and the matching-name record.
+  { const ENV_ID = { GIT_AUTHOR_NAME: H.FIXTURE_NAME, GIT_AUTHOR_EMAIL: H.FIXTURE_EMAIL, GIT_COMMITTER_NAME: H.FIXTURE_NAME, GIT_COMMITTER_EMAIL: H.FIXTURE_EMAIL };
+    const OTHER_ID = { GIT_AUTHOR_NAME: 'env-only fixture', GIT_AUTHOR_EMAIL: 'env-only@example.invalid', GIT_COMMITTER_NAME: 'env-only fixture', GIT_COMMITTER_EMAIL: 'env-only@example.invalid' };
+    const childSeed = (fx, extraEnv) => { const r = spawnSync(process.execPath, [path.join(TESTS, 'live', 'bs-doc-map.mjs'), 'seed', '--project', fx.proj, '--case', 'docs-sync'], { encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000, env: { ...process.env, ...extraEnv } }); return { code: r.status, out: String(r.stdout ?? ''), err: String(r.stderr ?? '').trim() }; };
+    const noLocalIdentity = (fx) => fx.g('config', '--local', '--get', 'user.name').code !== 0 && fx.g('config', '--local', '--get', 'user.email').code !== 0 && rd(fx.gitconfig) === '';
+    const envEntries = () => JSON.stringify(Object.entries(process.env).sort(([a], [b]) => (a < b ? -1 : 1)));
+    const mine0 = envEntries();
+    const ctl = mkSeedFixture('b5-env-ctl', { meta: LEGACY_META, identity: 'none' });
+    const asGit = { ...H.isolatedGitEnv(ctl.gitconfig), ...OTHER_ID };
+    const cc = spawnSync('git', ['commit', '--allow-empty', '-qm', 'control: environment identity'], { cwd: ctl.proj, env: asGit, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 });
+    G('control (R4): the fixture without a local identity really has none, and Git itself accepts the identity from the environment alone (so the refusal below is the helper\'s decision, not a Git failure)', noLocalIdentity(ctl) && cc.status === 0 && ctl.g('log', '-1', '--format=%ae').out.trim() === OTHER_ID.GIT_AUTHOR_EMAIL, { status: cc.status, err: String(cc.stderr ?? '').trim(), email: ctl.g('log', '-1', '--format=%ae').out.trim() });
+    for (const [label, o] of [['the legacy bs-new record', { meta: LEGACY_META }], ['the matching-name record (ps-first, project service)', {}]]) {
+      for (const [idLabel, id] of [['the fixture name and address', ENV_ID], ['another fixture name and address', OTHER_ID]]) {
+        const fx = mkSeedFixture('b5-env-only', { ...o, identity: 'none' }); const before = seedState(fx); const pre = noLocalIdentity(fx);
+        const r = childSeed(fx, id);
+        G(`environment-only identity (${idLabel} in GIT_AUTHOR_* and GIT_COMMITTER_*), ${label}, no local user.name or user.email: the seed command exits 2 with REFUSED unrecognized naming the identity, prints nothing on stdout, and HEAD, the porcelain, scenario.json and the fixture-gitconfig bytes are unchanged`, pre && r.code === 2 && r.out === '' && /^REFUSED unrecognized: .*identity/.test(r.err) && seedSame(fx, before) && !existsF(fx.proj, SEED_REL_DIR) && fx.head() === before.head && rd(fx.gitconfig) === before.cfg, { pre, r });
+      }
+    }
+    { const fx = mkSeedFixture('b5-env-partial', { meta: LEGACY_META, identity: 'none' }); const before = seedState(fx); const r = childSeed(fx, { GIT_AUTHOR_EMAIL: H.FIXTURE_EMAIL, GIT_COMMITTER_EMAIL: H.FIXTURE_EMAIL });
+      G('environment-only identity with the fixture address alone (the two EMAIL variables, no name) is refused the same way: code unrecognized, naming the identity, untouched', r.code === 2 && r.out === '' && /^REFUSED unrecognized: .*identity/.test(r.err) && seedSame(fx, before), r); }
+    { const fx = mkSeedFixture('b5-env-local-ok', { meta: LEGACY_META }); const before = fx.head(); const r = childSeed(fx, OTHER_ID); const L = r.out.split('\n');
+      G('control (R4): the same child command and environment on a fixture WITH the local fixture identity seeds (exit 0, exactly BASE, HEAD and RANGE) and its commit carries the LOCAL identity, never the environment one', r.code === 0 && L.length === 4 && /^BASE [0-9a-f]{40}$/.test(L[0]) && L[0] === `BASE ${before}` && r.err === '' && fx.g('log', '-1', '--format=%ae').out.trim() === H.FIXTURE_EMAIL && fx.g('log', '-1', '--format=%an').out.trim() === H.FIXTURE_NAME, { r, email: fx.g('log', '-1', '--format=%ae').out.trim() }); }
+    G('this test process\'s own environment is not mutated by the environment-only identity cases (the sorted environment entries are equal to those taken before them)', envEntries() === mine0); }
+  { const fx = legacy('b5-remember-empty'); fs.mkdirSync(path.join(fx.proj, '.remember')); const listed = fx.porcelain(); const r = seed(fx);
+    G('control (H7): an EMPTY .remember/ directory is not listed by git status --porcelain -uall, which is why the regression places a file in it; seed proceeds', listed === '' && r.ok === true, { listed, r }); }
+  { const fx = nestedFixtureCheck(); G('legacy shape in a directory that is not the root of its repository (the Git root is its parent) is refused as unrecognized, untouched', fx.ok, fx.detail); }
+  { const fx = legacy('b5-junction-proj-real'); const parent = liveDir('b5-junction-proj'); fs.writeFileSync(path.join(parent, 'scenario.json'), `${JSON.stringify(LEGACY_META)}\n`); fs.writeFileSync(path.join(parent, 'fixture-gitconfig'), '');
+    if (!liveJunction(fx.proj, path.join(parent, 'service'))) skip('legacy shape with the project path itself a junction is refused as linked-alias', 'a junction cannot be created on this host');
+    else { const r = H.runSeed({ project: path.join(parent, 'service'), caseName: 'docs-sync' }); G('legacy shape with the project path itself a junction is refused as linked-alias, and nothing is written through it', r.ok === false && r.refusal.code === 'linked-alias' && fx.porcelain() === '' && !existsF(fx.proj, SEED_REL_DIR), r.refusal ?? r); } }
+  { const fx = legacy('b5-junction-target'); const outside = liveDir('b5-junction-outside');
+    if (!liveJunction(outside, path.join(fx.proj, 'src', 'bs-doc-map-fixture'))) skip('legacy shape with a junction at the seed directory is refused as linked-ancestor', 'a junction cannot be created on this host');
+    else { const before = seedState(fx); const r = seed(fx); G('legacy shape with a junction at src/bs-doc-map-fixture is refused as linked-ancestor: nothing is written through it, committed or changed', r.ok === false && r.refusal.code === 'linked-ancestor' && fs.readdirSync(outside).length === 0 && seedSame(fx, before), r.refusal ?? r); } }
+  function nestedFixtureCheck() { const fx = mkNestedFixture('b5-nested'); const before = { head: fx.head(), por: fx.porcelain() }; const r = H.runSeed({ project: fx.proj, caseName: 'docs-sync' }); return { ok: r.ok === false && r.refusal.code === 'unrecognized' && fx.head() === before.head && fx.porcelain() === before.por && !existsF(fx.proj, SEED_REL_DIR), detail: r.refusal ?? r }; }
+}
+
+// ============================================================== GROUP: B5 initialization is unchanged, and works with explicit roots ====
+{
+  const G = grp('B5 init');
+  const roots = () => { const d = liveDir('b5-roots'); const repo = path.join(d, 'repo-excluded'); const temp = path.join(d, 'temp-excluded'); fs.mkdirSync(repo); fs.mkdirSync(temp); return { repo, temp }; };
+  let called = 0;
+  const noScaffold = () => { called += 1; throw new Error('the scaffold must not run for bs-new'); };
+  const out1 = path.join(liveDir('b5-init'), 'workspace');
+  const r1 = H.runInit({ scenario: 'bs-new', out: out1, roots: roots(), deps: { scaffold: noScaffold } });
+  const meta1 = attempt(() => JSON.parse(rd(path.join(out1, 'scenario.json'))));
+  G('runInit for bs-new with explicit roots disjoint from the destination succeeds without the OS temporary directory being excluded, never calls the scaffold and creates no service directory', r1.ok === true && called === 0 && !existsF(out1, 'service') && existsF(out1, 'scenario.json') && existsF(out1, 'fixture-gitconfig'), { r1, called });
+  G('the bs-new record keeps the explicit null project (schema 1, tool bs-doc-map, scenario bs-new, versions with only the Node version)', meta1.threw === undefined && Object.prototype.hasOwnProperty.call(meta1, 'project') && meta1.project === null && meta1.schema === 1 && meta1.tool === 'bs-doc-map' && meta1.scenario === 'bs-new' && meta1.versions?.node === process.version && meta1.versions?.nestCommon === null && meta1.versions?.nestCli === null, meta1);
+  { const before = path.join(liveDir('b5-init-d'), 'never'); const r = H.runInit({ scenario: 'bs-new', out: path.join(os.tmpdir(), `bsmap-never-${process.pid}`), deps: { scaffold: noScaffold } });
+    G('production defaults still refuse a destination inside the OS temporary directory (code inside-temp), and create nothing', r.ok === false && r.refusals.some((x) => x.code === 'inside-temp') && !fs.existsSync(path.join(os.tmpdir(), `bsmap-never-${process.pid}`)) && called === 0 && before.length > 0, r); }
+  { const dest = path.join(REPO, `zz-bsmap-never-${process.pid}`); const r = H.runInit({ scenario: 'bs-new', out: dest, deps: { scaffold: noScaffold } });
+    G('production defaults still refuse a destination inside the repository (code inside-repository), and create nothing', r.ok === false && r.refusals.some((x) => x.code === 'inside-repository') && !fs.existsSync(dest) && called === 0, r); }
+  // BS creates service directly under the initialized workspace (local fixture identity and policy), then both seed cases run on the result.
+  const bsCreatesService = (ws, files) => {
+    const proj = path.join(ws, 'service'); fs.mkdirSync(proj);
+    for (const [rel, text] of Object.entries(files)) putF(proj, rel, text);
+    const env = H.isolatedGitEnv(path.join(ws, 'fixture-gitconfig'));
+    const g = (...args) => { const r = spawnSync('git', args, { cwd: proj, env, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 }); return { code: r.status, out: String(r.stdout ?? ''), err: String(r.stderr ?? '').trim() }; };
+    g('init', '-q'); g('config', '--local', 'user.name', 'bs-doc-map fixture'); g('config', '--local', 'user.email', 'fixture@example.invalid');
+    g('add', '-A'); if (g('commit', '-qm', 'bs: new service').code !== 0) throw new Error(`cannot commit the simulated BS service: ${g('status').err}`);
+    return { parent: ws, proj, g, gitconfig: path.join(ws, 'fixture-gitconfig'), head: () => g('rev-parse', 'HEAD').out.trim(), porcelain: () => g('status', '--porcelain', '-z', '-uall').out };
+  };
+  for (const [label, caseName, files, edit] of [
+    ['docs-sync', 'docs-sync', { 'AGENTS.md': '# svc\n', [POLICY_REL]: policyWith(PRIVATE_DENY), 'src/main.ts': 'export {};\n' }, null],
+    ['reviewer with the invariant committed first', 'reviewer', { 'AGENTS.md': '# svc\n', [POLICY_REL]: policyWith(PRIVATE_DENY), [H.BS_03_REL]: with03Invariant(BS03) }, null],
+    ['reviewer with a reviewed uncommitted 03 edit', 'reviewer', { 'AGENTS.md': '# svc\n', [POLICY_REL]: policyWith(PRIVATE_DENY), [H.BS_03_REL]: BS03 }, (fx) => putF(fx.proj, H.BS_03_REL, with03Invariant(BS03))],
+  ]) {
+    const ws = path.join(liveDir('b5-int'), 'workspace'); const ir = H.runInit({ scenario: 'bs-new', out: ws, roots: roots(), deps: { scaffold: noScaffold } });
+    const fx = ir.ok ? bsCreatesService(ws, files) : null; if (fx !== null && edit !== null) edit(fx);
+    const meta = fx === null ? null : readF(ws, 'scenario.json'); const r = fx === null ? { ok: false, refusal: { code: 'init', detail: JSON.stringify(ir) } } : H.runSeed({ project: fx.proj, caseName });
+    G(`end to end: init bs-new, BS creates service under the workspace with the local fixture identity and policy, then seed ${label} succeeds with a range of only its named application files and the record untouched`, r.ok === true && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(NAMED_FILES(caseName)) && fx.porcelain() === '' && readF(ws, 'scenario.json') === meta, r.refusal ?? r);
+  }
+  { const ws = path.join(liveDir('b5-int-other'), 'workspace'); const ir = H.runInit({ scenario: 'bs-new', out: ws, roots: roots(), deps: { scaffold: noScaffold } }); const fx = bsCreatesService(ws, { 'AGENTS.md': '# svc\n' });
+    const other = path.join(ws, 'other-name'); fs.renameSync(fx.proj, other); const meta = readF(ws, 'scenario.json'); const r = H.runSeed({ project: other, caseName: 'docs-sync' });
+    G('end to end: BS creating a child with another name than service under the workspace is refused by seed (unrecognized) and scenario.json is not rewritten', ir.ok === true && r.ok === false && r.refusal.code === 'unrecognized' && readF(ws, 'scenario.json') === meta, r.refusal ?? r); }
+}
+
+// ============================================================== GROUP: B5 seed disables Git commit hooks for its own two commits only ====
+// The override is command-local: -c core.hooksPath=<empty directory> on the baseline commit and the case commit, nothing else (addendum A1). It protects the seeded bytes against commit hooks and claims nothing more (A2 H2).
+const HOOK_MARK = '// rewritten by the fixture hook';
+const hookBody = (kind, log) => (kind === 'rewriter'
+  ? ['#!/bin/sh', `echo rewriter >> "${log}"`, 'git diff --cached --name-only --diff-filter=AM | while read -r f; do', `  printf '${HOOK_MARK}\\n' >> "$f"`, '  git add -- "$f"', 'done', 'exit 0', ''].join('\n')
+  : ['#!/bin/sh', `echo rejecter >> "${log}"`, 'exit 1', ''].join('\n'));
+/** A repository-local hooks path resembling husky's .husky/_ (its own .gitignore of "*" keeps the generated directory out of the status), with one controlled pre-commit hook that records every run outside the project. */
+function installHooks(fx, kind) {
+  const dir = path.join(fx.proj, '.husky', '_');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '.gitignore'), '*\n');
+  const log = path.join(fx.parent, 'hook.log');
+  const body = hookBody(kind, log.split(path.sep).join('/'));
+  const hook = path.join(dir, 'pre-commit');
+  fs.writeFileSync(hook, body, { mode: 0o755 });
+  fs.chmodSync(hook, 0o755);
+  fx.g('config', '--local', 'core.hooksPath', '.husky/_');
+  return { hook, log, body, runs: () => (fs.existsSync(log) ? rd(log).split('\n').filter(Boolean) : []) };
+}
+const HOOK_PRECONDITION = 'hook-execution precondition not met: Git did not run the fixture pre-commit hook on this host (it needs a POSIX sh, an LF hook file starting with #!/bin/sh, mode 0755, and a repository-local core.hooksPath), so every seed hook test below would prove nothing';
+const HOOKS_WORK = (() => {
+  const out = { rewriter: false, rejecter: false, detail: {} };
+  try {
+    { const fx = mkSeedFixture('hk-ctl-rewriter'); const hk = installHooks(fx, 'rewriter'); putF(fx.proj, 'docs/ctl.md', 'control\n'); fx.g('add', '--', 'docs/ctl.md'); const c = fx.g('commit', '-qm', 'control'); const blob = showAt(fx, 'HEAD', 'docs/ctl.md');
+      out.rewriter = c.code === 0 && blob === `control\n${HOOK_MARK}\n` && hk.runs().length === 1; out.detail.rewriter = { code: c.code, err: c.err, blob, runs: hk.runs() }; }
+    { const fx = mkSeedFixture('hk-ctl-rejecter'); const hk = installHooks(fx, 'rejecter'); const before = fx.head(); putF(fx.proj, 'docs/ctl.md', 'control\n'); fx.g('add', '--', 'docs/ctl.md'); const c = fx.g('commit', '-qm', 'control');
+      out.rejecter = c.code !== 0 && fx.head() === before && hk.runs().length === 1; out.detail.rejecter = { code: c.code, err: c.err, runs: hk.runs() }; }
+  } catch (e) { out.detail.threw = String(e && e.message ? e.message : e); }
+  return out;
+})();
+{
+  const G = grp('B5 seed hooks');
+  const ctl = (kind) => ({ precondition: HOOK_PRECONDITION, ...HOOKS_WORK.detail[kind], threw: HOOKS_WORK.detail.threw });
+  G('positive control (H5): an ordinary fixture commit runs the rewriting hook (the committed bytes are the hook\'s) and the hook ran once', HOOKS_WORK.rewriter === true, ctl('rewriter'));
+  G('positive control (H5): an ordinary fixture commit runs the rejecting hook (the commit fails, HEAD does not move) and the hook ran once', HOOKS_WORK.rejecter === true, ctl('rejecter'));
+  { const fx = mkSeedFixture('hk-body'); const hk = installHooks(fx, 'rewriter'); const rej = installHooks(mkSeedFixture('hk-body2'), 'rejecter');
+    G('H5: both hook files are LF-only, start with #!/bin/sh, and carry no carriage return', [hk.body, rej.body].every((b) => b.startsWith('#!/bin/sh\n') && !b.includes('\r') && b.endsWith('\n')) && rd(hk.hook) === hk.body && !rd(hk.hook).includes('\r'), { hook: JSON.stringify(rd(hk.hook).slice(0, 60)) });
+    G('H5: the hook file is executable where the file system has permission bits (mode 0755 was applied)', process.platform === 'win32' || (fs.statSync(hk.hook).mode & 0o111) === 0o111, fs.statSync(hk.hook).mode.toString(8)); }
+  const edited = '# agents\nedited after setup\n';
+  function hookFixture(kind, caseName, route) {
+    const files = caseName === 'reviewer' ? { [H.BS_03_REL]: route === 'clean' ? with03Invariant(BS03) : BS03 } : {};
+    const fx = mkSeedFixture(`hk-${kind}-${caseName}-${route}`, { files });
+    const hk = installHooks(fx, kind);
+    if (route === 'auto') { if (caseName === 'reviewer') putF(fx.proj, H.BS_03_REL, with03Invariant(BS03)); else putF(fx.proj, 'AGENTS.md', edited); }
+    return { fx, hk };
+  }
+  const envJson = () => JSON.stringify(Object.entries(process.env).sort(([a], [b]) => (a < b ? -1 : 1)));
+  const norm = (p) => path.resolve(String(p));
+  const gate = (ok, detail) => (ok === true && HOOKS_WORK.rewriter && HOOKS_WORK.rejecter ? true : (ok === true ? HOOK_PRECONDITION : detail));
+  for (const kind of ['rewriter', 'rejecter']) for (const caseName of ['docs-sync', 'reviewer']) for (const route of ['clean', 'auto']) {
+    const label = `${kind} hook, ${caseName}, ${route === 'clean' ? 'clean baseline' : 'automatic post-setup baseline commit'}`;
+    const { fx, hk } = hookFixture(kind, caseName, route);
+    const cfg = fx.g('config', '--local', '--get-all', 'core.hooksPath').out.trim(); const hookBytes = rd(hk.hook); const gcfg = rd(fx.gitconfig); const env0 = envJson(); const before = fx.head();
+    const obs = observeSeed(() => H.runSeed({ project: fx.proj, caseName })); const r = obs.value;
+    const T = (what, ok, detail) => G(`${label}: ${what}`, gate(ok, detail) === true, gate(ok, detail));
+    T('seed succeeds without executing the hook (its log stays empty) and keeps the result shape', r.ok === true && JSON.stringify(Object.keys(r).sort()) === JSON.stringify(['base', 'files', 'head', 'ok', 'range']) && hk.runs().length === 0, { r: r.refusal ?? Object.keys(r), runs: hk.runs() });
+    const sb = SEED_BYTES[caseName];
+    T('the committed seed blobs and the working-tree bytes are exactly the expected seed bytes', r.ok === true && Object.entries(sb).every(([rel, bytes]) => showAt(fx, r.head, rel) === bytes && readF(fx.proj, rel) === bytes), { blobs: r.ok ? Object.keys(sb).map((rel) => showAt(fx, r.head, rel).slice(-60)) : r });
+    T(route === 'auto' ? 'the post-setup baseline commit holds the reviewed bytes exactly (the hook did not rewrite them), and for the reviewer case the returned base contains the exact invariant' : 'the returned base is the prior commit, and for the reviewer case it contains the exact invariant', r.ok === true && (route === 'clean' ? r.base === before : r.base !== before && (caseName === 'reviewer' ? showAt(fx, r.base, H.BS_03_REL) === with03Invariant(BS03) && readF(fx.proj, H.BS_03_REL) === with03Invariant(BS03) : showAt(fx, r.base, 'AGENTS.md') === edited && readF(fx.proj, 'AGENTS.md') === edited)) && (caseName !== 'reviewer' || showAt(fx, r.base, H.BS_03_REL).includes(LOCK_ORDER_BLOCK)), { base: r.base, before });
+    const emails = r.ok ? fx.g('log', '--format=%ae', `${before}..${r.head}`).out.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+    T('the range holds only the named application files, every seed commit carries the fixture identity and the resulting worktree is clean', r.ok === true && JSON.stringify(namesIn(fx, r.range)) === JSON.stringify(NAMED_FILES(caseName)) && emails.length === (route === 'clean' ? 1 : 2) && emails.every((e) => e === H.FIXTURE_EMAIL) && fx.porcelain() === '', { emails, por: fx.porcelain() });
+    // R5 (plan:490): the plan prohibits MUTATING the environment (before/after equality below), not inheriting it, so a HUSKY the caller's environment already sets is no failure here; the independent
+    // controls above (the hook log stays empty, the seed blobs are the expected bytes) and the positive controls prove that the hooks really were not executed.
+    T('the repository-local core.hooksPath value, the hook bytes, the fixture\'s own fixture-gitconfig and the parent-process environment are unchanged (nothing global or system is read)', fx.g('config', '--local', '--get-all', 'core.hooksPath').out.trim() === cfg && cfg === '.husky/_' && rd(hk.hook) === hookBytes && rd(fx.gitconfig) === gcfg && envJson() === env0, { cfg });
+    const commits = obs.calls.filter((c) => c.args.includes('commit')); const others = obs.calls.filter((c) => !c.args.includes('commit'));
+    const override = (c) => { if (c.hooksValue === null) return false; const i = c.args.indexOf(`core.hooksPath=${c.hooksValue}`); return i > 0 && c.args[i - 1] === '-c' && i < c.args.indexOf('commit') && !c.hooksValue.includes('\\') && path.isAbsolute(c.hooksValue) && Array.isArray(c.dirEntries) && c.dirEntries.length === 0 && obs.made.some((m) => samePath(norm(m.dir), norm(c.hooksValue))); };
+    const messages = commits.map((c) => c.args[c.args.indexOf('-m') + 1]);
+    T('exactly the baseline commit (when there is one) and the case commit carry -c core.hooksPath=<an empty directory made by mkdtempSync, forward slashes>, and no other Git call does', commits.length === (route === 'clean' ? 1 : 2) && commits.every(override) && JSON.stringify(messages) === JSON.stringify(route === 'clean' ? [`fixture: ${caseName} change`] : ['fixture: post-setup baseline', `fixture: ${caseName} change`]) && others.every((c) => c.hooksValue === null), { commits: commits.map((c) => ({ args: c.args, entries: c.dirEntries })), others: others.filter((c) => c.hooksValue !== null).length });
+    T('the helper-owned directory was created under the OS temporary directory, is removed after the seed by a non-recursive rmdirSync, and rmSync never touches it', obs.made.length >= 1 && obs.made.every((m) => { const rel = path.relative(path.resolve(os.tmpdir()), path.resolve(m.prefix)); return !rel.startsWith('..') && !path.isAbsolute(rel) && !fs.existsSync(m.dir) && obs.rmdirs.some((x) => samePath(norm(x.p), norm(m.dir)) && x.rest.every((o) => !(o !== null && typeof o === 'object' && o.recursive === true))) && !obs.rmsyncs.some((x) => samePath(norm(x.p), norm(m.dir))); }), { made: obs.made, rmdirs: obs.rmdirs });
+    // An ordinary commit afterwards is not affected: the configured hook still runs.
+    putF(fx.proj, 'docs/after-seed.md', 'after\n'); fx.g('add', '--', 'docs/after-seed.md'); const after = fx.g('commit', '-qm', 'after the seed');
+    T('an ordinary commit after the seed still executes the configured hook', kind === 'rewriter' ? after.code === 0 && showAt(fx, 'HEAD', 'docs/after-seed.md') === `after\n${HOOK_MARK}\n` && hk.runs().length === 1 : after.code !== 0 && hk.runs().length === 1 && fx.head() === r.head, { code: after.code, runs: hk.runs() });
+  }
+  // Preflight refusals stay mutation-free, create no hook override and make no directory (the directory is made only after every guard has passed).
+  for (const [label, caseName, files, mutate, code] of [
+    ['unrelated dirty state', 'docs-sync', {}, (fx) => putF(fx.proj, 'src/app.ts', 'changed\n'), 'dirty'],
+    ['a missing reviewer invariant', 'reviewer', {}, () => {}, 'baseline'],
+    ['an occupied seed target', 'docs-sync', { 'src/bs-doc-map-fixture/error-filter.ts': 'existing\n' }, () => {}, 'dirty'],
+    ['untracked host output inside .remember/', 'docs-sync', {}, (fx) => putF(fx.proj, '.remember/now.md', 'notes\n'), 'dirty'],
+    ['a malformed project policy', 'docs-sync', { [POLICY_REL]: '{nope' }, () => {}, 'policy'],
+  ]) {
+    const fx = mkSeedFixture('hk-pre', { files }); const hk = installHooks(fx, 'rewriter'); mutate(fx);
+    const before = seedState(fx); const cfg = fx.g('config', '--local', '--get-all', 'core.hooksPath').out.trim(); const hookBytes = rd(hk.hook); const obs = observeSeed(() => H.runSeed({ project: fx.proj, caseName })); const r = obs.value;
+    G(`preflight refusal (${label}) with the hook configured: code ${code}, HEAD, index and worktree unchanged, no hooks directory made, no hooks override passed to Git, configuration and hook bytes unchanged, the hook not run`, r.ok === false && r.refusal.code === code && seedSame(fx, before) && obs.made.length === 0 && obs.calls.every((c) => c.hooksValue === null) && fx.g('config', '--local', '--get-all', 'core.hooksPath').out.trim() === cfg && rd(hk.hook) === hookBytes && hk.runs().length === 0, { r: r.refusal ?? r, made: obs.made.length });
+  }
+  // An independent commit failure (a signing program that does not exist) keeps its diagnostic state: the existing refusal code and detail, nothing restored, and still no directory left behind.
+  const failSigning = (fx) => { fx.g('config', '--local', 'commit.gpgsign', 'true'); fx.g('config', '--local', 'gpg.program', 'bsmap-no-such-signing-program'); };
+  { const fx = mkSeedFixture('hk-fail-case'); const hk = installHooks(fx, 'rewriter'); failSigning(fx); const before = fx.head(); const obs = observeSeed(() => H.runSeed({ project: fx.proj, caseName: 'docs-sync' })); const r = obs.value;
+    G('an independent case-commit failure keeps the existing refusal (code commit, "the case commit failed"), leaves HEAD unmoved, keeps the seeded files written and staged for diagnosis, and passes the override to that commit', r.ok === false && r.refusal.code === 'commit' && r.refusal.detail === 'the case commit failed' && fx.head() === before && NAMED_FILES('docs-sync').every((rel) => readF(fx.proj, rel) === SEED_BYTES['docs-sync'][rel]) && JSON.stringify(fx.g('diff', '--cached', '--name-only').out.split('\n').map((s) => s.trim()).filter(Boolean).sort()) === JSON.stringify(NAMED_FILES('docs-sync')) && obs.calls.filter((c) => c.args.includes('commit')).length === 1 && obs.calls.filter((c) => c.args.includes('commit')).every((c) => c.hooksValue !== null) && hk.runs().length === 0, { r: r.refusal ?? r, head: fx.head() === before, staged: fx.g('diff', '--cached', '--name-only').out });
+    G('after that failure the helper-owned empty directory is gone (cleanup does not depend on the commit succeeding) and the refusal is reported without it being treated as a restored state', obs.made.length >= 1 && obs.made.every((m) => !fs.existsSync(m.dir)) && r.ok === false, { made: obs.made }); }
+  { const fx = mkSeedFixture('hk-fail-base'); const hk = installHooks(fx, 'rewriter'); putF(fx.proj, 'AGENTS.md', edited); failSigning(fx); const before = fx.head(); const r = H.runSeed({ project: fx.proj, caseName: 'docs-sync' });
+    G('an independent baseline-commit failure keeps the existing refusal (code commit, "the baseline commit failed"), leaves HEAD unmoved and the reviewed change staged, and writes no application file', r.ok === false && r.refusal.code === 'commit' && r.refusal.detail === 'the baseline commit failed' && fx.head() === before && fx.g('diff', '--cached', '--name-only').out.trim() === 'AGENTS.md' && !existsF(fx.proj, SEED_REL_DIR) && hk.runs().length === 0, { r: r.refusal ?? r }); }
+  { const fx = mkSeedFixture('hk-fail-cli'); installHooks(fx, 'rewriter'); failSigning(fx); const c = captureIo(); const code = H.main(['seed', '--project', fx.proj, '--case', 'docs-sync'], c.io);
+    G('through the command an independent commit failure exits 2, prints REFUSED commit with the unchanged detail on stderr and nothing on stdout', code === 2 && c.o.length === 0 && c.e.length === 1 && c.e[0] === 'REFUSED commit: the case commit failed', { code, out: c.o, err: c.e }); }
+  // H3: a failure to remove the helper-owned directory changes neither the result nor the three-line stdout contract; it is reported on stderr only. Run as the real command, with fs.rmdirSync made to fail for exactly that directory.
+  { const dir = liveDir('hk-removal'); const preload = path.join(dir, 'preload.mjs'); const log = path.join(dir, 'fault.log');
+    fs.writeFileSync(preload, [
+      "import fs from 'node:fs';", "import path from 'node:path';",
+      'const log = process.env.BSMAP_FAULT_LOG;', "const inject = process.env.BSMAP_INJECT === '1';", 'const made = [];',
+      'const rec = (o) => fs.appendFileSync(log, `${JSON.stringify(o)}\\n`);',
+      'const mk = fs.mkdtempSync; fs.mkdtempSync = function (...a) { const d = mk.apply(this, a); made.push(path.resolve(d)); rec({ op: "mkdtemp", dir: d }); return d; };',
+      'const fail = (p) => inject && made.includes(path.resolve(String(p)));',
+      'const rmdir = fs.rmdirSync; fs.rmdirSync = function (p, ...a) { rec({ op: "rmdir", p: String(p), opts: a }); if (fail(p)) throw Object.assign(new Error("EBUSY: injected removal failure"), { code: "EBUSY" }); return rmdir.call(this, p, ...a); };',
+      'const rm = fs.rmSync; fs.rmSync = function (p, ...a) { rec({ op: "rm", p: String(p), opts: a }); if (fail(p)) throw Object.assign(new Error("EBUSY: injected removal failure"), { code: "EBUSY" }); return rm.call(this, p, ...a); };',
+      '',
+    ].join('\n'));
+    const run = (fx, inject) => { const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, path.join(TESTS, 'live', 'bs-doc-map.mjs'), 'seed', '--project', fx.proj, '--case', 'docs-sync'], { encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000, env: { ...process.env, BSMAP_FAULT_LOG: log, BSMAP_INJECT: inject ? '1' : '0' } }); return { code: r.status, out: String(r.stdout ?? ''), err: String(r.stderr ?? '') }; };
+    const entries = () => (fs.existsSync(log) ? rd(log).split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+    const okOut = (o) => { const L = o.out.split('\n'); return L.length === 4 && L[3] === '' && /^BASE [0-9a-f]{40}$/.test(L[0]) && /^HEAD [0-9a-f]{40}$/.test(L[1]) && L[2] === `RANGE ${L[0].slice(5)}..${L[1].slice(5)}`; };
+    const fxA = mkSeedFixture('hk-removal-ok'); installHooks(fxA, 'rewriter'); const a = run(fxA, false); const logA = entries(); fs.rmSync(log, { force: true });
+    G('control: the real seed command with nothing injected prints exactly BASE, HEAD and RANGE on stdout, nothing on stderr, exits 0, and removes the helper-owned directory with one non-recursive rmdir', a.code === 0 && okOut(a) && a.err === '' && logA.filter((x) => x.op === 'mkdtemp').length >= 1 && logA.filter((x) => x.op === 'mkdtemp').every((m) => !fs.existsSync(m.dir) && logA.some((x) => x.op === 'rmdir' && path.resolve(x.p) === path.resolve(m.dir) && x.opts.every((o) => !(o !== null && typeof o === 'object' && o.recursive === true))) && !logA.some((x) => x.op === 'rm' && path.resolve(x.p) === path.resolve(m.dir))), { a, logA });
+    const fxB = mkSeedFixture('hk-removal-fail'); installHooks(fxB, 'rewriter'); const before = fxB.head(); const b = run(fxB, true); const logB = entries();
+    const left = logB.filter((x) => x.op === 'mkdtemp').map((x) => x.dir); const stillThere = left.filter((d) => fs.existsSync(d));
+    G('an injected failure to remove the helper-owned directory does not change the seed result: it commits, exits 0 and prints exactly the three BASE, HEAD and RANGE lines on stdout', b.code === 0 && okOut(b) && fxB.head() !== before && fxB.porcelain() === '' && !/EBUSY|injected|rmdir|remov/i.test(b.out), { b });
+    G('that removal failure is reported on stderr only (stderr is not empty, names nothing on stdout) and the removal was attempted with a non-recursive rmdirSync', b.err.trim() !== '' && logB.some((x) => x.op === 'rmdir' && left.some((d) => path.resolve(d) === path.resolve(x.p)) && x.opts.every((o) => !(o !== null && typeof o === 'object' && o.recursive === true))), { err: b.err.slice(0, 300), logB });
+    for (const d of stillThere) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* the injected failure left it; the test removes it */ } } }
 }
 
 // ============================================================== GROUP: verification fails closed (R3, R5) ====
@@ -3141,6 +3555,350 @@ const KEPT_TEXT_ORACLES = [
   G(`N21, N22 and N23 replays: ${replays} runs over both layouts (8 of N21, 2 of N22, 2 of N23: the extension that claims 1 byte, and the 5-byte record with no line)`, replays === 2 * 12, replays);
 }
 
+// ============================================================== GROUPS: the 3.1.0 helper batch, verification (B1, B2, B6) ====
+// Plan docs/plans/2026-11-15-project-setup-v3.1-helper-batch.md (frozen). They sit before the advisory contract group so that every run below goes through V and verify (the recording wrappers)
+// and is swept by that group's properties (outcome shape, report grammar, no verdict wording, limitations footer).
+const CRIT_DOC = '.ai/context/critical-modules.md';
+const NOT_STORED_REASON = 'secret-shaped text not stored';
+const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
+
+// ------------------------------------------------------------- B1: the money rule is preserved, the critical-modules reference is required when it applied ----
+{
+  const G = grp('B1 critical-modules reference');
+  const LINK = ' See `.ai/context/critical-modules.md`.';
+  const FULLDOC = '# Critical modules\n\nWallet transfers lock both rows in id order.\n';
+  const CAN = 'PROJECT_SETUP_CANARY_0123456789abcdef01234567';
+  const ORD_FILES = { 'AGENTS.md': renderAgents(false), 'CLAUDE.md': `${PS_CLAUDE_TEMPLATE}\n${USER_LINE}\n`, [H.BS_03_REL]: null, [H.MANIFEST_REL]: null, ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, null])) };
+  const ORD_EVID = (o = {}) => EVID({ layout: 'ordinary', pointers: [], fullDocuments: [], claude: { bsImports: [], bsVersionSentence: null, userLines: [USER_LINE] }, ...o });
+  // The root AGENTS.md of a fixture: the template with its link ('link'), without it ('none'), with it only in an HTML comment ('comment'), without it and with a secret-shaped line the snapshot withholds ('canary'),
+  // or the link-less text changed by a function (a mutation of the money rule, which must change something).
+  const AG = (ord, v) => {
+    const t = renderAgents(!ord);
+    if (!t.includes(LINK)) throw new Error('the template money rule no longer ends with the critical-modules reference');
+    const none = t.replace(LINK, '');
+    if (v === 'link') return t;
+    if (v === 'none') return none;
+    if (v === 'comment') return t.replace(LINK, ' <!-- See `.ai/context/critical-modules.md`. -->');
+    if (v === 'canary') return `${none}\n${CAN}\n`;
+    const m = v(none);
+    if (m === none) throw new Error('the mutation did not change the root AGENTS.md');
+    return m;
+  };
+  const rootCodes = (r) => { const f = r.findings.find((x) => /^root AGENTS\.md/.test(x.name)); return f === undefined || !Array.isArray(f.detail) ? [] : f.detail.map((d) => d.code); };
+  const run = (o = {}) => {
+    const ord = o.ordinary === true;
+    const root = mkVerify('b1', { files: { ...(ord ? ORD_FILES : {}), 'AGENTS.md': AG(ord, o.base ?? 'none'), ...(o.baseFiles ?? {}) } });
+    const base = clone(H.takeSnapshot(root));
+    if (o.baseline !== undefined) o.baseline(base);
+    putF(root, 'AGENTS.md', AG(ord, o.cur ?? 'none'));
+    for (const [rel, text] of Object.entries(o.curFiles ?? {})) { if (text === null) fs.rmSync(docAbsPath(root, rel), { force: true }); else putF(root, rel, text); }
+    const ev = ord ? ORD_EVID(o.evidence) : EVID(o.evidence);
+    const go = () => verify(root, { baseline: base, evidence: ev });
+    let seen = null; let r;
+    if (o.fault !== undefined) r = faultFs(o.fault(root), go); else if (o.spy === true) { const s = spyFs({}, go); r = s.value; seen = s.seen; } else r = go();
+    return { r, root, base, seen };
+  };
+  const REF = 'critical-modules-reference';
+  const LOST = 'critical-rule-lost';
+  const denyDoc = { [POLICY_REL]: policyWith([{ glob: CRIT_DOC, kind: 'project' }]) };
+  const reads = (x) => (x.seen === null ? [] : [...x.seen.read, ...x.seen.lstat]);
+  const MONEY = /^- Money, balance, payment, and points flows:[\s\S]*?idempotency\.\n/m;
+  for (const ord of [false, true]) {
+    const L = ord ? 'ordinary layout' : 'mapped layout';
+    const o = { ordinary: ord };
+    // Applicability: the optional case, and every trigger that makes the reference required.
+    { const a = run(o); G(`${L}: both snapshots confirm no document, the baseline has no visible reference and nothing declares one: the money rule without its link is accepted (clean outcome, no root-rule finding)`, clean(a.r) && rootCodes(a.r).length === 0, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'link', cur: 'none' }); G(`${L}: the baseline's visible critical rules had the link, the link was removed and the document is absent: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    for (const [what, base] of [['the baseline also had the visible link', 'link'], ['the baseline had no link (the baseline document alone makes it required)', 'none']]) {
+      const a = run({ ...o, base, cur: 'none', baseFiles: { [CRIT_DOC]: FULLDOC }, curFiles: { [CRIT_DOC]: null }, evidence: { explained: [CRIT_DOC] } });
+      G(`${L}: the document existed in the baseline, is deleted now and the deletion is explained, the link was removed (${what}): ${REF} remains (an explanation is a collateral assertion only)`, a.base.files[CRIT_DOC] !== undefined && a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) });
+    }
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: FULLDOC } }); G(`${L}: a current full document exists (nothing declares it, the baseline had neither it nor the link) and the link is missing: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: FULLDOC }, evidence: { explained: [CRIT_DOC] } }); G(`${L}: the current document exists and the evidence lists it as explained: ${REF} remains (explained exempts a collateral change, never this rule)`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: FULLDOC }, evidence: { fullDocuments: [CRIT_DOC] } }); G(`${L}: the evidence declares the document as a full document and it exists, the link is missing: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, evidence: { fullDocuments: [CRIT_DOC] } }); G(`${L}: the evidence declares the document as a full document that is absent, the link is missing: ${REF}, and the declared document keeps its own presence finding`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && findingAt(a.r, CHK.listedFullDoc, CRIT_DOC) !== undefined, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    // R2 (plan:177, 178): the document as a POINTER (a current pointer document, a declared pointer that exists, a declared pointer that is absent). The pointer text is the generated one, so the
+    // pointer checks and the root-rule check are independent: only the root-rule finding code and the presence finding of the declared document are asserted here.
+    const PTRS = ord ? [] : [...VERIFY_POINTERS];
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: pointerOf(CRIT_DOC) } }); G(`${L}: a current POINTER document exists (nothing declares it, the baseline had neither it nor the link) and the link is missing: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: pointerOf(CRIT_DOC) }, evidence: { explained: [CRIT_DOC] } }); G(`${L}: the current pointer document exists and the evidence lists it as explained: ${REF} remains`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, curFiles: { [CRIT_DOC]: pointerOf(CRIT_DOC) }, evidence: { pointers: [...PTRS, CRIT_DOC] } }); G(`${L}: the evidence declares the document as a pointer and the pointer exists, the link is missing: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, evidence: { pointers: [...PTRS, CRIT_DOC] } }); G(`${L}: the evidence declares the document as a pointer that is absent, the link is missing: ${REF}, and the declared document keeps its own presence finding (a pointer the evidence lists is present)`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && findingAt(a.r, CHK.listedPointer, CRIT_DOC) !== undefined, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'link', cur: 'link', evidence: { pointers: [...PTRS, CRIT_DOC] } }); G(`${L}: control: the same absent declared pointer with the link present gives no ${REF} (the root rule is satisfied) and still the declared document's presence finding`, a.r.outcome === 'findings' && !rootCodes(a.r).includes(REF) && findingAt(a.r, CHK.listedPointer, CRIT_DOC) !== undefined, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    // The comment cases.
+    { const a = run({ ...o, base: 'comment', cur: 'none' }); G(`${L}: the baseline link exists only in an HTML comment and both documents are confirmed absent: the comment creates no preservation requirement (clean outcome)`, clean(a.r) && rootCodes(a.r).length === 0, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'link', cur: 'comment' }); G(`${L}: the current link exists only in an HTML comment and the baseline had the visible link: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'none', cur: 'comment', curFiles: { [CRIT_DOC]: FULLDOC } }); G(`${L}: the current link exists only in an HTML comment and the document exists: ${REF}`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'none', cur: 'comment' }); G(`${L}: a commented link with no requirement trigger changes nothing (clean outcome)`, clean(a.r) && rootCodes(a.r).length === 0, { d: diag(a.r), codes: rootCodes(a.r) }); }
+    // The money rule stays mandatory even where the reference is optional: every weakening is still critical-rule-lost, and the optional case never waives it.
+    const WEAKEN = [
+      ['the whole money rule removed', (t) => t.replace(MONEY, '')],
+      ['"no read-modify-write without a lock or atomic statement" replaced by "locking is optional"', (t) => t.replace('no read-modify-write without a lock or atomic statement', 'locking is optional')],
+      ['the idempotency half replaced ("no retry without proven idempotency" becomes "retry freely")', (t) => t.replace('no retry without proven idempotency', 'retry freely')],
+      ['the rule shortened to "Money flows"', (t) => t.replace('Money, balance, payment, and points flows', 'Money flows')],
+      ['the whole money rule moved into an HTML comment', (t) => t.replace(/^(- Money, balance, payment, and points flows:[\s\S]*?idempotency\.)\n/m, '<!-- $1 -->\n')],
+      ['the personal-data rule removed (another critical rule)', (t) => t.replace(/^- Never log or return personal data or secrets\. Redact before logging\.\n/m, '')],
+    ];
+    for (const [label, fn] of WEAKEN) {
+      const a = run({ ...o, base: 'none', cur: fn });
+      G(`${L}: the reference is optional (nothing triggers it) and ${label}: ${LOST} (the optional reference never waives the substantive rule)`, a.r.outcome === 'findings' && rootCodes(a.r).includes(LOST), { d: diag(a.r), codes: rootCodes(a.r) });
+    }
+    { const a = run({ ...o, base: 'link', cur: (t) => t.replace('no read-modify-write without a lock or atomic statement', 'locking is optional').replace(/idempotency\./, `idempotency.${LINK}`) });
+      G(`${L}: with the link kept and the rule weakened, ${LOST} (the strict path is unchanged)`, a.r.outcome === 'findings' && rootCodes(a.r).includes(LOST), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    // Reads: the document is consulted only when the visible link is missing, and a state needed for the exception is never absence.
+    { const a = run({ ...o, base: 'link', cur: 'link', baseFiles: denyDoc, spy: true }); G(`${L}: a policy-denied document, the link present: the verification stays evaluable (clean outcome) and the document is never read or inspected`, clean(a.r) && !touched(reads(a), docAbsPath(a.root, CRIT_DOC)), { d: diag(a.r), read: reads(a).filter((p) => /critical-modules/.test(p)) }); }
+    { const a = run({ ...o, base: 'link', cur: 'link', spy: true }); G(`${L}: an absent document, the link present: B1 does not look at the document at all (no read and no inspection of its path)`, clean(a.r) && !touched(reads(a), docAbsPath(a.root, CRIT_DOC)), { d: diag(a.r), read: reads(a).filter((p) => /critical-modules/.test(p)) }); }
+    { const a = run({ ...o, base: 'link', cur: 'none', baseFiles: denyDoc, spy: true }); G(`${L}: the baseline link already makes the reference required, so a policy-denied document state is not needed: ${REF} is reported (findings, not not-evaluable) and the document is not read`, a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && !touched(reads(a), docAbsPath(a.root, CRIT_DOC)), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseFiles: denyDoc, spy: true }); G(`${L}: the link is missing and the document state needed for the exception is policy-denied: not evaluable, naming the document, and nothing denied is read`, notEval(a.r, /critical-modules\.md/) && !touched(a.seen.read, docAbsPath(a.root, CRIT_DOC)), diag(a.r)); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseFiles: { ...denyDoc, [CRIT_DOC]: FULLDOC }, spy: true }); G(`${L}: the same with the denied document on disk: not evaluable, and the denied document is never read`, a.r.outcome === 'not-evaluable' && a.r.findings.length === 0 && !touched(a.seen.read, docAbsPath(a.root, CRIT_DOC)), diag(a.r)); }
+    // The directory of the document exists in the fixture (a neighbor file), so the inspection of the document itself is what fails; with no such directory the path chain ends earlier, in a plain absence.
+    { const a = run({ ...o, base: 'none', cur: 'none', baseFiles: { '.ai/context/notes.md': '# notes\n' }, fault: (root) => ({ lstat: (p) => { if (same(path.resolve(p), docAbsPath(root, CRIT_DOC))) throw errCode('EACCES'); } }) }); G(`${L}: the link is missing and the document cannot be inspected (EACCES): not evaluable, naming the document, never absence`, notEval(a.r, /critical-modules\.md/), diag(a.r)); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseline: (b) => { b.skipped.push({ path: CRIT_DOC, reason: 'policy-denied' }); } }); G(`${L}: the link is missing and the BASELINE skipped the document: not evaluable, naming the document and the baseline side (a baseline that skipped a path cannot show it was absent)`, notEval(a.r, /critical-modules\.md/) && a.r.notEvaluable.some((x) => /baseline side: unavailable/.test(String(x))), diag(a.r)); }
+    // The baseline AGENTS.md text: a withheld text, or a text of an unsupported shape, never shows that the baseline lacked the reference.
+    { const a = run({ ...o, base: 'canary', cur: 'none' });
+      G(`${L}: the baseline AGENTS.md text was withheld (secret-shaped content) and the link is missing: not evaluable, naming AGENTS.md (never "the baseline had no link")`, a.base.files['AGENTS.md'].text === undefined && a.base.skipped.some((e) => e.path === 'AGENTS.md' && e.reason === NOT_STORED_REASON) && notEval(a.r, /AGENTS\.md/), diag(a.r)); }
+    { const a = run({ ...o, base: 'canary', cur: 'link' }); G(`${L}: the same withheld baseline text with the link present: evaluable (the baseline text is not needed when the link is there)`, clean(a.r) && rootCodes(a.r).length === 0, diag(a.r)); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseline: (b) => { b.files['AGENTS.md'].text = 5; } }); G(`${L}: a baseline AGENTS.md record whose text is not text: not evaluable, never "no link"`, notEval(a.r), diag(a.r)); }
+    // R2 (plan:158, 159): a baseline text the scanner cannot read EXACTLY (an unsupported Markdown shape, a REAL file the capture stored whole: the case above only exercises input validation).
+    // The text is needed only when the current link is missing: then the baseline cannot be shown to have lacked the reference (not evaluable); with the link present it is never read for this decision.
+    const CLEAN_BASE = AG(ord, 'none');
+    const SHAPES = [['a code fence that never closes', '\n```text\nnever closed\n'], ['an HTML comment that stays open across a list item', '\nlead <!-- note\n- item\n--> tail\n']];
+    for (const [what, tail] of SHAPES) {
+      const bad = `${CLEAN_BASE}${tail}`;
+      const pre = H.unsupportedShapes(bad).length > 0 && H.unsupportedShapes(CLEAN_BASE).length === 0;
+      { const a = run({ ...o, base: 'none', cur: 'none', baseFiles: { 'AGENTS.md': bad } });
+        G(`${L}: the baseline AGENTS.md has ${what} (unsupported shape, its text stored whole) and the link is missing: not evaluable, naming AGENTS.md, never "the baseline had no link"`, pre && a.base.files['AGENTS.md'].text === bad && !a.base.skipped.some((e) => e.path === 'AGENTS.md') && notEval(a.r, /AGENTS\.md/), { pre, d: diag(a.r) }); }
+      { const a = run({ ...o, base: 'none', cur: 'link', baseFiles: { 'AGENTS.md': bad } });
+        G(`${L}: the same baseline with ${what} and the link present: the verification stays evaluable (clean outcome, no root-rule finding), the baseline text is not needed`, pre && clean(a.r) && rootCodes(a.r).length === 0, { pre, d: diag(a.r), codes: rootCodes(a.r) }); }
+      { const a = run({ ...o, base: 'none', cur: 'none', baseFiles: { 'AGENTS.md': CLEAN_BASE } });
+        G(`${L}: control for ${what}: the same fixture whose baseline AGENTS.md is readable exactly is the optional case (clean outcome), so the shape is what made the verification not evaluable`, clean(a.r) && rootCodes(a.r).length === 0, diag(a.r)); }
+    }
+    // R6 (plan:153-161, 177, 181): a POSITIVE trigger (the baseline snapshot holds the document, or its current permitted state is present) already makes the reference required, so the baseline AGENTS.md text
+    // is not needed for the exception: its unavailability (withheld, or a shape the scanner cannot place) must not turn the finding into not-evaluable. Each unreadable baseline text is paired with the
+    // controls that keep their result, where nothing resolves the question (both documents confirmed absent, or the document state is unavailable too): the verification stays not evaluable.
+    const UNREAD = [
+      { what: 'the baseline AGENTS.md text was withheld (secret-shaped content: the record keeps no text)', opts: { base: 'canary' }, pre: (a) => a.base.files['AGENTS.md'].text === undefined && a.base.skipped.some((e) => e.path === 'AGENTS.md' && e.reason === NOT_STORED_REASON) },
+      ...SHAPES.map(([what, tail]) => { const bad = `${CLEAN_BASE}${tail}`; return { what: `the baseline AGENTS.md has ${what} (unsupported shape, text stored whole)`, opts: { base: 'none', baseFiles: { 'AGENTS.md': bad } }, pre: (a) => H.unsupportedShapes(bad).length > 0 && H.unsupportedShapes(CLEAN_BASE).length === 0 && a.base.files['AGENTS.md'].text === bad && !a.base.skipped.some((e) => e.path === 'AGENTS.md') }; }),
+    ];
+    const r6 = (t, x = {}) => run({ ...o, cur: 'none', ...t.opts, baseFiles: { ...(t.opts.baseFiles ?? {}), ...(x.baseFiles ?? {}) }, ...(x.curFiles === undefined ? {} : { curFiles: x.curFiles }), ...(x.spy === true ? { spy: true } : {}) });
+    const noBaseTextReason = (r) => !r.notEvaluable.some((x) => /AGENTS\.md/.test(String(x)));
+    for (const t of UNREAD) {
+      for (const [kind, text] of [['full document', FULLDOC], ['pointer document', pointerOf(CRIT_DOC)]]) {
+        const a = r6(t, { curFiles: { [CRIT_DOC]: text } });
+        G(`${L}: ${t.what}, the link is missing and a current ${kind} exists (the baseline had no document): ${REF}, not not-evaluable (the present document already makes the reference required)`, t.pre(a) && a.base.files[CRIT_DOC] === undefined && fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && noBaseTextReason(a.r), { d: diag(a.r), codes: rootCodes(a.r) });
+      }
+      { const a = r6(t, { baseFiles: { [CRIT_DOC]: FULLDOC }, curFiles: { [CRIT_DOC]: null } });
+        G(`${L}: ${t.what}, the link is missing and the document existed in the baseline and is deleted now: ${REF}, not not-evaluable (the baseline document already makes the reference required)`, t.pre(a) && a.base.files[CRIT_DOC] !== undefined && !fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && noBaseTextReason(a.r), { d: diag(a.r), codes: rootCodes(a.r) }); }
+      { const a = r6(t);
+        G(`${L}: control: ${t.what}, the link is missing, both documents are confirmed absent and nothing declares one: still not evaluable, naming AGENTS.md (nothing shows the baseline lacked the reference)`, t.pre(a) && a.base.files[CRIT_DOC] === undefined && !fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && notEval(a.r, /AGENTS\.md/), diag(a.r)); }
+      { const a = r6(t, { baseFiles: denyDoc, spy: true });
+        G(`${L}: control: ${t.what}, the link is missing and the document state is unavailable too (policy-denied, absent on disk): still not evaluable (no positive trigger resolves it) and the denied document is never read`, t.pre(a) && notEval(a.r, /AGENTS\.md|critical-modules\.md/) && !touched(a.seen.read, docAbsPath(a.root, CRIT_DOC)), diag(a.r)); }
+      { const a = r6(t, { baseFiles: { ...denyDoc, [CRIT_DOC]: FULLDOC }, spy: true });
+        G(`${L}: control: ${t.what}, the link is missing and the document state is unavailable too (policy-denied, present on disk): still not evaluable (no positive trigger resolves it) and the denied document is never read`, t.pre(a) && notEval(a.r, /AGENTS\.md|critical-modules\.md/) && !touched(a.seen.read, docAbsPath(a.root, CRIT_DOC)), diag(a.r)); }
+    }
+    // R6 sibling (plan:156 current document trigger, plan:177, plan:181 "when needed for the exception"): the BASELINE skipped the document (its baseline state is unavailable) while the baseline AGENTS.md text is
+    // readable without the link. A CURRENT document that is present is a positive trigger on its own, so the baseline document state is not needed for the exception: the finding is reported, and B1 adds no
+    // critical-modules reason to the unavailable list. Its control is the same skipped baseline document with the current document confirmed absent: then the exception does need the baseline state.
+    // The positive case uses a current POINTER document, not a full one: the collateral comparison is an independent check (plan:152 keeps every independently required inventory check, plan:273 keeps the
+    // collateral controls) that asks the baseline for the state of every path with a current record, so a present full document next to a skipped baseline document is not evaluable through that comparison
+    // whatever B1 does. A current pointer is in the comparison's exempt set (the pointers found in the listing), so B1 is the only check that consults the skipped baseline state. The full-document variant
+    // below therefore compares reasons: the missing link must add none to the ones the same fixture has with the link present.
+    const SKIP_BASE_DOC = (b) => { b.skipped.push({ path: CRIT_DOC, reason: 'policy-denied' }); };
+    const baseSkipped = (a) => a.base.files[CRIT_DOC] === undefined && a.base.skipped.some((e) => e.path === CRIT_DOC && e.reason === 'policy-denied');
+    const baseTextReadable = (a) => typeof a.base.files['AGENTS.md'].text === 'string' && !a.base.files['AGENTS.md'].text.includes(LINK.trim()) && H.unsupportedShapes(a.base.files['AGENTS.md'].text).length === 0;
+    const noCritReason = (r) => !r.notEvaluable.some((x) => /critical-modules/.test(String(x)));
+    { const a = run({ ...o, base: 'none', cur: 'none', baseline: SKIP_BASE_DOC, curFiles: { [CRIT_DOC]: pointerOf(CRIT_DOC) } });
+      G(`${L}: the baseline skipped the document, a current pointer document exists, the link is missing, nothing is declared and the baseline AGENTS.md text is readable without the link: ${REF}, not not-evaluable, and no critical-modules reason (the present current document already makes the reference required; no other check consults the skipped baseline state)`, baseSkipped(a) && baseTextReadable(a) && fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && a.r.outcome === 'findings' && rootCodes(a.r).includes(REF) && noCritReason(a.r), { d: diag(a.r), codes: rootCodes(a.r) }); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseline: SKIP_BASE_DOC, curFiles: { [CRIT_DOC]: FULLDOC } });
+      const c = run({ ...o, base: 'none', cur: 'link', baseline: SKIP_BASE_DOC, curFiles: { [CRIT_DOC]: FULLDOC } });
+      const reasons = (r) => JSON.stringify([...r.notEvaluable].map(String).sort());
+      G(`${L}: the baseline skipped the document and a current full document exists: the collateral comparison keeps its own reason (the control with the link present is not evaluable, naming the document), and the missing link adds no reason of its own (the same reasons with and without the link)`, baseSkipped(a) && baseTextReadable(a) && fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && notEval(c.r, /critical-modules\.md/) && a.r.outcome === 'not-evaluable' && reasons(a.r) === reasons(c.r), { missingLink: diag(a.r).reasons, linkPresent: diag(c.r).reasons }); }
+    { const a = run({ ...o, base: 'none', cur: 'none', baseline: SKIP_BASE_DOC });
+      G(`${L}: control: the same skipped baseline document, the current document confirmed absent, the link missing and nothing declared: not evaluable, naming the document (the exception needs the baseline state, and a baseline that skipped a path cannot show it was absent)`, baseSkipped(a) && baseTextReadable(a) && !fs.existsSync(docAbsPath(a.root, CRIT_DOC)) && notEval(a.r, /critical-modules\.md/), diag(a.r)); }
+  }
+  // Direct callers keep the conservative behavior (the requirement defaults to required), so a caller that never heard of the change is as strict as before.
+  { const t = renderAgents(false).replace(LINK, ''); const f = rootCheck(t, { activated: false });
+    G(`a direct call of checkRootInstructions without any requirement information still requires the reference: the link-less rule reports ${REF} and ${LOST}`, has(f, REF) && has(f, LOST), f); }
+}
+
+// ------------------------------------------------------------- B2: collateral findings carry the path, the kind of change, a class from a closed set and the manifest state ----
+{
+  const G = grp('B2 collateral classes');
+  const NAME = 'no unexplained collateral modification in the permitted inventory';
+  const CLASSES = ['canonical-agent', 'security-policy', 'tool', 'claude-project-settings', 'codex-agent-definition', 'decision-document', 'project-extension', 'other-inventory'];
+  const CHANGES = { creation: 'creation', created: 'creation', create: 'creation', modification: 'modification', modified: 'modification', modify: 'modification', deletion: 'deletion', deleted: 'deletion', delete: 'deletion' };
+  const TEXT = { '.mjs': 'export {};\n', '.toml': 'a = 1\n', '.json': '{}\n', '.md': '# x\n' };
+  const textFor = (rel) => (rel === POLICY_REL ? policyWith(PRIVATE_DENY) : TEXT[path.posix.extname(rel)] ?? 'x\n');
+  const collateralOf = (r) => r.findings.find((x) => x.name === NAME);
+  // The detail's shape is not fixed by the plan (it says "encoded detail data"): an entry is an object with this path, or a text that starts with it. Its class is the one string value that belongs to the closed set.
+  const nodesOf = (detail) => { const out = []; const walk = (v) => { if (typeof v === 'string') out.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v !== null && typeof v === 'object') { if (typeof v.path === 'string') out.push(v); else Object.values(v).forEach(walk); } }; walk(detail); return out; };
+  const entryFor = (r, rel) => { const f = collateralOf(r); return f === undefined ? undefined : nodesOf(f.detail).find((n) => (typeof n === 'string' ? n === rel || (n.startsWith(rel) && !/[\w./-]/.test(n[rel.length])) : n.path === rel)); };
+  const stringsOf = (n) => { const out = []; const walk = (v) => { if (typeof v === 'string') out.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v !== null && typeof v === 'object') Object.values(v).forEach(walk); }; walk(n); return typeof n === 'string' ? n.split(/[\s:;,|()=]+/).filter(Boolean) : out; };
+  const classesOf = (e) => stringsOf(e).filter((s) => CLASSES.includes(s));
+  const changeOf = (e) => { const c = [...new Set(stringsOf(e).filter((s) => Object.hasOwn(CHANGES, s)).map((s) => CHANGES[s]))]; return c.length === 1 ? c[0] : null; };
+  const ORD_FILES = { 'AGENTS.md': renderAgents(false), 'CLAUDE.md': `${PS_CLAUDE_TEMPLATE}\n${USER_LINE}\n`, [H.BS_03_REL]: null, [H.MANIFEST_REL]: null, ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, null])) };
+  const ORD_EVID = (o = {}) => EVID({ layout: 'ordinary', pointers: [], fullDocuments: [], claude: { bsImports: [], bsVersionSentence: null, userLines: [USER_LINE] }, ...o });
+  const MAN = H.MANIFEST_REL;
+  const man = (extra = {}) => manifestJson({ ...Object.fromEntries(VERIFY_POINTERS.map((p) => [p, { ownership: 'merged' }])), ...extra });
+  const SEEN = [];
+  const run = (o = {}) => {
+    const ord = o.ordinary === true;
+    const root = mkVerify('b2', { files: { ...(ord ? ORD_FILES : {}), ...(o.baseFiles ?? {}) } });
+    const base = clone(H.takeSnapshot(root));
+    if (o.baseline !== undefined) o.baseline(base);
+    for (const [rel, text] of Object.entries(o.curFiles ?? {})) { if (text === null) fs.rmSync(docAbsPath(root, rel), { force: true }); else putF(root, rel, text); }
+    const ev = ord ? ORD_EVID(o.evidence) : EVID(o.evidence);
+    const r = verify(root, { baseline: base, evidence: ev });
+    return { r, root, base };
+  };
+  const note = (r, rel) => { const e = entryFor(r, rel); if (e !== undefined) SEEN.push(e); return e; };
+  // Every actual path of the plan, and the boundaries: each as an unexplained creation in its own fixture.
+  const TOOLS = ['git-safe-core.mjs', 'git-safe.mjs', 'guard-raw-git-core.mjs', 'guard-raw-git.mjs', 'hooks-selftest.mjs', 'review-diff.mjs', 'security-policy.mjs'].map((n) => `.ai/tools/${n}`);
+  const TABLE = [
+    ['.ai/agents/docs-sync.md', 'canonical-agent'], ['.ai/agents/reviewer.md', 'canonical-agent'],
+    [POLICY_REL, 'security-policy'],
+    ...TOOLS.map((p) => [p, 'tool']), ['.ai/tools/nested/deep.mjs', 'tool'],
+    ['.claude/settings.json', 'claude-project-settings'],
+    ['.codex/agents/docs_sync.toml', 'codex-agent-definition'], ['.codex/agents/reviewer.toml', 'codex-agent-definition'], ['.codex/agents/other.toml', 'codex-agent-definition'],
+    ['.ai/decisions/0001-forbid-non-whitelisted-off.md', 'decision-document'], ['.ai/decisions/README.md', 'decision-document'],
+    ['.ai/agents/reviewer.project.md', 'project-extension'], ['.ai/agents/docs-sync.project.md', 'project-extension'],
+    ['.ai/context/zz-extra.md', 'other-inventory'], ['docs/zz-extra.md', 'other-inventory'], ['docs/integrations/zz-extra.md', 'other-inventory'], ['src/wallet/AGENTS.md', 'other-inventory'], ['.toolchain-config.json', 'other-inventory'], ['.claude/agents/other.md', 'other-inventory'],
+    // unknown agent files and case variants
+    ['.ai/agents/unknown.md', 'other-inventory'], ['.ai/agents/Reviewer.md', 'other-inventory'], ['.ai/agents/DOCS-SYNC.md', 'other-inventory'], ['.ai/agents/Reviewer.project.md', 'other-inventory'],
+    // a prefix or a suffix must not impersonate a canonical agent or a recognized extension
+    ['.ai/agents/reviewer.md.md', 'other-inventory'], ['.ai/agents/docs-sync.md.md', 'other-inventory'], ['.ai/agents/reviewer-v2.md', 'other-inventory'], ['.ai/agents/reviewer.project.md.md', 'other-inventory'], ['.ai/agents/docs-sync.project.md.md', 'other-inventory'],
+    // the class is a fixed literal, never built from the words of the path
+    ['docs/tool.md', 'other-inventory'], ['docs/canonical-agent.md', 'other-inventory'], ['docs/security-policy.md', 'other-inventory'],
+  ];
+  for (const [rel, cls] of TABLE) {
+    const a = run({ curFiles: { [rel]: textFor(rel) } }); const e = note(a.r, rel);
+    G(`an unexplained creation of ${rel} is a collateral finding with the class ${cls} and the change kind creation`, a.r.outcome === 'findings' && e !== undefined && JSON.stringify(classesOf(e)) === JSON.stringify([cls]) && changeOf(e) === 'creation', { d: diag(a.r), entry: e });
+  }
+  // R3 (plan:265): directory boundaries cannot be confused by a prefix. collateralClass is called directly (it is exported): a path in a sibling directory whose name merely STARTS with a classified
+  // directory's name is other-inventory, the same names written in the directory are classified, and the bare directory name (no trailing slash, so no file inside it) is not the directory's class.
+  { const BOUNDARY = [
+      // [directory, in-directory file, its class, prefix-lookalikes (all other-inventory)]
+      ['.ai/tools', '.ai/tools/x.mjs', 'tool', ['.ai/tools-extra/x.mjs', '.ai/toolsx/x.mjs', '.ai/tools2/x.mjs', '.ai/tools.bak/x.mjs', 'x.ai/tools/x.mjs', 'docs/.ai/tools/x.mjs']],
+      ['.codex/agents', '.codex/agents/x.toml', 'codex-agent-definition', ['.codex/agents-extra/x.toml', '.codex/agentsx/x.toml', '.codex/agents2/x.toml', '.codex/agents.bak/x.toml', 'x.codex/agents/x.toml', 'docs/.codex/agents/x.toml']],
+      ['.ai/decisions', '.ai/decisions/x.md', 'decision-document', ['.ai/decisions-extra/x.md', '.ai/decisionsx/x.md', '.ai/decisions2/x.md', '.ai/decisions.bak/x.md', 'x.ai/decisions/x.md', 'docs/.ai/decisions/x.md']],
+    ];
+    for (const [dir, inside, cls, lookalikes] of BOUNDARY) {
+      G(`collateralClass: the in-directory path ${inside} is ${cls} (the control for the boundary cases of ${dir})`, H.collateralClass(inside) === cls, H.collateralClass(inside));
+      const nested = `${dir}/nested/deep/x${path.posix.extname(inside)}`;
+      G(`collateralClass: a file nested below ${dir}/ (${nested}) is ${cls} too (the whole directory is the class, not one level)`, H.collateralClass(nested) === cls, H.collateralClass(nested));
+      for (const p of lookalikes) G(`collateralClass: ${p} is other-inventory (a directory whose name only starts with ${dir}, or a path that merely contains it, is not ${dir}/)`, H.collateralClass(p) === 'other-inventory', H.collateralClass(p));
+      G(`collateralClass: the bare directory name ${dir} (no trailing slash) is other-inventory, never ${cls}`, H.collateralClass(dir) === 'other-inventory', H.collateralClass(dir));
+    }
+    // The three the plan names, once more as the plain table, so the exact assertion of R3 stands on its own line.
+    for (const [p, cls] of [['.ai/tools-extra/x.mjs', 'other-inventory'], ['.codex/agents-extra/x.toml', 'other-inventory'], ['.ai/decisions-extra/x.md', 'other-inventory'], ['.ai/tools/x.mjs', 'tool'], ['.codex/agents/x.toml', 'codex-agent-definition'], ['.ai/decisions/x.md', 'decision-document']]) G(`collateralClass(${p}) is ${cls}`, H.collateralClass(p) === cls, H.collateralClass(p));
+    // Through the verification only the in-directory neighbours are observable: the lookalike directories (.ai/tools-extra/ and the like) are outside the walked inventory (the batch adds no inventory
+    // directory, plan:241), so no finding exists for them there and the unit assertions above are where the boundary is proven.
+    for (const [rel, cls] of [['.ai/tools/x.mjs', 'tool'], ['.codex/agents/x.toml', 'codex-agent-definition'], ['.ai/decisions/x.md', 'decision-document']]) {
+      const a = run({ curFiles: { [rel]: textFor(rel) } }); const e = note(a.r, rel);
+      G(`through the verification: an unexplained creation of ${rel} is a collateral finding of class ${cls}`, a.r.outcome === 'findings' && e !== undefined && JSON.stringify(classesOf(e)) === JSON.stringify([cls]) && changeOf(e) === 'creation', { d: diag(a.r), entry: e });
+    }
+  }
+  // Creation, modification and deletion, with and without ownership, always reported without an explanation.
+  const P = '.ai/tools/git-safe.mjs';
+  const CHG = [
+    ['a creation', {}, { [P]: 'new\n' }, 'creation'],
+    ['a modification', { [P]: 'old\n' }, { [P]: 'new\n' }, 'modification'],
+    ['a deletion', { [P]: 'old\n' }, { [P]: null }, 'deletion'],
+    ['a creation of a path both manifests already own', { [MAN]: man({ [P]: ownershipRecord('full') }) }, { [P]: 'new\n' }, 'creation'],
+    ['a modification of a path both manifests own', { [P]: 'old\n', [MAN]: man({ [P]: ownershipRecord('full') }) }, { [P]: 'new\n' }, 'modification'],
+    ['a deletion of a path both manifests own', { [P]: 'old\n', [MAN]: man({ [P]: ownershipRecord('full') }) }, { [P]: null }, 'deletion'],
+    ['a creation whose ownership record is added by the same run', {}, { [P]: 'new\n', [MAN]: man({ [P]: ownershipRecord('full') }) }, 'creation'],
+    ['a modification whose ownership record changes in the same run', { [P]: 'old\n', [MAN]: man({ [P]: ownershipRecord('merged') }) }, { [P]: 'new\n', [MAN]: man({ [P]: ownershipRecord('full') }) }, 'modification'],
+  ];
+  for (const [label, baseFiles, curFiles, kind] of CHG) {
+    const a = run({ baseFiles, curFiles }); const e = note(a.r, P);
+    G(`${label} is an unexplained collateral finding with the change kind ${kind} and the class tool (ownership approves nothing)`, a.r.outcome === 'findings' && e !== undefined && changeOf(e) === kind && JSON.stringify(classesOf(e)) === JSON.stringify(['tool']), { d: diag(a.r), entry: e });
+  }
+  { const a = run({ baseFiles: { [P]: 'same\n', [MAN]: man({ [P]: ownershipRecord('merged') }) }, curFiles: { [MAN]: man({ [P]: ownershipRecord('full') }) } });
+    G('an unchanged file whose ownership record changes produces no collateral finding (only changed files are collateral)', collateralOf(a.r) === undefined && entryFor(a.r, P) === undefined && clean(a.r), diag(a.r)); }
+  { const a = run({}); G('control: nothing changed gives no collateral finding', collateralOf(a.r) === undefined && clean(a.r), diag(a.r)); }
+  // An explanation is an exact reviewed path: it removes that path's entry and nothing else.
+  { const A1 = '.ai/tools/a.mjs'; const B1_ = '.ai/tools/b.mjs';
+    const both = run({ curFiles: { [A1]: 'a\n', [B1_]: 'b\n' } });
+    const one = run({ curFiles: { [A1]: 'a\n', [B1_]: 'b\n' }, evidence: { explained: [A1] } });
+    const all = run({ curFiles: { [A1]: 'a\n', [B1_]: 'b\n' }, evidence: { explained: [A1, B1_] } });
+    G('without an explanation both new tools are listed, each with its own entry', entryFor(both.r, A1) !== undefined && entryFor(both.r, B1_) !== undefined, diag(both.r));
+    G('explaining one exact path removes only that path\'s entry: the neighbor stays in the collateral finding', entryFor(one.r, A1) === undefined && entryFor(one.r, B1_) !== undefined && one.r.outcome === 'findings', diag(one.r));
+    G('explaining every changed path leaves no collateral finding at all (clean outcome)', collateralOf(all.r) === undefined && clean(all.r), diag(all.r));
+    const pre = run({ curFiles: { '.ai/tools/a.mjs.bak.mjs': 'x\n' }, evidence: { explained: [A1] } });
+    G('an explanation is an exact path: the explanation of one path does not cover a different path that starts with it', entryFor(pre.r, '.ai/tools/a.mjs.bak.mjs') !== undefined, diag(pre.r)); }
+  for (const [label, baseFiles, curFiles] of [['a modification', { [P]: 'old\n' }, { [P]: 'new\n' }], ['a deletion', { [P]: 'old\n' }, { [P]: null }]]) {
+    const a = run({ baseFiles, curFiles, evidence: { explained: [P] } });
+    G(`explaining ${label} of ${P} removes its collateral finding (the exemption algorithm is unchanged)`, collateralOf(a.r) === undefined && clean(a.r), diag(a.r));
+  }
+  // An extension the evidence declares keeps its own check and its exemption; an undeclared one is collateral (above).
+  { const EXT = '.ai/agents/reviewer.project.md'; const a = run({ curFiles: { [EXT]: 'ext\n' }, evidence: { extensions: { [EXT]: { approvedAppend: 'ext\n' } } } });
+    G('a project extension declared in the evidence is exempt from the collateral comparison (its own preservation check applies instead)', entryFor(a.r, EXT) === undefined, diag(a.r)); }
+  // The manifest: absent, present without a record, and present with a record stay distinguishable, and nothing invents an owner.
+  { const T = '.ai/tools/x.mjs';
+    const s1 = run({ ordinary: true, curFiles: { [T]: 'x\n' } });
+    const s2 = run({ ordinary: true, baseFiles: { [MAN]: manifestJson({}) }, curFiles: { [T]: 'x\n' } });
+    const s3 = run({ ordinary: true, baseFiles: { [MAN]: manifestJson({}) }, curFiles: { [T]: 'x\n', [MAN]: manifestJson({ [T]: ownershipRecord('full') }) } });
+    const e1 = note(s1.r, T); const e2 = note(s2.r, T); const e3 = note(s3.r, T);
+    G('the three manifest situations are reported for the same new path: no manifest, a valid manifest without a record, a valid manifest with a recorded ownership', [e1, e2, e3].every((e) => e !== undefined) && s1.r.outcome === 'findings' && s2.r.outcome === 'findings' && s3.r.outcome === 'findings', { s1: diag(s1.r), s2: diag(s2.r), s3: diag(s3.r) });
+    const j = [e1, e2, e3].map((e) => JSON.stringify(e));
+    G('the detail entries of those three situations are pairwise different (an absent manifest, a missing record and a recorded ownership are not told the same way)', new Set(j).size === 3, j);
+    G('only the recorded ownership names an owner: the entries for the absent manifest and for the missing record carry no ownership value (no owner is invented), the recorded one carries "full"', !stringsOf(e1).includes('full') && !stringsOf(e2).includes('full') && !stringsOf(e1).includes('merged') && !stringsOf(e2).includes('merged') && stringsOf(e3).includes('full'), { e1, e2, e3 }); }
+  { const T = '.ai/tools/x.mjs'; const a = run({ ordinary: true, curFiles: { [T]: 'x\n', [MAN]: '{nope' } });
+    G('a malformed current manifest keeps its existing finding and does not hide the collateral entry of the new path', a.r.outcome === 'findings' && findingNames(a.r).some((n) => /manifest\.json is present and parses/.test(n)) && entryFor(a.r, T) !== undefined, diag(a.r)); }
+  { const T = '.ai/tools/x.mjs'; const a = run({ ordinary: true, baseFiles: { [POLICY_REL]: policyWith([{ glob: MAN, kind: 'project' }]), [MAN]: manifestJson({}) }, curFiles: { [T]: 'x\n' } });
+    G('a manifest the policy skips (no usable baseline summary) keeps its existing behavior: not evaluable, naming the manifest', notEval(a.r, /manifest\.json/), diag(a.r)); }
+  // Unavailable paths stay not evaluable, explained or not (the collateral comparison consults both sides first).
+  for (const [label, evidence] of [['not explained', {}], ['explained', { explained: [P] }]]) {
+    const a = run({ curFiles: { [P]: 'new\n' }, evidence, baseline: (b) => { b.skipped.push({ path: P, reason: 'policy-denied' }); } });
+    G(`a path the baseline skipped and the run created (${label}): not evaluable, naming the path and the baseline side, never a collateral finding`, notEval(a.r, /git-safe\.mjs/) && a.r.notEvaluable.some((x) => /baseline side: unavailable/.test(String(x))), diag(a.r));
+  }
+  // A path with a line break in its name cannot forge a report line. A file system may refuse some of these names, which is then reported as a skip.
+  for (const [label, c] of [['U+2028', LS], ['U+2029', PS], ['NEL (U+0085)', ch(0x85)], ['LF', ch(10)], ['CR', ch(13)]]) {
+    const rel = `docs/a${c}OUTCOME no-automated-findings passed.md`;
+    const a = attempt(() => run({ curFiles: { [rel]: 'x\n' } }));
+    if (a.threw !== undefined) { skip(`[B2 collateral classes] a ${label} in the name of a new file cannot forge a report line`, `this file system does not accept that name (${a.threw.slice(0, 80)})`); continue; }
+    const text = H.formatVerify(a.r, false); const e = note(a.r, rel);
+    G(`a ${label} in the name of a new file: the collateral entry exists with the class other-inventory, the report keeps its grammar and holds exactly one OUTCOME line, never a forged one`, a.r.outcome === 'findings' && e !== undefined && JSON.stringify(classesOf(e)) === JSON.stringify(['other-inventory']) && reportGrammarProblems(text, a.r).length === 0 && !text.split(LINE_BREAK).some((l) => /^OUTCOME no-automated/.test(l)) && outcomeLines(text).length === 1, { d: diag(a.r), problems: reportGrammarProblems(text, a.r) });
+  }
+  G('every class an entry carries belongs to the closed set of eight, each entry carries exactly one class, and the run emitted every class of the set (the property is not vacuous)', SEEN.length >= TABLE.length && SEEN.every((e) => classesOf(e).length === 1) && CLASSES.every((c) => SEEN.some((e) => classesOf(e)[0] === c)), { entries: SEEN.length, classes: [...new Set(SEEN.map((e) => classesOf(e)[0]))] });
+  G('the finding keeps its name (no unexplained collateral modification in the permitted inventory): a constant, with the variable text only in its details', (() => { const a = run({ curFiles: { 'docs/tool.md': 'x\n' } }); return collateralOf(a.r) !== undefined && !/docs\/tool/.test(collateralOf(a.r).name); })());
+  { const src = rd(path.join(TESTS, 'live', 'bs-doc-map.mjs')); const i = src.indexOf('==== BEGIN path-state accessors'); const j = src.indexOf('==== END path-state accessors ====');
+    const after = src.slice(j, src.indexOf('\n}\n', j));
+    G('B2 source pin: a baseManifestState accessor stands inside the path-state accessor boundary, beside curManifestState, and nothing after the boundary indexes the baseline or snapshot manifest directly', i > 0 && j > i && /baseManifestState/.test(src.slice(i, j)) && /curManifestState/.test(src.slice(i, j)) && !/baseline\.manifest|snap\.manifest/.test(after), { i, j }); }
+}
+
+// ------------------------------------------------------------- B6: the pointer and stale-token limitation, and its paired controls ----
+{
+  const G = grp('B6 limitations');
+  const S = [
+    'Token matching may also report a fact copied into a pointer when a generic token occurs only in navigation text such as Scope or a heading.',
+    'Choose distinctive factual tokens and review the matched context.',
+    'A visible historical mention of a stale conflict value in 03 can likewise trigger stale-value-retained; the helper cannot distinguish historical explanation from an operative claim.',
+  ];
+  const lims = H.KNOWN_LIMITATIONS.map((l) => l.replace(/\s+/g, ' '));
+  S.forEach((s, i) => G(`the helper's limitations carry sentence ${i + 1} of the pointer and stale-token limitation exactly: "${s.slice(0, 48)}..."`, lims.some((l) => l.includes(s)), lims));
+  G('the pointer and stale-token sentences sit in the report footer after every outcome, written without a verdict word', ['not-evaluable', 'findings', 'no-automated-findings'].every((outcome) => { const text = H.formatVerify({ outcome, findings: outcome === 'findings' ? [{ name: 'x' }] : [], notEvaluable: outcome === 'not-evaluable' ? ['x'] : [], checked: outcome === 'no-automated-findings' ? [{ name: 'x' }] : [] }, false); return S.every((s) => text.replace(/\s+/g, ' ').includes(s)) && own(text).every((l) => !FORBIDDEN.test(l)); }));
+  G('the earlier raw-text limitation still stands (the new text extends the footer and replaces nothing)', H.KNOWN_LIMITATIONS.some((l) => /raw text/.test(l) && /copied into a pointer/.test(l)) && H.KNOWN_LIMITATIONS.some((l) => /assumes the baseline is a snapshot it took itself/.test(l)));
+  // The paired controls over the checker: detection is unchanged in all four.
+  const PTR = pointerOf('docs/database.md');
+  const GEN = { id: 'nav-1', doc: 'docs/database.md', token: 'Scope', ref: 'Database', kind: 'config' };
+  const doc03 = (tok) => insertUnder(build03(), 'Database', tok);
+  G('precondition: the generated pointer carries the generic word Scope in its navigation text', /\bScope\b/.test(PTR), PTR);
+  { const f = H.checkConsolidation({ doc03Text: doc03('Scope of the schema is the wallet database'), inventory: [GEN], pointers: { 'docs/database.md': PTR }, fullDocuments: {} });
+    G('navigation-token collision stays advisory: a generic token that occurs only in the pointer\'s own Scope line is still reported as copied-into-pointer, naming the fact (the detection is unchanged)', f.length === 1 && f[0].code === 'copied-into-pointer' && f[0].id === 'nav-1', f); }
+  { const f = H.checkConsolidation({ doc03Text: build03(), inventory: [INV[1]], pointers: { 'docs/database.md': `${PTR}\n- ${INV[1].token}\n` }, fullDocuments: {} });
+    G('actual factual duplication in a pointer is still detected as copied-into-pointer', f.length === 1 && f[0].code === 'copied-into-pointer' && f[0].id === 'tx-1', f); }
+  { const f = H.checkConsolidation({ doc03Text: build03(), inventory: [INV[1]], pointers: { 'docs/database.md': PTR }, fullDocuments: {} });
+    G('a distinctive factual token present only in 03 does not trigger copied-into-pointer', f.length === 0, f); }
+  { const C = { id: 'conf-1', doc: '.ai/context/configuration.md', token: 'WALLET_LOCK_TTL_MS default is 5000 ms', ref: 'Configuration', kind: 'config', conflict: { stale: 'default is 3000 ms', current: 'default is 5000 ms' } };
+    const t = insertUnder(insertUnder(BS03, 'Configuration', C.token), 'Configuration', 'Historical note: an older release documented that the default is 3000 ms.');
+    const f = H.checkConsolidation({ doc03Text: t, inventory: [C], dispositions: { 'conf-1': 'use-5000' }, pointers: {}, fullDocuments: {} });
+    G('a visible historical mention of the stale value is still reported as stale-value-retained (the helper cannot tell history from an operative claim)', f.length === 1 && f[0].code === 'stale-value-retained' && f[0].id === 'conf-1', f);
+    const gone = H.checkConsolidation({ doc03Text: insertUnder(BS03, 'Configuration', C.token), inventory: [C], dispositions: { 'conf-1': 'use-5000' }, pointers: {}, fullDocuments: {} });
+    G('control: with the historical sentence removed the same fact is clean', gone.length === 0, gone); }
+}
+
 // ============================================================== GROUP: advisory contract (amendment 1) ====
 // (a) No input, evidence or project state of this whole spec makes verify print or return passed, complete or compatible; (b) every outcome maps to its exit code; (c) the earlier probes.
 {
@@ -3290,6 +4048,288 @@ const KEPT_TEXT_ORACLES = [
   G(`every explicit shape (${SHAPES.length}) yields a snapshot the gate finds consistent: nothing, or only the unusable manifest summary of N18, as taken and after the JSON round trip`, shapesTaken === SHAPES.length && seen.bad.length === 0, seen.bad.slice(0, 3));
   G(`the ${seen.snapshots - before} real snapshots of the fixtures this spec created are all consistent too (a legitimate snapshot never becomes not evaluable because of the gate)`, seen.snapshots - before >= 150 && seen.bad.length === 0, { swept: swept.length, taken: seen.snapshots - before, bad: seen.bad.slice(0, 3) });
   G('the property is not vacuous: the snapshots held withheld text, policy-denied entries, size03, and every manifest state (absent, valid, malformed, skipped), and some of them were unusable baselines (N18) with exactly one reason', seen.withheld >= 2 && seen.denied >= 2 && seen.size03 >= 5 && seen.valid >= 5 && seen.absent >= 5 && seen.malformed >= 1 && seen.skipped >= 1 && seen.unusable >= 2, { ...seen, bad: undefined });
+}
+
+// ============================================================== GROUP: the procedure contract of the live acceptance document (3.1.0 helper batch) ====
+// The plan's "Procedure-contract controls": the acceptance document must keep these obligations. Prose is compared with whitespace, backticks, emphasis markers, curly quotes and blockquote markers
+// normalized away (wording and punctuation are not); commands and the invariant fence are compared exactly. Every requirement has an individually named assertion against the real document, and the
+// same checker is run on an in-memory reference document built from the requirements themselves, with each requirement removed or altered in turn: each removal must fail its own assertion (and only
+// then does a passing result mean something). These controls prove the procedure keeps its obligations; they do not prove that a live host followed them.
+{
+  const G = grp('Procedure contract');
+  const ACC = rd(path.join(TESTS, 'live', 'BS-DOC-MAP-ACCEPTANCE.md'));
+  const lf = (s) => String(s).replace(/\r\n?/g, '\n');
+  const norm = (s) => lf(s).split('\n').map((l) => l.replace(/^\s*(?:>\s?)+/, '')).join('\n').replace(/\\([*_`<>])/g, '$1').replace(/\*\*|__/g, '').replace(/`/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
+  // The sections: the text before the first "## " heading is the introduction, "## N. " opens section N; 'any' is the whole document. Raw (LF) and normalized forms are kept.
+  const sectionsOf = (doc) => {
+    const d = lf(doc); const heads = [...d.matchAll(/^## (\d+)\. .*$/gm)].map((m) => ({ k: m[1], at: m.index }));
+    const out = { any: { raw: d, text: norm(d) } };
+    const firstHead = d.search(/^## /m);
+    const intro = firstHead < 0 ? d : d.slice(0, firstHead); out.intro = { raw: intro, text: norm(intro) };
+    heads.forEach((h, i) => { const end = i + 1 < heads.length ? heads[i + 1].at : d.length; const raw = d.slice(h.at, end); out[h.k] = { raw, text: norm(raw) }; });
+    return out;
+  };
+  // [id, sections, sentence]; the sentence must appear in at least one of the sections (the plan's table, section column as written there).
+  const REQS = [
+    ['P01', ['1'], "Include .project-setup.bak-* installer backups when checking for duplicate PS copies; disable a discoverable backup through the host's skill selection without moving the installer backup."],
+    ['P02', ['1'], 'Confirm exactly one active PS copy, its selected path and its version in the same new session that will run PS; interactive skill toggles do not establish print-mode selection.'],
+    ['P03', ['1', '5'], 'PS rows stay interactive and follow project-setup/references/CLAUDE.md, Permission mode during setup: use --permission-mode default.'],
+    ['P04', ['1', '7'], 'Record the actual permission mode and every global-instruction prompt and answer during a PS row.'],
+    ['P05', ['3'], 'For bs-new, require and record that BS creates service directly under the initialized workspace; another child name is refused by seed.'],
+    ['P06', ['4'], 'Review exact before/after changes and add only independently approved exact paths to evidence.explained; location and manifest ownership do not establish approval.'],
+    ['P07', ['4'], 'Preserve pre-BS and post-BS/pre-candidate snapshots, per-file outcomes, installed-version diagnostics and deviations before candidate recovery.'],
+    ['P08', ['4'], 'Post-recovery state cannot establish an earlier BS outcome; without contemporaneous evidence, that earlier outcome remains unmeasured.'],
+    ['P09', ['4'], 'Record actual BS stamp and provenance signals and deviations; do not force an unstamped result.'],
+    ['P10', ['5'], 'Launch each Claude agent measurement in a fresh session at the fixture root, never with --continue.'],
+    ['P11', ['5'], 'Substitute only the actual agent name and printed range in the two agent prompts.'],
+    ['P12', ['5'], "The clean docs-sync and reviewer measurements actually used --permission-mode auto; these agent rows do not exercise PS's human approval gates."],
+    ['P13', ['5'], "The 2026-11-14 isolation probe's Claude Code version, 2.1.325, was confirmed from probe-run init events by the orchestrator on 2026-11-15."],
+    ['P14', ['5'], 'Context-presence answers are session self-report; agent and skill listings and permission mode come from init events.'],
+    ['P15', ['5'], 'Codex isolation remains unmeasured; no equivalent flag or host parity is assumed.'],
+    ['P16', ['5', '7'], "Retain JSONL and inspect the parent's Agent brief and any parent edits before counting routing evidence."],
+    ['P17', ['5', '7'], "A relay of the installed project's operative AGENTS routing sentence is valid routing evidence when attributed to that source."],
+    ['P18', ['5', '7'], "A parent brief supplying discovered application facts, the detailed invariant's destination or expected findings contaminates the measurement."],
+    ['P19', ['5', '7'], 'Report subagent output separately from parent edits and checks; a combined final tree is not silently the subagent result.'],
+    ['P20', ['5', '7'], 'Missing JSONL or ambiguous provenance makes cleanliness inconclusive; rerun from an independent fixture or untouched baseline.'],
+    ['P21', ['5', '6'], 'Verify the launch directory and baseline before each run; never measure a second host against documentation corrected by the first.'],
+    ['P22', ['5'], 'This probe covers one host, one version, one project-level Read deny and the raw-Git hook; it does not establish user-level deny loading, subprocess confinement or general isolation.'],
+    ['P23', ['6'], "This is a synthetic, fixture-only acceptance setup; that explanation belongs here, not in the measured project's 03."],
+    ['P24', ['6'], 'The maintainer adds the exact Lock order subsection to 03 §8 and reviews the prerequisite diff before seeding.'],
+    ['P25', ['6'], 'The preferred path is to commit the reviewed invariant with the fixture identity before running seed.'],
+    ['P26', ['6'], 'Seed also accepts a reviewed, uncommitted 03 edit: it commits permitted post-setup changes as the baseline before committing the application change.'],
+    ['P27', ['6'], 'In both paths, verify that the returned base commit contains the exact invariant and that the printed range contains only the seeded application change.'],
+    ['P28', ['6'], 'Do not add a fixture-only heading, a synthetic-scope paragraph or the seeded filename to 03.'],
+    ['P29', ['6'], 'The helper checks only the readable 03 Lock order marker; the maintainer verifies the exact text and returned baseline commit.'],
+    ['P30', ['6'], 'The helper never writes documentation.'],
+    ['P31', ['6'], "Before seeding, run git status --porcelain -uall and record how host-generated output such as .remember/ is excluded; leaving it untracked or merely unstaged does not satisfy seed's dirty-state guard."],
+    ['P32', ['6'], 'Seed disables Git commit hooks only for its own post-setup baseline and application-case commits, using a command-local core.hooksPath override to an empty directory, so those commits preserve the reviewed prerequisite and seeded bytes.'],
+    ['P33', ['6'], 'The override changes no Git configuration, hook file, permission rule or parent-process environment; it does not apply to PS, BS, manual commits or agent measurements.'],
+    ['P34', ['6'], 'Record whether hooks ran, failed, changed files or were skipped; skipped hooks are not passing checks.'],
+    ['P35', ['6'], 'On commit failure, preserve the output and inspect HEAD, index and worktree before retrying; do not assume the attempt left the fixture untouched.'],
+    ['P36', ['6'], 'Add the reviewer prerequisite as a narrow prose edit; avoid a whole-document formatting pass that changes unrelated 03 content.'],
+    ['P37', ['7'], 'Record exact factual destinations, including TODO, and disclose host-generated output and failed or unavailable checks.'],
+    // Pins beyond the plan's controls table, taken from the plan's own text (the Implementation checklist of B2, the B3 operative guidance and the exact hook note): flagged in the report as extras.
+    ['X01', ['4'], 'Review exact before/after changes across all classes.'],
+    ['X02', ['4'], 'Establish approval and ADR rationale independently.'],
+    ['X03', ['4'], 'Add only exact approved paths to evidence.explained.'],
+    ['X04', ['4'], 'Retain independent wrapper, pointer, extension and ownership checks.'],
+    ['X05', ['4'], 'Treat omitted explanation as unresolved evidence, not proof of a PS defect.'],
+    ['X06', ['6'], 'Within the measured fixture, keep the detailed invariant only in 03; do not copy it into root instructions, agent definitions, wrappers, project extensions or a launch brief.'],
+    ['X07', ['6'], 'Use the exact §5 reviewer prompt, substituting only the actual agent name and printed range.'],
+    ['X08', ['6'], 'Manual fixture commits can run project hooks.'],
+    ['X09', ['6'], 'In the recorded bs-new setup, the first post-BS commit ran lint-staged with eslint --fix and prettier --write; a later fixture commit used HUSKY=0, so its hooks did not run.'],
+    ['X10', ['6'], 'Review the resulting bytes and range before measurement.'],
+  ];
+  const P_DOCS = 'Run `<actual agent name>` for `<printed range>`. Update affected documentation under the installed project instructions. Report files changed and unresolved gaps.';
+  const P_REVIEW = 'Run `<actual agent name>` on `<printed range>`. Follow installed project instructions and report findings with severity and file:line. Do not modify files.';
+  const CMD = 'claude -p --setting-sources project,local --permission-mode auto --output-format stream-json --verbose "<exact §5 prompt>"';
+  const ID_NAME = 'git config --local user.name "bs-doc-map fixture"';
+  const ID_EMAIL = 'git config --local user.email fixture@example.invalid';
+  const ID_STATUS = 'git status --porcelain -uall';
+  const O3 = ['On 2026-11-15, the orchestrator probed the bs-new fixture on this host with Claude Code 2.1.325 in isolated print mode using auto permission mode.', 'Read of secrets/canary.txt was refused by the project Read(**/secrets/**) deny rule, and raw git log -1 --oneline was blocked by the project guard-raw-git.mjs PreToolUse hook.', 'The canary content did not appear in the transcript; the canary was removed and the fixture was clean afterward.'];
+  const O3_CLAUSES = [['O3-denial', 'Read of secrets/canary.txt was refused by the project Read(**/secrets/**) deny rule'], ['O3-blocked', 'raw git log -1 --oneline was blocked by the project guard-raw-git.mjs PreToolUse hook'], ['O3-no-disclosure', 'The canary content did not appear in the transcript'], ['O3-cleanup', 'the canary was removed and the fixture was clean afterward']];
+  const INTRO = 'Status: pending stage-2 acceptance sign-off. Dated live-run records are retained outside this matrix. This procedure records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15 init-event confirmation and the 2026-11-15 project-control probe below; it does not enter acceptance results or close checklist items. Stage 2 records the dated matrix results and TODO closeout.';
+  const LIMITS = ['Token matching may also report a fact copied into a pointer when a generic token occurs only in navigation text such as Scope or a heading.', 'Choose distinctive factual tokens and review the matched context.', 'A visible historical mention of a stale conflict value in 03 can likewise trigger stale-value-retained; the helper cannot distinguish historical explanation from an operative claim.'];
+  const TRUST = 'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.';
+  const MATRIX_ROWS = [
+    '| Case | Claude Code | Codex |', '|---|---|---|',
+    '| P1 Nest CLI scaffold versions | pending evidence | pending evidence |',
+    '| P2 BS procedure selected; stamp/provenance state | pending evidence | pending evidence |',
+    '| P7 PS-first state after BS (per file, validate and drift) | pending evidence | pending evidence |',
+    '| Canonical docs-sync: explicit range, facts in 03, navigation-only pointers | pending evidence | pending evidence |',
+    '| Reviewer: seeded money defect, 03 citation, finding and severity | pending evidence | pending evidence |',
+    '| Read-only missing destination: gap reported, no file changed | pending evidence | pending evidence |',
+    '| Documentation-writing missing destination: TODO entry, no unsupported fact | pending evidence | pending evidence |',
+    '| Retained BS docs-sync: definition, routing, incomplete PS status | pending evidence | pending evidence |',
+    '| Blank section, renamed heading, deleted pointer, local-instruction conflict | pending evidence | pending evidence |',
+    '| Unchanged rerun: zero document and manifest diff | pending evidence | pending evidence |',
+    '| Factual accuracy and invariants against permitted code | pending evidence | pending evidence |',
+    '| Agent, wrapper and approved-extension bytes unchanged during docs-sync | pending evidence | pending evidence |',
+    '| P3/P4 context loading (self-report labeled) | pending evidence | pending evidence |',
+    '| P5 03 preload size observations | pending evidence | not applicable |',
+    '| P8 Codex ownership grant | not applicable | pending evidence |',
+  ];
+  const MATRIX_SHA = '7274697ac6acebc4351de1db632071fc5f09e4f39310ca4d9cb4e4ccf071690f';
+  // The one dedicated invariant fence: the single ```markdown fence of section 6, compared byte for byte (LF) with the shared constant the positive seed tests use.
+  const fenceOf = (raw6) => {
+    const lines = lf(raw6).split('\n'); const found = []; let cur = null;
+    for (const l of lines) { if (cur === null) { if (/^```markdown\s*$/.test(l)) cur = []; } else if (/^```\s*$/.test(l)) { found.push(`${cur.join('\n')}\n`); cur = null; } else cur.push(l); }
+    return { count: found.length, content: found[0], open: cur !== null };
+  };
+  // R1 (plan:637, 654): every fenced code block of a section as its EXACT content (the lines between the opening and the closing fence, joined with LF: line endings are the only thing normalized),
+  // and whether a fence never closes. The Claude agent command is compared as the complete content of one such block, never as a substring of the section's normalized prose: a substring of
+  // normalized text accepts an appended flag (--continue) and an uncontinued line break, because the normalization turns a line break into a space.
+  const fencedBlocks = (raw) => { const blocks = []; let cur = null; for (const l of lf(raw).split('\n')) { if (cur === null) { if (/^ {0,3}```/.test(l)) cur = []; } else if (/^ {0,3}```\s*$/.test(l)) { blocks.push(cur.join('\n')); cur = null; } else cur.push(l); } return { blocks, open: cur !== null }; };
+  const fenceLines = (raw) => { const out = []; let inside = false; for (const l of lf(raw).split('\n')) { if (/^\s*```/.test(l)) { inside = !inside; continue; } if (inside) out.push(l.trim()); } return out; };
+  /** The ids of the requirements the document does not meet ([] = all met). */
+  const procProblems = (doc) => {
+    const s = sectionsOf(doc); const bad = [];
+    const at = (k) => (s[k] === undefined ? '' : s[k].text);
+    const inAny = (keys, text) => keys.some((k) => at(k).includes(norm(text)));
+    for (const [id, keys, text] of REQS) if (!inAny(keys, text)) bad.push(id);
+    if (!inAny(['5'], P_DOCS)) bad.push('prompt-docs-sync');
+    if (!inAny(['5'], P_REVIEW)) bad.push('prompt-reviewer');
+    // The complete command: section 5 holds exactly one fenced block that mentions claude, it closes, and its whole content is the command (exact text, LF line endings only).
+    const F5 = s['5'] === undefined ? { blocks: [], open: false } : fencedBlocks(s['5'].raw);
+    const claudeBlocks = F5.blocks.filter((b) => /\bclaude\b/.test(b));
+    if (!(F5.open === false && claudeBlocks.length === 1 && claudeBlocks[0] === CMD)) bad.push('claude-command');
+    // The three commands are given as complete lines of a fenced code block of section 6 (exact text, no normalization), the status command after the identity ones.
+    const L6 = s['6'] === undefined ? [] : fenceLines(s['6'].raw);
+    for (const [id, c] of [['identity-name', ID_NAME], ['identity-email', ID_EMAIL], ['identity-status', ID_STATUS]]) if (!L6.includes(c)) bad.push(id);
+    const iN = L6.indexOf(ID_NAME); const iE = L6.indexOf(ID_EMAIL); const iS = L6.indexOf(ID_STATUS, iE + 1);
+    if (!(iN >= 0 && iE > iN && iS > iE)) bad.push('identity-order');
+    const fence = s['6'] === undefined ? { count: 0 } : fenceOf(s['6'].raw);
+    if (!(fence.count === 1 && fence.open !== true && fence.content === LOCK_ORDER_BLOCK)) bad.push('invariant-fence');
+    if (!at('any').includes(norm(O3.join(' ')))) bad.push('O3-paragraph');
+    for (const [id, c] of O3_CLAUSES) if (!at('any').includes(norm(c))) bad.push(id);
+    if (!at('intro').includes(norm(INTRO))) bad.push('intro');
+    if (/Nothing below has been run/.test(at('any'))) bad.push('intro-stale-statement');
+    LIMITS.forEach((l, i) => { if (!at('4').includes(norm(l))) bad.push(`limit-${i + 1}`); });
+    if (!at('4').includes(norm(TRUST))) bad.push('baseline-trust');
+    const rows7 = s['7'] === undefined ? [] : s['7'].raw.split('\n').filter((l) => l.startsWith('|'));
+    if (!(rows7.length === MATRIX_ROWS.length && sha(rows7.join('\n')) === MATRIX_SHA)) bad.push('matrix');
+    return bad;
+  };
+  // The reference document: every requirement written once, verbatim, into the first section it names; the commands, prompts, fence, probe paragraph, introduction, limitations and matrix beside them.
+  const refDoc = () => {
+    const by = { 1: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+    for (const [, keys, text] of REQS) by[keys[0]].push(text);
+    const fence = ['```markdown', ...LOCK_ORDER_BLOCK.slice(0, -1).split('\n'), '```'].join('\n');
+    return [
+      '# project-setup 3.1.0 live acceptance: backend-standards documentation mapping', '', INTRO, '',
+      '## 0. Record and keep the pre-acceptance installation', '', 'Reference text.', '',
+      '## 1. Prerequisite A: install and switch one active version', '', ...by[1].flatMap((t) => [t, '']),
+      '## 2. Prerequisite B: exact Codex Git ownership grant', '', 'Reference text.', '',
+      '## 3. Workspaces', '', ...by[3].flatMap((t) => [t, '']),
+      '## 4. Scenarios', '', ...by[4].flatMap((t) => [t, '']), 'Known limitations (the helper prints them after every outcome):', '', ...[TRUST, ...LIMITS].map((l) => `- ${l}`), '',
+      '## 5. Exact prompts', '', `- **Docs-sync:** "${P_DOCS}"`, `- **Reviewer:** "${P_REVIEW}"`, '', '```text', CMD, '```', '', `> ${O3.join(' ')}`, '', ...by[5].flatMap((t) => [t, '']),
+      '## 6. Committed changes for the agent measurements', '', ...by[6].flatMap((t) => [t, '']), '```powershell', ID_NAME, ID_EMAIL, ID_STATUS, '```', '', fence, '',
+      '## 7. Evidence matrix (dated results go here in stage 2)', '', ...MATRIX_ROWS, '', ...by[7].flatMap((t) => [t, '']),
+      '## 8. Rollback', '', 'Reference text.', '',
+    ].join('\n');
+  };
+  const REF = refDoc();
+  // A mutation that cannot be applied (the text it edits is not in the document) yields null, and a null document never counts as a caught mutant: the assertion fails and says so.
+  const change = (doc, from, to) => (doc === null || !doc.includes(from) ? null : doc.replace(from, to));
+  const remove = (doc, text) => change(doc, text, '');
+  const failsWith = (doc, id) => { if (doc === null) return false; const p = attempt(() => procProblems(doc)); return Array.isArray(p) && p.includes(id); };
+
+  // The checker and its constants, before the document.
+  G('the matrix rows pinned here are the existing matrix, byte for byte (17 lines: header, separator and 15 cases, every cell "pending evidence" or "not applicable")', MATRIX_ROWS.length === 17 && sha(MATRIX_ROWS.join('\n')) === MATRIX_SHA && MATRIX_ROWS.slice(2).every((r) => r.split('|').length === 5), sha(MATRIX_ROWS.join('\n')));
+  G('the invariant constant of this spec is the dedicated fence of the reference document and the unit the seed fixtures use (one constant for the document pin and the positive seed tests)', fenceOf(sectionsOf(REF)['6'].raw).content === LOCK_ORDER_BLOCK && with03Invariant(BS03).includes(LOCK_ORDER_BLOCK));
+  G('the checker accepts the reference document (every requirement met), so a removal below is the only thing that can fail', JSON.stringify(procProblems(REF)) === '[]', procProblems(REF));
+  G('the reference document holds every requirement once (a removal below removes exactly one occurrence)', REQS.every(([, , t]) => REF.split(t).length === 2), REQS.filter(([, , t]) => REF.split(t).length !== 2).map(([id]) => id));
+
+  // The real document, one named assertion per requirement.
+  const real = attempt(() => procProblems(ACC));
+  for (const [id, keys, text] of REQS) G(`${id} (${keys.map((k) => `§${k}`).join('/')}${id.startsWith('X') ? ', beyond the plan\'s controls table' : ''}): the acceptance document says "${text.slice(0, 70)}${text.length > 70 ? '...' : ''}"`, Array.isArray(real) && !real.includes(id), real);
+  for (const [id, label] of [['prompt-docs-sync', 'the exact docs-sync agent prompt (section 5)'], ['prompt-reviewer', 'the exact reviewer agent prompt (section 5)'], ['claude-command', 'the complete Claude agent command with all four flags (section 5): claude -p --setting-sources project,local --permission-mode auto --output-format stream-json --verbose "<exact §5 prompt>"'], ['identity-name', 'the repository-local user.name command (section 6)'], ['identity-email', 'the repository-local user.email command (section 6)'], ['identity-status', 'the status command git status --porcelain -uall (section 6)'], ['identity-order', 'the identity commands before the status command, in that order (section 6)'], ['invariant-fence', 'the single markdown fence of section 6 holds the exact seven-line Lock order unit, byte for byte (the shared constant)'], ['O3-paragraph', 'the full dated project-control probe paragraph of 2026-11-15'], ['O3-denial', 'the probe paragraph records the refused read under the project Read deny rule'], ['O3-blocked', 'the probe paragraph records the raw Git command blocked by the project hook'], ['O3-no-disclosure', 'the probe paragraph records that the canary content did not appear in the transcript'], ['O3-cleanup', 'the probe paragraph records the canary removal and the clean fixture'], ['intro', 'the revised introduction (pending stage-2 acceptance sign-off, the three dated probes, no results entered)'], ['intro-stale-statement', 'the stale blanket statement "Nothing below has been run" is gone'], ['limit-1', 'section 4 carries the navigation-token sentence of the pointer limitation'], ['limit-2', 'section 4 carries the distinctive-token guidance'], ['limit-3', 'section 4 carries the stale-historical-mention sentence'], ['baseline-trust', 'section 4 keeps the baseline-trust limitation'], ['matrix', 'section 7 keeps every matrix row and cell unchanged (digest of the 17 table lines)']]) G(`${id}: ${label}`, Array.isArray(real) && !real.includes(id), real);
+
+  // Removal of each requirement fails its own assertion, on the reference document.
+  for (const [id, , text] of REQS) G(`mutant: removing ${id} from the reference document fails ${id}, and only that requirement`, (() => { const d = remove(REF, text); const p = d === null ? null : attempt(() => procProblems(d)); return Array.isArray(p) && p.length === 1 && p[0] === id; })(), (() => { const d = remove(REF, text); return d === null ? 'the mutation did not apply' : attempt(() => procProblems(d)); })());
+  G('mutant: a requirement placed in a section its row does not name is not met (the section column is part of the pin: P24 moved from section 6 into section 7)', (() => { const d = change(remove(REF, REQS.find(([id]) => id === 'P24')[2]), '## 8. Rollback', `${REQS.find(([id]) => id === 'P24')[2]}\n\n## 8. Rollback`); return failsWith(d, 'P24'); })());
+  G('mutant: a requirement of two sections (P03: sections 1 and 5) is met in either one and unmet in neither-only (moving it into section 7 fails it)', (() => { const t = REQS.find(([id]) => id === 'P03')[2]; const moved = change(remove(REF, t), '## 8. Rollback', `${t}\n\n## 8. Rollback`); const in5 = change(remove(REF, t), '## 6. Committed changes', `${t}\n\n## 6. Committed changes`); return failsWith(moved, 'P03') && !failsWith(in5, 'P03') && !failsWith(REF, 'P03'); })());
+  G('mutant: a changed word fails the prose pin (P34: "skipped hooks are not passing checks" becomes "skipped hooks are passing checks")', failsWith(change(REF, 'skipped hooks are not passing checks', 'skipped hooks are passing checks'), 'P34'));
+  G('mutant: reflowing the whitespace of a prose pin, adding a blockquote marker, backticks or curly quotes keeps it met (the pins are tolerant of formatting only)', (() => { const t = REQS.find(([id]) => id === 'P01')[2]; const d = change(REF, t, `> Include \`.project-setup.bak-*\` installer\n> backups when checking for duplicate PS copies;   disable a discoverable backup through the host’s skill\n> selection without moving the installer backup.`); return !failsWith(d, 'P01'); })());
+
+  // The exact prompts, the Claude command with its flags, the commands and the probe paragraph.
+  G('mutant: a changed docs-sync prompt fails (the word "for" replaced by "on")', failsWith(change(REF, 'for `<printed range>`. Update', 'on `<printed range>`. Update'), 'prompt-docs-sync'));
+  G('mutant: a changed reviewer prompt fails ("Do not modify files." removed)', failsWith(change(REF, ' Do not modify files.', ''), 'prompt-reviewer'));
+  for (const [label, from, to] of [
+    ['--permission-mode auto changed to default', '--permission-mode auto', '--permission-mode default'],
+    ['--permission-mode removed', ' --permission-mode auto', ''],
+    ['--setting-sources project,local narrowed to project', '--setting-sources project,local', '--setting-sources project'],
+    ['--setting-sources removed', ' --setting-sources project,local', ''],
+    ['--output-format stream-json changed to json', '--output-format stream-json', '--output-format json'],
+    ['--output-format removed', ' --output-format stream-json', ''],
+    ['--verbose removed', ' --verbose', ''],
+    ['-p removed (not print mode)', 'claude -p ', 'claude '],
+    ['the prompt placeholder removed', ' "<exact §5 prompt>"', ''],
+  ]) G(`mutant: the Claude agent command with ${label} fails the command pin`, failsWith(change(REF, from, to), 'claude-command'));
+  // R1: the command is the complete content of its fence, exact text. Each mutation below replaces the command text itself (the one occurrence in the reference document) and must fail the command pin
+  // and nothing else; the precondition says the mutation applied and the control says the unmutated command passes.
+  { const only = (d) => { if (d === null) return 'the mutation did not apply'; const p = attempt(() => procProblems(d)); return Array.isArray(p) && p.length === 1 && p[0] === 'claude-command' ? true : p; };
+    const withCmd = (c) => (c === CMD ? null : change(REF, CMD, c));
+    const FLAGS = ['--setting-sources project,local', '--permission-mode auto', '--output-format stream-json', '--verbose'];
+    G('R1 control: the reference command is the one occurrence of the command text, inside the one fence of section 5, and the checker meets it', REF.split(CMD).length === 2 && fencedBlocks(sectionsOf(REF)['5'].raw).blocks.length === 1 && fencedBlocks(sectionsOf(REF)['5'].raw).blocks[0] === CMD && !failsWith(REF, 'claude-command'));
+    for (const [label, mutated] of [
+      // an appended flag
+      ['an appended --continue after the prompt', `${CMD} --continue`],
+      ['an appended --resume after the prompt', `${CMD} --resume`],
+      ['an appended --dangerously-skip-permissions after the prompt', `${CMD} --dangerously-skip-permissions`],
+      ['--continue inserted before the prompt', CMD.replace(' "<exact §5 prompt>"', ' --continue "<exact §5 prompt>"')],
+      ['--continue inserted before the first flag', CMD.replace('claude -p ', 'claude -p --continue ')],
+      ['a flag repeated (--verbose twice)', CMD.replace(' --verbose', ' --verbose --verbose')],
+      // a removed flag, each of the four
+      ...FLAGS.map((f) => [`the flag ${f} removed`, CMD.replace(` ${f}`, '')]),
+      // a broken command line: a line break that is not a continuation, before each flag and before the prompt
+      ['an uncontinued newline before --permission-mode', CMD.replace(' --permission-mode', '\n--permission-mode')],
+      ['an uncontinued newline before --setting-sources', CMD.replace(' --setting-sources', '\n--setting-sources')],
+      ['an uncontinued newline before --output-format', CMD.replace(' --output-format', '\n--output-format')],
+      ['an uncontinued newline before --verbose', CMD.replace(' --verbose', '\n--verbose')],
+      ['an uncontinued newline before the prompt', CMD.replace(' "<exact §5 prompt>"', '\n"<exact §5 prompt>"')],
+      ['a newline between --permission-mode and its value', CMD.replace('--permission-mode auto', '--permission-mode\nauto')],
+      ['a blank line before the closing fence (a trailing newline in the content)', `${CMD}\n`],
+      ['a blank line before the command inside the fence', `\n${CMD}`],
+      ['a backslash continuation instead of the exact single line', CMD.replace(' --permission-mode', ' \\\n  --permission-mode')],
+      ['a backtick continuation instead of the exact single line', CMD.replace(' --permission-mode', ' `\n  --permission-mode')],
+      ['a second command line after the first (a continued session on the next line)', `${CMD}\nclaude -p --continue "<exact §5 prompt>"`],
+      ['a trailing space', `${CMD} `],
+      ['a leading space', ` ${CMD}`],
+      // a changed prompt placeholder
+      ['the placeholder changed to another text', CMD.replace('"<exact §5 prompt>"', '"<exact §6 prompt>"')],
+      ['the placeholder shortened to "<prompt>"', CMD.replace('"<exact §5 prompt>"', '"<prompt>"')],
+      ['the placeholder without its quotes', CMD.replace('"<exact §5 prompt>"', '<exact §5 prompt>')],
+      ['the placeholder replaced by a real prompt', CMD.replace('"<exact §5 prompt>"', '"Run the reviewer"')],
+      ['the placeholder removed', CMD.replace(' "<exact §5 prompt>"', '')],
+      // other changed text
+      ['the program name changed to claud', CMD.replace('claude -p', 'claud -p')],
+      ['the program name in upper case (the pin is exact text)', CMD.replace('claude -p', 'CLAUDE -p')],
+      ['two flags swapped (the order is part of the command)', CMD.replace('--permission-mode auto --output-format stream-json', '--output-format stream-json --permission-mode auto')],
+    ]) {
+      const d = withCmd(mutated);
+      G(`R1 mutant: the Claude agent command with ${label} fails the command pin and only that pin`, d !== null && only(d) === true, d === null ? 'the mutation did not apply (it equals the command)' : only(d));
+    }
+    // Where the command stands: a fence of section 5, the only one that mentions claude, closed, and not merely prose.
+    const fenceText = ['```text', CMD, '```'].join('\n');
+    G('R1 mutant: the command written as a plain prose line (no fence) fails the command pin', only(change(REF, fenceText, CMD)) === true);
+    G('R1 mutant: the command moved out of section 5 (into section 6) fails the command pin', only(change(change(REF, fenceText, ''), '## 7. Evidence matrix', `${fenceText}\n\n## 7. Evidence matrix`)) === true);
+    G('R1 mutant: a second fence in section 5 carrying a continued-session variant beside the exact one fails the command pin', only(change(REF, fenceText, `${fenceText}\n\n\`\`\`text\n${CMD} --continue\n\`\`\``)) === true);
+    G('R1 mutant: a second fence repeating the exact command (two claude fences) fails the command pin', only(change(REF, fenceText, `${fenceText}\n\n${fenceText}`)) === true);
+    G('R1 mutant: a fence that never closes fails the command pin', only(change(REF, fenceText, `\`\`\`text\n${CMD}`)) === true);
+    // The exactness is of text, not of the file's line endings: the same document with CRLF (or lone CR) line ends keeps the pin met, and so does another fence label.
+    G('R1 control: the reference document with CRLF line ends, and with lone CR line ends, still meets the command pin (line endings are normalized, nothing else)', !failsWith(REF.replace(/\n/g, '\r\n'), 'claude-command') && !failsWith(REF.replace(/\n/g, '\r'), 'claude-command'));
+    G('R1 control: surrounding prose does not matter to the command pin (a sentence quoting the command with --continue in section 5 outside any fence leaves it met)', !failsWith(change(REF, fenceText, `${fenceText}\n\nDo not run it as: ${CMD} --continue`), 'claude-command')); }
+  G('mutant: the repository-local user.name command with another name fails', failsWith(change(REF, 'user.name "bs-doc-map fixture"', 'user.name "someone"'), 'identity-name'));
+  G('mutant: the global form of the identity command (without --local) fails', failsWith(change(REF, ID_EMAIL, 'git config user.email fixture@example.invalid'), 'identity-email'));
+  G('mutant: the status command removed from the code block fails (a mention of it in prose does not count)', failsWith(change(REF, `${ID_EMAIL}\n${ID_STATUS}\n`, `${ID_EMAIL}\n`), 'identity-status'));
+  G('mutant: the status command placed before the identity commands fails the order pin', failsWith(change(REF, `${ID_NAME}\n${ID_EMAIL}\n${ID_STATUS}`, `${ID_STATUS}\n${ID_NAME}\n${ID_EMAIL}`), 'identity-order'));
+  G('mutant: the two identity commands swapped fail the order pin', failsWith(change(REF, `${ID_NAME}\n${ID_EMAIL}`, `${ID_EMAIL}\n${ID_NAME}`), 'identity-order'));
+  for (const [id, c] of O3_CLAUSES) G(`mutant: the probe paragraph without its clause "${c.slice(0, 40)}..." fails ${id} and the full-paragraph pin`, (() => { const d = remove(REF, c); return failsWith(d, id) && failsWith(d, 'O3-paragraph'); })());
+  G('mutant: the probe date changed (2026-11-15 to 2026-11-14 in the paragraph) fails the full-paragraph pin', failsWith(change(REF, 'On 2026-11-15, the orchestrator', 'On 2026-11-14, the orchestrator'), 'O3-paragraph'));
+  G('mutant: the introduction removed fails; the stale blanket statement put back fails its own pin', failsWith(remove(REF, INTRO), 'intro') && failsWith(change(REF, INTRO, `${INTRO} Nothing below has been run for 3.1.0 yet.`), 'intro-stale-statement'));
+  G('mutant: a matrix cell changed fails the matrix pin; a deleted row fails it; a row added fails it', failsWith(change(REF, '| P1 Nest CLI scaffold versions | pending evidence | pending evidence |', '| P1 Nest CLI scaffold versions | recorded | pending evidence |'), 'matrix') && failsWith(remove(REF, `${MATRIX_ROWS[5]}\n`), 'matrix') && failsWith(change(REF, MATRIX_ROWS[16], `${MATRIX_ROWS[16]}\n| P9 extra | pending evidence | pending evidence |`), 'matrix'));
+
+  // The invariant fence: the shared constant, byte for byte. Each substantive alteration fails, and so does a missing, doubled or unclosed fence.
+  const block = LOCK_ORDER_BLOCK.slice(0, -1);
+  for (const [label, fn] of [
+    ['dropping "ascending wallet-id order"', (d) => change(d, 'in ascending wallet-id order', 'in some order')],
+    ['changing the heading', (d) => change(d, '### Lock order\n', '### Fixture lock order\n')],
+    ['naming the seeded target inside the fence', (d) => change(d, 'A balance read outside the lock', 'A balance read outside the lock in wallet-transfer.ts')],
+    ['adding a synthetic-scope paragraph inside the fence', (d) => change(d, '### Lock order\n\n', '### Lock order\n\nThis is a synthetic, fixture-only acceptance setup.\n\n')],
+    ['dropping the trailing blank line of the unit', (d) => change(d, `${block}\n\`\`\``, `${block.slice(0, -1)}\n\`\`\``)],
+    ['changing "ascending" to "descending"', (d) => change(d, 'ascending wallet-id', 'descending wallet-id')],
+    ['losing the second lock clause ("before reading either balance")', (d) => change(d, ' before reading either balance', '')],
+    ['indenting the fence content', (d) => change(d, '### Lock order\n', '  ### Lock order\n')],
+    ['turning the fence into a plain text fence (no markdown fence in section 6)', (d) => change(d, '```markdown', '```text')],
+    ['adding a second markdown fence to section 6', (d) => change(d, '## 7. Evidence matrix', '```markdown\nextra\n```\n\n## 7. Evidence matrix')],
+    ['removing the closing fence marker', (d) => { const i = d.indexOf('```markdown'); const j = d.indexOf('\n```\n', i); return `${d.slice(0, j + 1)}${d.slice(j + 5)}`; }],
+  ]) G(`mutant: ${label} fails the invariant fence pin`, failsWith(fn(REF), 'invariant-fence'));
+  G('mutant: the reference fence copied byte for byte from the shared constant passes, with CRLF line ends too (the comparison is on LF)', !failsWith(REF.replace(/\n/g, '\r\n'), 'invariant-fence') && !failsWith(REF, 'invariant-fence'));
+  // The pointer and stale-token limitation and the baseline-trust bullet live in section 4 only.
+  LIMITS.forEach((l, i) => G(`mutant: removing limitation sentence ${i + 1} from section 4 fails limit-${i + 1}; putting it in section 5 instead does not meet it`, failsWith(remove(REF, l), `limit-${i + 1}`) && failsWith(change(remove(REF, l), '## 6. Committed changes', `${l}\n\n## 6. Committed changes`), `limit-${i + 1}`)));
+  G('mutant: removing the baseline-trust bullet from section 4 fails baseline-trust', failsWith(remove(REF, TRUST), 'baseline-trust'));
+  G('the known-limitations entry the existing control looks for is still in section 4 of the real document (the list heading and the next heading it brackets)', (() => { const s = sectionsOf(ACC); return s['4'] !== undefined && s['4'].text.includes('Known limitations (the helper prints them after every outcome):') && s['5'] !== undefined; })());
 }
 
 // ============================================================== run and report ====
