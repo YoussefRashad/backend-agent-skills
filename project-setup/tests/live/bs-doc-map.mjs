@@ -6,7 +6,8 @@
 // What it never does: install, switch or restore a skill copy; write global or system Git configuration; grant a safe.directory;
 // read .env* files, secrets or policy-denied paths; pre-restore, intercept or repair what backend-standards wrote; simulate drafting.
 // What it does: create unused fixture workspaces (init), record explicit-inventory snapshots (snapshot), commit fixture-only
-// application changes for the agent measurements (seed) and check the state a run left behind (verify).
+// application changes for the agent measurements (seed; its own two commits run with commit hooks disabled by a command-local option, nothing else does) and check
+// the state a run left behind (verify).
 //
 // CLI (importing this file starts nothing; the commands run only when it is the entry point):
 //   node tests/live/bs-doc-map.mjs init     --scenario ps-first|bs-existing|bs-new --out <unused absolute dir>
@@ -809,8 +810,18 @@ export function checkBlankSections({ doc03Text, refs }) {
 
 // ------------------------------------------------------- root and local instructions ----
 const topBullets = (inner) => { const out = []; let cur = null; for (const l of normalizeEol(inner).split('\n')) { if (/^- /.test(l)) { if (cur !== null) out.push(cur); cur = l; } else if (cur !== null && /^\s+\S/.test(l)) cur += ` ${l.trim()}`; else if (cur !== null) { out.push(cur); cur = null; } } if (cur !== null) out.push(cur); return out.map(squash); };
-/** Root AGENTS.md checks: conditional routing only when activated, the template critical rules kept, summaries present, paired local files, unrelated text. */
-export function checkRootInstructions({ agentsText, activated, paragraph, navSentence, templateAgentsText, nested = [], unrelatedLines = [] }) {
+// The exact trailing sentence of the template money rule (after whitespace normalization), and the visible-reference test the requirement decision and the check share.
+const CRITICAL_MODULES_REL = '.ai/context/critical-modules.md';
+const CRITICAL_REFERENCE_TAIL = ' See `.ai/context/critical-modules.md`.';
+const MONEY_RULE_START = '- Money, balance, payment, and points flows:';
+const CRITICAL_REFERENCE = /\.ai\/context\/critical-modules\.md/;
+/**
+ * Root AGENTS.md checks: conditional routing only when activated, the template critical rules kept, summaries present, paired local files, unrelated text.
+ * referenceRequired (3.1.0 helper batch, B1): whether the money rule must keep its reference to .ai/context/critical-modules.md. It defaults to required, so a caller that
+ * does not decide applicability is as strict as before. When the caller has CONFIRMED the reference optional (no visible link in the baseline critical rules, the document
+ * absent from both snapshots and from the evidence), only the exact trailing reference sentence is dropped from the money-rule comparison; every substantive word stays required.
+ */
+export function checkRootInstructions({ agentsText, activated, paragraph, navSentence, templateAgentsText, nested = [], unrelatedLines = [], referenceRequired = true }) {
   const f = [];
   const add = (code, detail) => f.push({ code, detail });
   const p = parseBlocks(agentsText);
@@ -834,8 +845,12 @@ export function checkRootInstructions({ agentsText, activated, paragraph, navSen
     const tcr = parseBlocks(templateAgentsText).blocks.find((b) => b.id === 'critical-rules');
     const have = seen(cr.inner);
     const crVisible = visibleText(cr.inner);
-    for (const b of tcr === undefined ? [] : topBullets(tcr.inner)) if (!/\{\{/.test(b) && !have.includes(b)) add('critical-rule-lost', b.slice(0, 70));
-    if (!/\.ai\/context\/critical-modules\.md/.test(crVisible)) add('critical-modules-reference', 'the money and auth rule must keep its reference to .ai/context/critical-modules.md');
+    const optionalTail = referenceRequired === false; // only an explicit false waives the reference; anything else keeps it required
+    for (const b of tcr === undefined ? [] : topBullets(tcr.inner)) {
+      const want = optionalTail && b.startsWith(MONEY_RULE_START) && b.endsWith(CRITICAL_REFERENCE_TAIL) ? b.slice(0, -CRITICAL_REFERENCE_TAIL.length) : b;
+      if (!/\{\{/.test(b) && !have.includes(want)) add('critical-rule-lost', b.slice(0, 70));
+    }
+    if (!optionalTail && !CRITICAL_REFERENCE.test(crVisible)) add('critical-modules-reference', 'the money and auth rule must keep its reference to .ai/context/critical-modules.md');
     if (!/Database changes follow the project's own policy:\s*\S/.test(crVisible)) add('db-policy-missing', 'the instruction-summary exception keeps the database-change policy in the critical rules');
   }
   for (const id of ['overview', 'commands']) if (blk(id) === undefined || !/\S/.test(visibleText(blk(id).inner))) add('summary-missing', `the ${id} summary block is part of the instruction role`);
@@ -1271,6 +1286,24 @@ const SEED_FILES = Object.freeze({
   }),
 });
 function seedRefusal(code, detail) { return { ok: false, refusal: { code, detail } }; }
+// 3.1.0 helper batch, B5: init leaves a bs-new workspace unscaffolded with an explicit "project": null, and BS later creates the project as "service" directly under it.
+// Exactly that record is recognized, in addition to the matching-name rule: schema 1, tool bs-doc-map, scenario bs-new, an OWN project property that is null (a missing
+// field is not an explicit null), and a project directory named exactly "service". Any other null record, a missing field or another child name stays unrecognized,
+// and the record is never rewritten. Every guard after recognition (own Git root, fixture-local identity, policy, targets, status) applies unchanged.
+const BS_NEW_PROJECT_DIR = 'service';
+const isLegacyBsNew = (meta, dirName) => isRecord(meta) && meta.schema === 1 && meta.tool === 'bs-doc-map' && meta.scenario === 'bs-new' && hasOwn(meta, 'project') && meta.project === null && dirName === BS_NEW_PROJECT_DIR;
+// B3: the refusal of the reviewer case when the baseline 03 does not record the invariant. It names where the procedure is and who owns the prerequisite.
+const BASELINE_INVARIANT_REFUSAL = `The baseline 03 must already record the project lock-order invariant ("${REVIEWER_INVARIANT_MARKER}"). See BS-DOC-MAP-ACCEPTANCE.md §6: the maintainer adds and reviews the exact invariant, normally committing it before seeding; seed can commit a reviewed uncommitted 03 edit into its post-setup baseline. The helper never writes documentation.`;
+// B5 (plan addendum A1): seed's own two commits (the post-setup baseline and the case commit) run with a command-local -c option that points Git's hooks path at a fresh,
+// empty, helper-owned directory, so a project commit hook cannot rewrite or refuse the controlled bytes. It is an argument of those two Git invocations only: no Git
+// configuration is written, no hook file is touched and the process environment is not changed, so PS, BS, manual commits and agent measurements keep the project hooks.
+// It protects the seeded bytes against COMMIT HOOKS only: repository-local configuration can still run commands during seed's git status and git add (for example an
+// fsmonitor or a clean or smudge filter), which the isolated Git environment does not isolate (plan addendum A2 H2).
+const noHooksArgs = (dir) => ['-c', `core.hooksPath=${dir.split(path.sep).join('/')}`];
+function removeHelperHooksDir(dir) {
+  // Non-recursive: the directory was created empty by this process and must still be empty; anything else is left in place and reported, never deleted.
+  try { fs.rmdirSync(dir); } catch (e) { process.stderr.write(`warning: the helper's empty hooks directory could not be removed (${e !== null && typeof e === 'object' && e.code !== undefined ? e.code : 'error'}): ${encodeLine(dir)}; the seed result is unaffected\n`); }
+}
 /**
  * One seed target, checked BEFORE anything is written: a contained relative path, not policy-denied, every existing ancestor a real directory
  * (no symbolic link or junction at any depth, which would redirect the write outside the fixture), nothing already at the target (a dangling
@@ -1297,7 +1330,9 @@ function checkSeedTarget(proj, rel, policy) {
 /**
  * Commits a fixture-only application change on a recognized disposable fixture and prints the exact range. Never edits instructions, agents or policy.
  * Everything that can refuse (the fixture identity, the project policy, every target's containment, ancestors and policy, the Git state)
- * is decided before the first write or commit; a refusal leaves the repository exactly as it was.
+ * is decided before the first write or commit; a refusal leaves the repository exactly as it was. A commit that fails afterwards keeps its refusal (code commit), and the
+ * state it leaves is preserved for diagnosis, not restored. Seed's own two commits run with commit hooks disabled by a command-local option (see noHooksArgs); the result
+ * shape and the three-line BASE / HEAD / RANGE output are unchanged.
  */
 export function runSeed({ project, caseName }) {
   if (!SEED_CASES.includes(caseName)) return seedRefusal('bad-case', `case must be one of ${SEED_CASES.join(', ')}`);
@@ -1306,7 +1341,7 @@ export function runSeed({ project, caseName }) {
   const parent = path.dirname(proj);
   let meta = null;
   try { meta = JSON.parse(fs.readFileSync(path.join(parent, 'scenario.json'), 'utf8')); } catch { /* unrecognized */ }
-  if (meta === null || meta.tool !== 'bs-doc-map' || meta.project !== path.basename(proj)) return seedRefusal('unrecognized', 'not a bs-doc-map fixture (no matching scenario.json beside it)');
+  if (!isRecord(meta) || meta.tool !== 'bs-doc-map' || (meta.project !== path.basename(proj) && !isLegacyBsNew(meta, path.basename(proj)))) return seedRefusal('unrecognized', 'not a bs-doc-map fixture (no matching scenario.json beside it)');
   if (fold(canon(proj)) !== fold(proj) || lstatChain(parent, path.basename(proj)) !== 'ok') return seedRefusal('linked-alias', 'the project path is linked or aliased');
   const env = isolatedGitEnv(path.join(parent, 'fixture-gitconfig'));
   if (git(proj, env, ['rev-parse', '--show-toplevel']).stdout === '' || fold(canon(git(proj, env, ['rev-parse', '--show-toplevel']).stdout)) !== fold(canon(proj))) return seedRefusal('unrecognized', 'the project is not the root of its own Git repository');
@@ -1326,21 +1361,29 @@ export function runSeed({ project, caseName }) {
   if (unrelated.length > 0) return seedRefusal('dirty', `unrelated dirty state: ${unrelated.slice(0, 5).join(', ')}`);
   if (caseName === 'reviewer') {
     const t03 = readPermitted(proj, BS_03_REL, { policy: pol.policy });
-    if (t03.state !== 'ok' || !t03.text.includes(REVIEWER_INVARIANT_MARKER)) return seedRefusal('baseline', `the baseline 03 must already record the project lock-order invariant ("${REVIEWER_INVARIANT_MARKER}"); the helper never writes documentation`);
+    if (t03.state !== 'ok' || !t03.text.includes(REVIEWER_INVARIANT_MARKER)) return seedRefusal('baseline', BASELINE_INVARIANT_REFUSAL);
   }
-  if (parsed.entries.length > 0) {
-    // Explicit staging list: only a path whose working tree differs from the index needs an add (a staged rename or deletion is already in the
-    // index, and its old path no longer matches anything for `git add`).
-    const stage = parsed.entries.filter((e) => e.y !== ' ').map((e) => e.path);
-    if (stage.length > 0 && git(proj, env, ['add', '--', ...stage]).code !== 0) return seedRefusal('commit', 'staging the post-setup baseline failed');
-    if (git(proj, env, ['commit', '-q', '-m', 'fixture: post-setup baseline']).code !== 0) return seedRefusal('commit', 'the baseline commit failed');
+  // Every refusal above came before this point. The empty hooks directory is made only now, under the OS temporary directory (outside the project), and is used by the two
+  // commits below and by nothing else. A failed commit keeps its existing refusal and leaves HEAD, index and worktree as Git left them, for the maintainer to inspect.
+  const hooksDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bsmap-seed-hooks-'));
+  try {
+    const noHooks = noHooksArgs(hooksDir);
+    if (parsed.entries.length > 0) {
+      // Explicit staging list: only a path whose working tree differs from the index needs an add (a staged rename or deletion is already in the
+      // index, and its old path no longer matches anything for `git add`).
+      const stage = parsed.entries.filter((e) => e.y !== ' ').map((e) => e.path);
+      if (stage.length > 0 && git(proj, env, ['add', '--', ...stage]).code !== 0) return seedRefusal('commit', 'staging the post-setup baseline failed');
+      if (git(proj, env, [...noHooks, 'commit', '-q', '-m', 'fixture: post-setup baseline']).code !== 0) return seedRefusal('commit', 'the baseline commit failed');
+    }
+    const base = git(proj, env, ['rev-parse', 'HEAD']).stdout;
+    for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(proj, ...rel.split('/'))), { recursive: true }); fs.writeFileSync(path.join(proj, ...rel.split('/')), text); }
+    git(proj, env, ['add', '--', ...Object.keys(files)]);
+    if (git(proj, env, [...noHooks, 'commit', '-q', '-m', `fixture: ${caseName} change`]).code !== 0) return seedRefusal('commit', 'the case commit failed');
+    const head = git(proj, env, ['rev-parse', 'HEAD']).stdout;
+    return { ok: true, base, head, range: `${base}..${head}`, files: Object.keys(files) };
+  } finally {
+    removeHelperHooksDir(hooksDir);
   }
-  const base = git(proj, env, ['rev-parse', 'HEAD']).stdout;
-  for (const [rel, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(proj, ...rel.split('/'))), { recursive: true }); fs.writeFileSync(path.join(proj, ...rel.split('/')), text); }
-  git(proj, env, ['add', '--', ...Object.keys(files)]);
-  if (git(proj, env, ['commit', '-q', '-m', `fixture: ${caseName} change`]).code !== 0) return seedRefusal('commit', 'the case commit failed');
-  const head = git(proj, env, ['rev-parse', 'HEAD']).stdout;
-  return { ok: true, base, head, range: `${base}..${head}`, files: Object.keys(files) };
 }
 
 // ----------------------------------------------------------------------- verify ----
@@ -1355,6 +1398,22 @@ export const CONVERSIONS = Object.freeze(['complete', 'partial', 'held', 'pendin
 const LAYOUTS = Object.freeze(['bs-mapped', 'ordinary']);
 const DISPOSITIONS = Object.freeze(['take-new', 'keep', 'merge']);
 const AGENT_NAMES = Object.freeze(['reviewer', 'docs-sync']);
+// B2: the closed set of collateral classes. A path gets one of these literals through exact, case-sensitive rules, canonical paths first; a prefix, a suffix or a case variant
+// of a canonical agent or a recognized extension, an unknown agent file and every other permitted inventory path are other-inventory.
+export const COLLATERAL_CLASSES = Object.freeze(['canonical-agent', 'security-policy', 'tool', 'claude-project-settings', 'codex-agent-definition', 'decision-document', 'project-extension', 'other-inventory']);
+const CANONICAL_AGENT_PATHS = Object.freeze(AGENT_NAMES.map((n) => `.ai/agents/${n}.md`));
+const PROJECT_EXTENSION_PATHS = Object.freeze(AGENT_NAMES.map((n) => `.ai/agents/${n}.project.md`));
+const COLLATERAL_GUIDANCE = 'review the exact change; add only an independently approved exact path to evidence.explained (location and manifest ownership do not establish approval)';
+export function collateralClass(rel) {
+  if (CANONICAL_AGENT_PATHS.includes(rel)) return 'canonical-agent';
+  if (rel === '.ai/security-paths.json') return 'security-policy';
+  if (rel.startsWith('.ai/tools/')) return 'tool';
+  if (rel === '.claude/settings.json') return 'claude-project-settings';
+  if (rel.startsWith('.codex/agents/')) return 'codex-agent-definition';
+  if (rel.startsWith('.ai/decisions/')) return 'decision-document';
+  if (PROJECT_EXTENSION_PATHS.includes(rel)) return 'project-extension';
+  return 'other-inventory';
+}
 const POINTER_PATH = /^(?:\.ai\/context|docs|docs\/integrations)\/[^/]+\.md$/;
 const isRecord = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isPathList = (v) => Array.isArray(v) && v.every((x) => validRel(x));
@@ -1595,21 +1654,27 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
   const curOwner = (rel) => ownerOf(snap.manifest, rel);
   const curManifestState = () => snap.manifest.state;
   // BOTH snapshots, by record: snapshotPathState (present | absent | unavailable). `why` says what the check needed the path for.
-  const sideState = (snapshot, side, rel, why) => {
+  // `held` (optional, an array): a check that asks a state it may turn out not to need (B1: one of several triggers, any of which settles the question) passes its own array, and
+  // the unavailable reason goes there instead of into `unavailable`. The check MUST then either move every held reason into `unavailable` (the state was needed after all) or
+  // drop them only because another, confirmed state settled the question. The state itself is answered the same way either way, so held never turns unavailable into absent.
+  const sideState = (snapshot, side, rel, why, held) => {
     const s = snapshotPathState(snapshot, rel);
-    if (s.state === 'unavailable') unavailable.add(`${rel} ${s.why} (${side} side: unavailable, ${s.cause}), but ${why}`);
+    if (s.state === 'unavailable') { const reason = `${rel} ${s.why} (${side} side: unavailable, ${s.cause}), but ${why}`; if (Array.isArray(held)) held.push(reason); else unavailable.add(reason); }
     return s.state;
   };
-  const baseState = (rel, why = 'a check compares it with the baseline') => sideState(baseline, 'baseline', rel, why);
+  const baseState = (rel, why = 'a check compares it with the baseline', held = undefined) => sideState(baseline, 'baseline', rel, why, held);
   const snapState = (rel, why = 'a check compares it with the baseline') => sideState(snap, 'current', rel, why);
-  // BASELINE side. The record of a path (undefined for absent AND for unavailable: the second is recorded, so the caller's "no record" can never reach a clean outcome).
-  const baseRec = (rel, why) => (baseState(rel, why) === 'present' ? ownOf(baseline.files, rel) : undefined);
+  // BASELINE side. The record of a path (undefined for absent AND for unavailable: the second is recorded, or held as above, so the caller's "no record" can never reach a clean outcome).
+  const baseRec = (rel, why, held = undefined) => (baseState(rel, why, held) === 'present' ? ownOf(baseline.files, rel) : undefined);
   const basePaths = () => Object.keys(baseline.files);
   const baseSha = (rel) => ownOf(baseline.files, rel).sha256;
   // The ownership the baseline manifest recorded for a path: inputProblems has already refused a baseline whose manifest summary is not 'absent' with the manifest path confirmed
   // absent (no manifest, so no record) or 'valid' with the path present (an ownership map that lists every record), reconciled with the baseline's own file record and skipped
   // list of that path (N20, and the rest of the baseline's self-consistency, N21: baselineContradictions), so a missing key here is a confirmed absence of the record.
   const baseOwner = (rel) => ownerOf(baseline.manifest, rel);
+  // The baseline manifest summary's state (3.1.0 helper batch, B2), beside curManifestState: with the owner accessors it tells an absent or unusable manifest apart from a valid
+  // manifest that has no record of the path (ownerOf answers undefined for both). The input gate has already refused a summary it cannot reconcile.
+  const baseManifestState = () => baseline.manifest.state;
   // ==== END path-state accessors ====
   const notEvaluableByReads = () => notEvaluableResult([...unavailable], expectPartial);
   // Every file the checks read through the Markdown scanner. A comment shape the scanner cannot place exactly (see commentSpan, blockTail), or a code fence that never
@@ -1672,10 +1737,45 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
       check(blanks.length === 0, 'every 03 section a pointer references is free of unresolved blanks', blanks);
     }
   }
+  // B1 (3.1.0 helper batch): is the money rule's reference to .ai/context/critical-modules.md required? A visible link in the current critical rules keeps the strict check and
+  // asks nothing else (no state of the document is consulted for this decision). With the link missing it is required when ANY of these holds: the evidence declares the
+  // document (pointers or fullDocuments), the baseline's visible critical rules had the link, the baseline snapshot holds the document, or the current permitted state of the
+  // document is present. A trigger CONFIRMED to hold ends the question, so no state is read only to rediscover the requirement. The order: the evidence declarations (no state
+  // at all); then the two baseline-side triggers (the baseline AGENTS.md record and text, taken through baseRec only, then baseState of the document), which are answered from the
+  // baseline snapshot without reading the project; then, last, the current permitted state of the document through need(), the only trigger that reads.
+  // A baseline-side trigger that cannot be established (a baseline AGENTS.md that is unavailable, keeps no text or has a shape the scanner cannot place; a skipped or uncovered
+  // document path) is HELD, not recorded, and the next trigger is asked: an unestablished trigger is never "absent", but another trigger that is confirmed positive settles the
+  // question without it (plan B1 step 8: a state is fatal only when it is needed to establish the exception). The current state is asked only when nothing earlier was confirmed
+  // positive, so it is always needed by then, and need() records it itself when it is unavailable (denied, unsafe, unreadable; a denied document is never opened).
+  // With no trigger confirmed positive: optional only when every trigger is CONFIRMED false; otherwise the held reasons are recorded and the reference stays required, and the
+  // last gate makes the verification not evaluable. evidence.explained plays no part here: an explanation exempts a collateral change, never this rule.
+  const visibleCriticalReference = (text) => { const b = parseBlocks(text).blocks.find((x) => x.id === 'critical-rules'); return b !== undefined && CRITICAL_REFERENCE.test(visibleText(b.inner)); };
+  const criticalReferenceRequired = (curText) => {
+    if (visibleCriticalReference(curText)) return true;
+    if (evidence.pointers.includes(CRITICAL_MODULES_REL) || evidence.fullDocuments.includes(CRITICAL_MODULES_REL)) return true;
+    const why = 'a check decides whether the money rule must keep its reference to .ai/context/critical-modules.md';
+    const held = [];
+    const b = baseRec('AGENTS.md', why, held);
+    if (b !== undefined) {
+      if (typeof b.text !== 'string') held.push(`the baseline keeps no text for AGENTS.md, so it cannot be shown that the baseline critical rules lacked the reference to ${CRITICAL_MODULES_REL} (baseline side: unavailable, no-text), but ${why}`);
+      else {
+        const shapes = unsupportedShapes(b.text);
+        const parsedBase = parseBlocks(b.text);
+        if (shapes.length > 0 || parsedBase.errors.length > 0) held.push(`the baseline AGENTS.md text has a shape the scanner cannot read exactly (${shapes.length > 0 ? `line ${shapes[0].line}: ${shapes[0].reason}` : parsedBase.errors[0]}), so it cannot be shown that the baseline critical rules lacked the reference to ${CRITICAL_MODULES_REL} (baseline side: unavailable, unsupported-shape), but ${why}`);
+        else if (visibleCriticalReference(b.text)) return true;
+      }
+    }
+    if (baseState(CRITICAL_MODULES_REL, why, held) === 'present') return true;
+    const current = need(CRITICAL_MODULES_REL).state;
+    if (current === 'ok') return true;
+    if (current === 'absent' && held.length === 0) return false;
+    for (const reason of held) unavailable.add(reason);
+    return true;
+  };
   const agentsText = read('AGENTS.md');
   check(agentsText !== null, 'the root AGENTS.md is present and readable', 'missing');
   if (agentsText !== null) {
-    const f = checkRootInstructions({ agentsText, activated: mapped, paragraph: extractRootParagraph(refDoc), navSentence: extractNavSentence(refDoc), templateAgentsText: fs.readFileSync(path.join(SKILL_ROOT, 'assets', 'templates', 'AGENTS.md'), 'utf8'), nested: (evidence.nested ?? []).map((n) => ({ dir: n.dir, agents: read(`${n.dir}/AGENTS.md`) ?? undefined, claude: read(`${n.dir}/CLAUDE.md`) ?? undefined })), unrelatedLines: evidence.unrelatedAgentsLines ?? [] });
+    const f = checkRootInstructions({ agentsText, referenceRequired: criticalReferenceRequired(agentsText), activated: mapped, paragraph: extractRootParagraph(refDoc), navSentence: extractNavSentence(refDoc), templateAgentsText: fs.readFileSync(path.join(SKILL_ROOT, 'assets', 'templates', 'AGENTS.md'), 'utf8'), nested: (evidence.nested ?? []).map((n) => ({ dir: n.dir, agents: read(`${n.dir}/AGENTS.md`) ?? undefined, claude: read(`${n.dir}/CLAUDE.md`) ?? undefined })), unrelatedLines: evidence.unrelatedAgentsLines ?? [] });
     check(f.length === 0, 'root AGENTS.md: routing only when activated, template rules and summaries kept', f);
   }
   { // The independent inventory and its dispositions are required evidence (an empty inventory is an explicit statement that there is nothing to consolidate).
@@ -1711,6 +1811,17 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
   // coverage) would be exempted from nothing it could ever have compared: the exemption would only look like a review. Every listed path is therefore asked for its state first.
   for (const rel of evidence.explained ?? []) { baseState(rel, 'the evidence lists it as explained'); snapState(rel, 'the evidence lists it as explained'); }
   const explained = new Set([...(evidence.explained ?? []), ...pointerRels, ...evidence.pointers, ...evidence.fullDocuments, BS_03_REL, 'CLAUDE.md', 'AGENTS.md', 'TODO.md', MANIFEST_REL, ...Object.keys(evidence.extensions), ...AGENT_NAMES.map((n) => `.claude/agents/${n}.md`)]);
+  // B2 (3.1.0 helper batch): each unexplained change is reported with what a reviewer needs to decide it, never with an exemption. The class is diagnostic only (a fixed literal
+  // of COLLATERAL_CLASSES, chosen by exact, case-sensitive path rules, never built from path text); the manifest part says which manifest each side had and the ownership it
+  // recorded for the path (null when there is no record: with state 'absent' there is no manifest, with state 'valid' the manifest has no record of the path). Ownership approves
+  // nothing: a run can write a file and its record together. Only an exact path in evidence.explained, after review, removes an entry.
+  const collateralEntry = (rel, was, is) => ({
+    path: rel,
+    change: was === 'absent' ? 'creation' : is === 'absent' ? 'deletion' : 'modification',
+    class: collateralClass(rel),
+    manifest: { baseline: { state: baseManifestState(), ownership: baseOwner(rel) ?? null }, current: { state: curManifestState(), ownership: curOwner(rel) ?? null } },
+    guidance: COLLATERAL_GUIDANCE,
+  });
   const collateral = [];
   // The collateral comparison consults every path that has a record on either side, on BOTH sides. A record on one side and no record on the other is a creation or a deletion only
   // when the other side CONFIRMS the absence; a path the other side skipped, never covered or cannot prove is unavailable (N19: "no record" is not "did not exist").
@@ -1719,7 +1830,7 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
     const was = baseState(rel);
     const is = snapState(rel);
     // An unavailable side is already recorded (and the last gate drops every finding), so the comparison below only has to be right where both sides are present or confirmed absent.
-    if (was !== is || (was === 'present' && baseSha(rel) !== curSha(rel))) collateral.push(rel);
+    if (was !== is || (was === 'present' && baseSha(rel) !== curSha(rel))) collateral.push(collateralEntry(rel, was, is));
   }
   check(collateral.length === 0, 'no unexplained collateral modification in the permitted inventory', collateral);
   check(expectPartial ? incomplete : !incomplete, expectPartial ? 'the case really is partial (declined or custom replacement, or a held conversion)' : 'the evidence states a full conversion and a canonical agent layer (no kept or custom agent, no partial or held conversion)', { incomplete, conversion: evidence.conversion });
@@ -1764,6 +1875,7 @@ export const KNOWN_LIMITATIONS = Object.freeze([
   'Checks that look for something that must not be there read raw text and may over-report a commented copy: the duplicate root-start rule, routing or navigation text in a layout that is not mapped, and a fact copied into a pointer.',
   'validate.mjs --json results, drift output and host routing are recorded by the maintainer; the helper does not run them.',
   'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.',
+  'Token matching may also report a fact copied into a pointer when a generic token occurs only in navigation text such as Scope or a heading. Choose distinctive factual tokens and review the matched context. A visible historical mention of a stale conflict value in 03 can likewise trigger stale-value-retained; the helper cannot distinguish historical explanation from an operative claim.',
 ]);
 /**
  * The report. One "OUTCOME <name>" line states which of the three outcomes it is, and nothing else is a result. Lines that echo evidence or project content are the
