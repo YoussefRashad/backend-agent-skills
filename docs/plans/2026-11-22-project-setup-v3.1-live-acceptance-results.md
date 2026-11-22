@@ -1,4 +1,4 @@
-# project-setup 3.1.0: dated live acceptance results (Claude Code)
+# project-setup 3.1.0: dated live acceptance results (Claude Code and Codex)
 
 Status: evidence record for the maintainer's stage-2 sign-off. It is **not** an acceptance verdict and it
 does not edit the section 7 matrix of `project-setup/tests/live/BS-DOC-MAP-ACCEPTANCE.md`. That matrix is pinned
@@ -12,7 +12,7 @@ files, verify outputs). Nothing here is reproduced from them beyond the figures 
 ## Common record (applies to every row unless a row says otherwise)
 
 - **Host:** Windows 11 (maintainer-described), Node v24.14.1, Claude Code 2.1.325 for the 2026-11-14 runs, 2.1.328 for the
-  declined adopt of 2026-11-21, and 2.1.330 for the later agent runs, controls and 2026-11-22 rows, Codex not exercised.
+  declined adopt of 2026-11-21, and 2.1.330 for the later agent runs, controls and 2026-11-22 rows. Codex: codex-cli 0.163.0 on 2026-11-22 (see "Codex results").
 - **Skill copy:** the user-installed project-setup 3.1.0 candidate was the only active copy in every PS session,
   with the synced anthropic-skills copies and the `.project-setup.bak-*` backups switched off in `/skills` or by
   `skillOverrides` in the fixture's `.claude/settings.local.json`. The installer backup being discovered as a skill is
@@ -26,7 +26,7 @@ files, verify outputs). Nothing here is reproduced from them beyond the figures 
   PS-only rows of 2026-11-22 are a **recorded deviation**: headless `claude -p --permission-mode auto`, default setting
   sources, gates answered by the orchestrator on the maintainer's instruction of 2026-11-21.
 
-## Matrix (Claude Code column only; the Codex column is not measured)
+## Matrix (Claude Code column; the Codex rows that were measured are in "Codex results")
 
 | Case | Date | Result | Unverified scope |
 |---|---|---|---|
@@ -34,7 +34,7 @@ files, verify outputs). Nothing here is reproduced from them beyond the figures 
 | P2 BS procedure and stamp state | 2026-11-14, 2026-11-21 | ps-first: BS asked mode, agents, stamp and git, took the recommended answers, wrote `.backend-standards.json` 3.1.0. bs-existing: existing-project procedure, **no stamp**, provenance by the CLAUDE.md version sentence (line 68) plus the 03 import (line 20). bs-new: new-service procedure, stamp 3.1.0. Declined fixture: BS 3.1.0 existing-project applied. | The same BS 3.1.0 wrote the stamp on ps-first and not on bs-existing (recorded inconsistency). Stamp state of the declined fixture is not recorded here. |
 | P7 PS-first state after BS | 2026-11-14 | Per file vs the pre-BS snapshot: added `.ai/agents/*.project.md`, `.ai/standards/00-04`, `known-deviations.md`, `.backend-standards.json`; CLAUDE.md changed (2790 to 5605 bytes, BS text after the PS managed block); the other 22 PS files unchanged, including both wrappers, AGENTS.md and the manifest. PS 3.0.0 `validate --json` 16 pass / 0 fail; CLAUDE.md block drift unchanged. | Only the **merge (append)** branch was observed, with BS option "project extensions". The overwrite branch was not observed. |
 | Canonical docs-sync | 2026-11-14 | `docs-sync-2-clean`, session 8a9b1809, range fc9493b..7f67271, 3 parent turns, 1.00 USD, parent 0 edits. Subagent edited 03 (sections 3, 4, 5, 12 and 15) and TODO.md; pointers untouched; 03 301 to 311 lines, 21554 to 22901 bytes. | The invoked definition (`.claude/agents/docs-sync.md` loading `.ai/agents/docs-sync.md` and the project extension) is read from the transcript. `docs-sync-1` is contaminated (parent brief pre-stated routing; parent made 4 further edits) and invalid. |
-| Reviewer: seeded money defect | 2026-11-14 | `reviewer-2-clean` on bs-existing, range fda7370..df0299b, session 843bbd2a, 0.88 USD, parent 0 edits: HIGH lost update at `wallet-transfer.ts:2-5`, citing 03 section 8 Lock order first; no files modified. | The 03 Lock order rule was added by the maintainer for the fixture. The reviewer kept HIGH while noting nothing calls the function; the 3.0.0 Codex INFO residual stays open until Codex is re-measured. `reviewer-1` is contaminated and invalid. |
+| Reviewer: seeded money defect | 2026-11-14 | `reviewer-2-clean` on bs-existing, range fda7370..df0299b, session 843bbd2a, 0.88 USD, parent 0 edits: HIGH lost update at `wallet-transfer.ts:2-5`, citing 03 section 8 Lock order first; no files modified. | The 03 Lock order rule was added by the maintainer for the fixture. The reviewer kept HIGH while noting nothing calls the function; the 3.0.0 Codex INFO residual is still open: Codex re-measured on 2026-11-22 rated this same defect INFO (see "Codex results"). `reviewer-1` is contaminated and invalid. |
 | Read-only missing destination | not run | none | Not measured on any fixture. |
 | Documentation-writing missing destination | not run | none | Not measured on any fixture. |
 | Retained BS docs-sync (declined row) | 2026-11-21 | PS adopt on a bs-existing-derived fixture: reviewer replaced, docs-sync replacement declined; official line "Agent migration: incomplete update; kept installed file: .claude/agents/docs-sync.md". `verify --expect-partial`: 30 checks without finding, 1 finding (`claude-block-content`, the Subagents line). Clean docs-sync run, session fec968b2, 0.63 USD, parent 0 edits: subagent ran on opus (the retained agent's `model: opus`), edited 03 (22745 to 24738 bytes, 291 to 307 lines), AGENTS.md, CLAUDE.md and TODO.md; pointers unchanged. | The invoked definition is **inferred** (only docs-sync in the init agent list; no canonical one exists). The docs-sync edit changed the PS-managed `overview` block of AGENTS.md; PS `validate` then reports `drift` as a warning (see findings). |
@@ -48,6 +48,23 @@ files, verify outputs). Nothing here is reproduced from them beyond the figures 
 | P3/P4 context loading | 2026-11-14, 2026-11-21 | Init events show the project agents loaded and no PS or BS skill with `--setting-sources project,local`; the routing sentence relayed by the parent is the installed AGENTS.md text. | No `/memory` or `/context` self-report was collected. P4 (Codex) not run. |
 | P5 03 preload size | 2026-11-14 to 2026-11-22 | Sizes recorded: ps-first 301/21554 to 311/22901; bs-existing 273/21001; bs-new 332/28300 to 31230 bytes; declined 291/22745 to 307/24738; r2 294/21683 to 314/23064 (lines/bytes). | Sizes only; no preload measurement and no ceiling claim. |
 | P8 Codex ownership grant | not run | none | Needs the maintainer's grant first. |
+
+## Codex results (2026-11-22, codex-cli 0.163.0)
+
+Two independent fixtures, each cloned from an untouched baseline commit of an existing fixture (so no host measures documentation another host corrected) and seeded with the
+helper: `codex-docsync` (ps-first at fc9493b, range fc9493b..52bc8d9) and `codex-reviewer` (bs-existing at fda7370, range fda7370..0751c29). Runs went through the codex-delegate relay with
+`--isolated --model gpt-6-astra --effort high --sandbox workspace-write`, in the elevated Windows sandbox, with the exact section 5 prompt (`docs_sync` / `reviewer` and the range) as the whole brief.
+
+| Case | Result | Unverified scope |
+|---|---|---|
+| Setup failures (not measurements) | docs_sync runs 1 and 2: the sandbox user could not enter the fixture directory ("Access is denied"), first under `D:\ps-live`, then under `D:\ContactRepos\codex-fixtures`; the agent stopped per its rules, 0 files changed. Cause: no `CodexSandboxUsers` ACL entry on those directories (the repository root has one). The maintainer granted `(OI)(CI)(RX)` on the fixtures directory; run 3 then worked. | The acceptance doc section 2 names only the Git ownership grant, not this ACL prerequisite (doc gap). |
+| Canonical docs_sync | Run 3 (thread 01a203e9): 03 (301 to 323 lines, 21554 to 23357 bytes), `known-deviations.md` and `TODO.md` changed; 03 now records the standalone `toClientError` mapping (`WALLET_LOCKED` to 423, otherwise 500, not a Nest filter and not wired), the `FIXTURE_TRANSFER_LIMIT` handling and the layout; TODO.md holds the validation, coverage, integration and env-template gaps; pointers untouched; agent, wrapper, extension, toml, AGENTS.md and CLAUDE.md hashes identical before and after. Parent stream: 2 reads and one rejected `git-safe diff`, no file-change items. | The invoked definition is inferred (the parent read `docs-sync.md` and `docs_sync.toml`; the thread name was not observed). Child-thread edits are not in the relay stream, so parent and child edits are not separated beyond "the parent shows none". Facts not independently checked against code. Cost not reported by Codex. |
+| Reviewer: seeded money defect | Run 1 (thread 01a203ee): one finding at `wallet-transfer.ts:2` citing `03 section 8 Lock order` (found from the documents) and `01 section 7`, labelled **INFO** and "BLOCKING", verdict block, because no caller exists; no files modified; hashes identical. | One sample. The parent also read the user-level `code-review` skill (`--isolated` ignores user config but not user skills), so the severity may not be attributable to the installed instructions alone. |
+| P8 ownership grant | Not obtainable as specified: the maintainer's global git config already holds `safe.directory = *`, so an ungranted attempt does not exist and none was manufactured. | The `git-safe` ownership check inside the sandbox was not separately exercised. |
+| P4 Codex context, read-only and documentation-writing missing destinations, Codex PS rows | Not run. | Not measured. |
+
+Consequence for the open reviewer residual: Claude kept HIGH on this seed, Codex again produced INFO with a block verdict. Routing to 03 worked on both hosts; the severity wording
+of the canonical reviewer for unreachable MUST-rule violations is still the 3.0.x change recorded in TODO.md.
 
 ## Controls on the declined fixture (2026-11-21, Claude Code 2.1.330)
 
@@ -76,9 +93,12 @@ Decided by the maintainer unless marked open.
 6. **BS stamp inconsistency:** the same BS 3.1.0 wrote the stamp on ps-first and not on bs-existing (record for BS).
 7. **Open, recorded only:** Phase 0 of the declined adopt listed critical-modules as skipped for lack of evidence, yet the applied tree
    has a critical-modules pointer (five pointers).
-8. **Open:** the reviewer severity residual and the launch rule residual of the 3.0.0 host measurements stay in TODO.md.
+8. **Open:** the reviewer severity residual (confirmed again on Codex on 2026-11-22) and the launch rule residual of the 3.0.0 host measurements stay in TODO.md.
+9. **Acceptance doc gap:** section 2 names the Git ownership grant but not the `CodexSandboxUsers` ACL entry a fixture directory outside the repository root needs for the Codex sandbox to enter it.
+10. **Procedure deviation:** after the Claude measurements the two `.project-setup.bak-3.0.0-*` installer backups were moved out of the skills directories (to a non-discovered folder) instead of disabled in the
+    host, which acceptance section 1 prefers because the installer's rollback restores from the sibling location; they must be moved back before an installer rollback.
 
 ## Not done
 
-Codex rows and the P8 grant; the Read-only and Documentation-writing missing-destination cases; the section 7 matrix edit,
+Codex P4, Codex PS rows and a second Codex reviewer sample; the Read-only and Documentation-writing missing-destination cases; the section 7 matrix edit,
 the release-notes known-issues entry and the README wording, all of which belong to the maintainer's sign-off.
