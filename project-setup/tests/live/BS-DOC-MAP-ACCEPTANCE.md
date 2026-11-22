@@ -94,7 +94,11 @@ Before **every** PS run (a PS row of the scenarios in section 4):
 
 Moving an installer backup out of the skill directory breaks installer rollback, which restores
 from it; disable it in the host instead. The recorded interactive workaround disabled the backup
-without moving it. In the recorded declined-replacement attempt, interactive toggles did not
+without moving it. After the recorded Claude Code measurements, the two `.project-setup.bak-3.0.0-*`
+installer backups were instead moved out of the skill directories to a folder the hosts do not
+discover (a recorded deviation, finding 10 of
+`docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`); a backup moved that way
+must be moved back before any installer rollback. In the recorded declined-replacement attempt, interactive toggles did not
 establish print-mode selection: that attempt stopped with three loaded PS copies and made no
 measurement. Whether Codex discovers an installer backup as a skill is unverified.
 
@@ -128,6 +132,13 @@ On `GIT_SAFE_OWNERSHIP`, stop and record a setup failure, then begin a new attem
 grant. Record an ungranted attempt only where no grant already exists; never remove user trust
 configuration to manufacture one. `GIT_SAFE_REPOSITORY` needs diagnosis; it is not a routing
 result.
+
+A fixture directory outside the repository root also needs a `CodexSandboxUsers` ACL entry before
+the elevated Windows Codex sandbox can enter it; the repository root has one, a new fixture
+directory does not. Without it the sandbox user gets "Access is denied" and the agent stops with no
+file changed: record that as a setup failure, not a measurement. The recorded grant was read and
+execute, inherited by files and subdirectories, on the fixtures directory (finding 9 of
+`docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`).
 
 ## 3. Workspaces
 
@@ -447,23 +458,27 @@ Commit hooks:
 Record for every row: date, host and version, original launch directory, selected skill copy,
 actual agent definition, 03 size (bytes and lines), range, result and unverified scope.
 
+The cells below are the stage-2 outcomes in brief. Those per-row details, the versions, the
+deviations and the unverified scope are in the results file,
+`docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`.
+
 | Case | Claude Code | Codex |
 |---|---|---|
-| P1 Nest CLI scaffold versions | pending evidence | pending evidence |
-| P2 BS procedure selected; stamp/provenance state | pending evidence | pending evidence |
-| P7 PS-first state after BS (per file, validate and drift) | pending evidence | pending evidence |
-| Canonical docs-sync: explicit range, facts in 03, navigation-only pointers | pending evidence | pending evidence |
-| Reviewer: seeded money defect, 03 citation, finding and severity | pending evidence | pending evidence |
-| Read-only missing destination: gap reported, no file changed | pending evidence | pending evidence |
-| Documentation-writing missing destination: TODO entry, no unsupported fact | pending evidence | pending evidence |
-| Retained BS docs-sync: definition, routing, incomplete PS status | pending evidence | pending evidence |
-| Blank section, renamed heading, deleted pointer, local-instruction conflict | pending evidence | pending evidence |
-| Unchanged rerun: zero document and manifest diff | pending evidence | pending evidence |
-| Factual accuracy and invariants against permitted code | pending evidence | pending evidence |
-| Agent, wrapper and approved-extension bytes unchanged during docs-sync | pending evidence | pending evidence |
-| P3/P4 context loading (self-report labeled) | pending evidence | pending evidence |
-| P5 03 preload size observations | pending evidence | not applicable |
-| P8 Codex ownership grant | not applicable | pending evidence |
+| P1 Nest CLI scaffold versions | 2026-11-14: bs-new pinned Nest CLI 11 (`@nestjs/common` 11.2.10); not recorded for the other fixtures | not measured (Codex fixtures are clones) |
+| P2 BS procedure selected; stamp/provenance state | 2026-11-14: existing-project on bs-existing, new-service on bs-new; stamp on ps-first and bs-new, none on bs-existing (results file finding 6) | not measured |
+| P7 PS-first state after BS (per file, validate and drift) | 2026-11-14: merge branch only; 22 PS files unchanged; validate 16 pass, 0 fail | not measured |
+| Canonical docs-sync: explicit range, facts in 03, navigation-only pointers | 2026-11-14: facts in 03 and TODO.md; pointers untouched; parent 0 edits | 2026-11-22: facts in 03, known-deviations.md and TODO.md; pointers untouched; definition inferred |
+| Reviewer: seeded money defect, 03 citation, finding and severity | 2026-11-14: HIGH lost update citing 03 Lock order; no file modified | 2026-11-22: cites 03 Lock order; INFO with block verdict, one sample (open residual) |
+| Read-only missing destination: gap reported, no file changed | not measured | not measured |
+| Documentation-writing missing destination: TODO entry, no unsupported fact | not measured | not measured |
+| Retained BS docs-sync: definition, routing, incomplete PS status | 2026-11-21: incomplete update reported; facts in 03; definition inferred; known issues in results file findings 1 and 2 | not measured |
+| Blank section, renamed heading, deleted pointer, local-instruction conflict | 2026-11-22: each held, resolved after approval; validate 0 fail; headless auto-mode deviation | not measured |
+| Unchanged rerun: zero document and manifest diff | 2026-11-22: zero diff, manifest included, after four clone-artifact proposals were declined | not measured |
+| Factual accuracy and invariants against permitted code | 2026-11-14: ps-first checked by the maintainer; the other rows not independently checked | not measured |
+| Agent, wrapper and approved-extension bytes unchanged during docs-sync | 2026-11-14: hashes equal; 2026-11-21: equal except docs-sync edits to AGENTS.md and CLAUDE.md | 2026-11-22: hashes identical before and after |
+| P3/P4 context loading (self-report labeled) | 2026-11-14 and 2026-11-21: init events show the project agents and no PS or BS skill; no self-report | not measured (P4 not run) |
+| P5 03 preload size observations | sizes recorded 2026-11-14 to 2026-11-22; no preload measurement or ceiling | not applicable |
+| P8 Codex ownership grant | not applicable | not obtainable: a global wildcard `safe.directory` entry already exists |
 
 Routing success does not close the recorded reviewer severity or launch residuals; those TODO
 entries stay. No correctness rule depends on P3 to P5 succeeding, but a missing measurement

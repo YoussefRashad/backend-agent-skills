@@ -1,7 +1,7 @@
 # project-setup 3.1.0 - skill source
 
 **Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards
-documentation mapping, acceptance requirements, pending live evidence and the remaining limitations.
+documentation mapping, acceptance requirements, the measured live results and the remaining limitations.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -198,7 +198,11 @@ recovery after BS ran on a project-setup project is in `references/modes.md`.
 Backend-standards and the shipped canonical agents, wrappers and templates are unchanged. The
 static gates check the instructions and a test-only checker; whether a Claude or Codex agent
 follows a pointer is measured live with `tests/live/BS-DOC-MAP-ACCEPTANCE.md` and the helper
-`tests/live/bs-doc-map.mjs`. That live acceptance is pending evidence for 3.1.0.
+`tests/live/bs-doc-map.mjs`. That live acceptance was measured from 2026-11-14 to 2026-11-22; the
+results are in `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md` of the
+distribution repository. Reviewer and docs-sync routing was measured on both hosts, but the Codex
+reviewer still rates the seeded money defect INFO, so 3.1.0 makes a narrower claim than full
+cross-host compatibility; see RELEASE-NOTES-3.1.0.md.
 
 ## Test first (no installation, no real config touched)
 

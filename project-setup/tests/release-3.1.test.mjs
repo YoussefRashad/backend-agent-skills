@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// project-setup 3.1.0 release assertions, STAGE 1 (the implementation commit). Standalone: `node tests/release-3.1.test.mjs` prints PASS and
+// project-setup 3.1.0 release assertions, STAGE 2 (the sign-off commit after the live acceptance; stage 1 was the implementation commit). Standalone: `node tests/release-3.1.test.mjs` prints PASS and
 // FAIL lines, a totals line, and exits 0 only when every assertion passes. It is not a registered component (plan section 8): registering it
 // would amend the exact run-tests.mjs and registry pins of C11b to C17 for no behavioral gain, the same decision C18 recorded (I18-2).
 // Plan: docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md (sections 6, 7, 8 and amendments P1 to P4).
@@ -9,19 +9,20 @@
 //     of the ten amendable files are the independently pinned 3.0.0 baseline plus exactly the recorded amendments: insertions, and the closed
 //     list of named replacements of plan section 7. The gate engine below is THIS FILE's own. It never asks the helper to decide pass or
 //     fail, every baseline identity is pinned here (not read from the helper or the fixture), and the helper is only compared to it. That holds
-//     for each approved replacement too: the complete identity of all sixteen (id, file, both anchors, old, neu) is pinned in APPROVED below,
+//     for each approved replacement too: the complete identity of all seventeen (id, file, both anchors, old, neu) is pinned in APPROVED below,
 //     and the helper records and the fixture are compared against those pins, so a consistent change of an id, an anchor or a text is rejected.
 //  B. The gate is proven by mutation controls on synthetic data, each checked for the intended failure and not just for "something failed".
 //  C. Actual inherited obligations survive in the actual bytes (normative baseline lines, the 21 retained C14 adoption sentences, the TODO
-//     lines that stage 1 keeps), and new text carries no listed weakening phrase.
+//     lines that stage 2 keeps: every baseline line except the four lines of the closeout), and new text carries no listed weakening phrase.
 //  D. VERSION, headings and the current public claims agree on 3.1.0, historical claims stay, and RELEASE-NOTES-3.1.0.md keeps the notes
-//     contract and states the live acceptance as pending evidence.
+//     contract and states the measured live results (dated, scoped, with what was not measured, the known issues and the narrower claim).
 //  E. Everything else is unchanged: assets (canonical agents, wrappers, templates, tools), scripts, installer and builder, data, evals,
 //     historical notes, runners and the historical test sources; only the exact validated notes path is excluded from the enumeration.
 //  F. The installer installs 3.1.0 into both destinations in isolation, and a synthetic tagged repository builds the actual 3.1.0 payload
 //     with its matching notes.
 // What it does not prove: that an agent drafts a mapped project correctly (tests/bs-doc-map.test.mjs states its own evidence boundary and the
-// live acceptance document covers the rest), or anything measured on a host. No resolved measurement belongs in stage 1.
+// live acceptance document covers the rest), or anything measured on a host: the notes contract checks that the measured results are stated
+// with their scope and residuals, not that they are true; the dated evidence is docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md.
 //
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // INTERFACE the implementation MUST provide (this file is written before it exists; both files are implementation deliverables).
@@ -51,14 +52,22 @@
 // tests/live/BS-DOC-MAP-ACCEPTANCE.md exists and uses only $env:USERPROFILE\.claude\skills and $env:USERPROFILE\.agents\skills for user paths.
 // ---------------------------------------------------------------------------------------------------------------------------------------
 //
-// STAGE 2 (a follow-up commit, after the maintainer's live acceptance) EXTENDS this file; nothing below is skipped or hidden meanwhile:
-//   - STAGE becomes 2: the allowlist gains @root/TODO.md baseline lines 72-75 (the competing-document-homes subitem, no RFC 2119 word) and
-//     APPROVED gains that one closeout record (APPROVED_STAGE2_EXTRA), the
-//     only record allowed an empty neu (a deletion), and the TODO retention check drops exactly those four lines while the BS overwrite item,
-//     the integration items and the reviewer residuals stay (control: deleting them alongside the closeout is rejected).
-//   - RELEASE-NOTES-3.1.0.md loses "pending evidence" and gains the measured live results (dated, scoped, with the residuals named); the notes
-//     contract then requires those sections and still forbids resolved 40- or 64-hex IDs (artifact IDs stay in the acceptance evidence).
-//   - The gate runs once more with its own exact amendment set (stage-1 records plus the one TODO closeout record), unchanged otherwise.
+// STAGE 2 (this commit, the follow-up after the maintainer's live acceptance) EXTENDS the stage-1 file; stage-1 behavior stays reachable
+// through STAGE and the stage-1 notes controls below still run against a stage-1 synthetic document:
+//   - STAGE is 2: the allowlist gains @root/TODO.md baseline lines 72-75 (the competing-document-homes subitem, no RFC 2119 word) and
+//     APPROVED gains that one closeout record (APPROVED_STAGE2_EXTRA, id TD31_1), the only record allowed an empty neu (a deletion). The TODO
+//     retention check drops exactly those four lines while every other baseline line, among them the BS overwrite item, the integration items
+//     and the reviewer residuals, stays (controls: deleting any other TODO line alongside the closeout, or a closeout widened by one line, is
+//     rejected).
+//   - The live-acceptance sentences of five stage-1 records were restated as measured (same id, file, anchors and old): the replacements
+//     RM31_2 and RR31_5, whose revised identity is pinned in APPROVED_STAGE2_REVISED, and the insertions RM31_3, CL31_1 and PT31_3, which the
+//     chain, baseline pin and round trip judge like every insertion.
+//   - RELEASE-NOTES-3.1.0.md no longer says "pending evidence"; the notes contract requires a dated "### Measured live results" section with
+//     the host versions, a "### Not measured" list, a "### Known issues" list, the open reviewer severity residual (Codex INFO) and the
+//     narrower claim (no full cross-host compatibility claim), and still forbids resolved 40- or 64-hex IDs (artifact IDs stay in the
+//     acceptance evidence).
+//   - The gate runs with its own exact amendment set (the stage-1 records as revised above plus the one TODO closeout record), unchanged
+//     otherwise.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -436,7 +445,7 @@ const NORMATIVE_LINES = Object.freeze({
 // ------------------------------------------------------------------------------------------------------------- end of pins ----
 
 // ------------------------------------------------------------------------------------------------------------------------ harness ----
-const STAGE = 1;
+const STAGE = 2;
 const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: ok === true, detail }); };
 const attempt = (fn) => { try { return fn(); } catch (e) { return { threw: String(e && e.message ? e.message : e).split('\n')[0] }; } };
@@ -493,9 +502,18 @@ const APPROVED_STAGE1 = Object.freeze({
   PT31_1: Object.freeze({ file: "@root/.ai/context/project-tree.md", before: "", old: "├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.0.0)\n", neu: "├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.1.0)\n", after: "" }),
   PT31_2: Object.freeze({ file: "@root/.ai/context/project-tree.md", before: "", old: "(`project-setup/VERSION` is `3.0.0`) with its own layout: `SKILL.md`,\n", neu: "(`project-setup/VERSION` is `3.1.0`) with its own layout: `SKILL.md`,\n", after: "" }),
 });
-// Stage 2 adds exactly one entry here: the TODO closeout (file @root/TODO.md, old = baseline lines 72-75, neu = empty). It is authored with stage 2.
-const APPROVED_STAGE2_EXTRA = Object.freeze({});
-const APPROVED = STAGE === 1 ? APPROVED_STAGE1 : Object.freeze({ ...APPROVED_STAGE1, ...APPROVED_STAGE2_EXTRA });
+// Stage 2 (sign-off) restates the live-acceptance sentence of two approved replacements as measured: the id, file, both anchors and old stay the stage-1
+// pins above; only neu changes, and the complete revised identity is pinned here. Neither old nor new text holds an RFC 2119 word.
+const APPROVED_STAGE2_REVISED = Object.freeze({
+  RM31_2: Object.freeze({ ...APPROVED_STAGE1.RM31_2, neu: "**Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards\ndocumentation mapping, acceptance requirements, the measured live results and the remaining limitations.\n" }),
+  RR31_5: Object.freeze({ ...APPROVED_STAGE1.RR31_5, neu: "The 3.1.0 live acceptance was measured on both hosts and supports a narrower claim than full cross-host compatibility; its scope, results and limitations are in the 3.1.0 release notes.\n" }),
+});
+// Stage 2 adds exactly one entry here: the TODO closeout (file @root/TODO.md, old = baseline lines 72-75, neu = empty), anchored on the whole baseline
+// lines 71 and 76 that stay.
+const APPROVED_STAGE2_EXTRA = Object.freeze({
+  TD31_1: Object.freeze({ file: "@root/TODO.md", before: "    backend-standards 3.1.0. Not exercised: the agents themselves, Codex, or PS then BS.\n", old: "  - The two skills use different doc homes. BS ships `.ai/standards/`; PS's canonical\n    docs-sync and AGENTS.md navigation expect `.ai/context/*` and `docs/*`, so on a BS\n    scaffold PS validate fails `reference-exists` until PS generates its docs or drops the\n    references. The 4.0.0 integration has to pick one map.\n", neu: "", after: "- **`project-setup` acceptance timeout headroom needs a C16 measurement.**\n" }),
+});
+const APPROVED = STAGE === 1 ? APPROVED_STAGE1 : Object.freeze({ ...APPROVED_STAGE1, ...APPROVED_STAGE2_REVISED, ...APPROVED_STAGE2_EXTRA });
 
 // ---------------------------------------------------------------------------------------------------------------- the gate engine ----
 // Records are { file, before, old, neu, after } exactly as in c17/c18-amendments: before + old + after is the baseline slice and
@@ -632,7 +650,9 @@ function obligationProblems(text, digests) {
 
 // -------------------------------------------------------------------------------------------------- notes, claims: contract engines ----
 const NOTES_TERMS = Object.freeze([['compatibility', /compatib/i], ['consolidation', /consolidat/i], ['recovery', /recover/i], ['rollback', /rollback/i], ['verification', /verif/i], ['limitations', /limitation/i], ['provenance', /provenance/i]]);
-function notesProblems(buf, version = '3.1.0') {
+/** The notes contract of the given stage (default: this file's STAGE). Stage 1 required "pending evidence" and no resolved result; stage 2 forbids
+ *  "pending evidence" and requires the dated, scoped results section, the not-measured and known-issue lists, the named residual and the narrower claim. */
+function notesProblems(buf, version = '3.1.0', stage = STAGE) {
   const p = [];
   if (!Buffer.isBuffer(buf)) return ['the notes are unreadable'];
   const t = buf.toString('utf8');
@@ -646,9 +666,22 @@ function notesProblems(buf, version = '3.1.0') {
   if (!t.startsWith(`# project-setup ${version}\n`)) p.push('the title is not "# project-setup 3.1.0"');
   const h2 = t.split('\n').filter((l) => /^## /.test(l));
   for (const [name, rx] of NOTES_TERMS) if (!h2.some((l) => rx.test(l))) p.push(`no ## heading covers ${name}`);
-  if (STAGE === 1) {
+  if (stage === 1) {
     if (!/pending evidence/i.test(t)) p.push('the live acceptance is not stated as "pending evidence"');
     if (/\b(?:live|host) (?:acceptance|measurements?) (?:passed|completed|succeeded|were completed)\b/i.test(t) || /\bacceptance (?:passed|completed|succeeded)\b/i.test(t)) p.push('a resolved acceptance result (stage 1 records none)');
+  } else {
+    if (/pending evidence/i.test(t)) p.push('the notes still state the live acceptance as "pending evidence" (stage 2 records the measured results)');
+    const res = sectionOf(t, /^### Measured live results\b/);
+    if (res === null) p.push('no "### Measured live results" section');
+    else {
+      if (!/\b20\d\d-\d\d-\d\d\b/.test(res)) p.push('the measured live results are not dated');
+      if (!/\bClaude Code \d+\.\d+\.\d+\b/.test(res) || !/\bcodex-cli \d+\.\d+\.\d+\b/.test(res)) p.push('the measured live results do not state the host versions (Claude Code and codex-cli)');
+    }
+    const listUnder = (rx) => { const s = sectionOf(t, rx); return s !== null && s.split('\n').slice(1).some((l) => /^(?:- |\d+\. )\S/.test(l)); };
+    if (!listUnder(/^### Not measured\b/)) p.push('no "### Not measured" list (what the live acceptance did not measure)');
+    if (!listUnder(/^### Known issues\b/)) p.push('no "### Known issues" list (the live-acceptance findings carried to 3.1.x or recorded)');
+    if (!/\bINFO\b/.test(t) || !/reviewer severity residual/i.test(t)) p.push('the open reviewer severity residual (the Codex reviewer rating the seeded money defect INFO) is not named');
+    if (!/no full cross-host compatibility claim/i.test(t)) p.push('the narrower claim ("no full cross-host compatibility claim") is not stated');
   }
   if (!/re-?sync/i.test(t) || !/overwrit/i.test(t)) p.push('the backend-standards re-sync overwrite limitation is not stated');
   return p;
@@ -744,7 +777,9 @@ check('every fixture replacement is { file, old, oldSha256 } with oldSha256 the 
 check('the fixture and the helper agree: one fixture replacement per AM31 record with a nonempty old, same file and same old bytes, and no other', fixReps !== null && shapeFrozen && (() => { const reps = Object.entries(H31.AM31).filter(([, r]) => r.old !== ''); return reps.length === Object.keys(fixReps).length && reps.every(([id, r]) => has(fixReps, id) && fixReps[id].file === r.file && fixReps[id].old === r.old); })(), fixReps === null || !shapeFrozen ? NOT_YET('fixture and helper') : { fixture: Object.keys(fixReps), records: Object.entries(H31.AM31).filter(([, r]) => r.old !== '').map(([id]) => id) });
 // The independent pins (review round 1, R4): the helper and the fixture are compared against APPROVED, never the reverse.
 const PIN_IDS = Object.keys(APPROVED);
-check('the approved pins are well formed: sixteen frozen plain-identifier records in the amendable set (none in @root/TODO.md at stage 1), exactly the keys file, before, old, neu, after as LF-only strings, old and neu whole lines that differ, no RFC 2119 word in old', Object.isFrozen(APPROVED) && PIN_IDS.length === 16 && PIN_IDS.every((id) => { const p = APPROVED[id]; return ID_RE.test(id) && Object.isFrozen(p) && JSON.stringify(Object.keys(p).sort()) === JSON.stringify(REC_KEYS) && REC_KEYS.every((k) => typeof p[k] === 'string' && !p[k].includes('\r')) && AMENDABLE.includes(p.file) && (STAGE !== 1 || p.file !== '@root/TODO.md') && p.old !== '' && p.old.endsWith('\n') && p.neu.endsWith('\n') && p.old !== p.neu && !KEYWORD.test(p.old); }), PIN_IDS.filter((id) => !ID_RE.test(id)));
+const PIN_COUNT = STAGE === 1 ? 16 : 17;
+const isCloseoutPin = (id) => STAGE === 2 && has(APPROVED_STAGE2_EXTRA, id);
+check(`the approved pins are well formed: ${PIN_COUNT} frozen plain-identifier records in the amendable set (none in @root/TODO.md at stage 1; at stage 2 only the one closeout record, which alone has an empty neu), exactly the keys file, before, old, neu, after as LF-only strings, old whole lines, neu whole lines or (closeout only) empty, old and neu differ, no RFC 2119 word in old`, Object.isFrozen(APPROVED) && PIN_IDS.length === PIN_COUNT && (STAGE === 1 || Object.keys(APPROVED_STAGE2_EXTRA).length === 1) && PIN_IDS.every((id) => { const p = APPROVED[id]; return ID_RE.test(id) && Object.isFrozen(p) && JSON.stringify(Object.keys(p).sort()) === JSON.stringify(REC_KEYS) && REC_KEYS.every((k) => typeof p[k] === 'string' && !p[k].includes('\r')) && AMENDABLE.includes(p.file) && (isCloseoutPin(id) ? p.file === '@root/TODO.md' && p.neu === '' && p.before !== '' && p.after !== '' : p.file !== '@root/TODO.md' && p.neu.endsWith('\n')) && p.old !== '' && p.old.endsWith('\n') && p.old !== p.neu && !KEYWORD.test(p.old); }), PIN_IDS.filter((id) => !ID_RE.test(id)));
 check('the helper holds exactly the approved replacements: the same ids, and for each the same file, both anchors, old text and new text', shapeFrozen && (() => { const reps = Object.entries(H31.AM31).filter(([, r]) => r.old !== ''); return reps.length === PIN_IDS.length && reps.every(([id, r]) => has(APPROVED, id) && REC_KEYS.every((k) => r[k] === APPROVED[id][k])); })(), shapeFrozen ? Object.entries(H31.AM31).filter(([id, r]) => r.old !== '' && !(has(APPROVED, id) && REC_KEYS.every((k) => r[k] === APPROVED[id][k]))).map(([id]) => id) : NOT_YET('AM31'));
 check('the fixture holds exactly the approved replacements: the same ids and files, the pinned old bytes, and oldSha256 the digest of them', fixReps !== null && JSON.stringify(Object.keys(fixReps).sort()) === JSON.stringify([...PIN_IDS].sort()) && PIN_IDS.every((id) => fixReps[id].file === APPROVED[id].file && fixReps[id].old === APPROVED[id].old && fixReps[id].oldSha256 === sha(APPROVED[id].old)), fixReps === null ? NOT_YET('fixture replacements') : Object.keys(fixReps).filter((id) => !has(APPROVED, id) || fixReps[id].old !== APPROVED[id].old));
 check('the fixture holds no personal path, no secret-shaped string and no baseline file text', typeof FIX_RAW === 'string' && !/[A-Za-z]:\\\\Users|\/home\/|\/Users\/|ghp_[A-Za-z0-9]{20}|AKIA[0-9A-Z]{12}|BEGIN [A-Z ]*PRIVATE KEY/.test(FIX_RAW) && FIX_OK && !JSON.stringify(Object.keys(FIX.files ?? {}).map((k) => Object.keys(FIX.files[k]))).includes('text'), typeof FIX_RAW === 'string' ? undefined : NOT_YET('fixture'));
@@ -765,7 +800,13 @@ for (const k of AMENDABLE) {
 check('the amendment records and orders are consistent (no unlisted, duplicated or misfiled record, no pattern id)', REAL !== null && REAL.problems.filter((q) => q.kind === 'order' || (q.file === null && q.kind !== 'obligation')).length === 0, REAL === null ? NOT_YET('gate') : msgs(REAL.problems.filter((q) => q.kind === 'order' || q.file === null)));
 check('every non-insertion record is one of the approved named replacements (complete identity pinned in this spec), whole lines inside a fixed baseline range, no RFC 2119 word in old, exactly the fixture bytes', REAL !== null && REAL.problems.filter((q) => ['approved', 'range', 'keyword', 'fixture'].includes(q.kind)).length === 0, REAL === null ? NOT_YET('gate') : msgs(REAL.problems.filter((q) => ['approved', 'range', 'keyword', 'fixture'].includes(q.kind))));
 check('no amendment text carries a listed weakening phrase (approval, root-start, security, ownership exceptions)', REAL !== null && REAL.problems.filter((q) => q.kind === 'weaken').length === 0, REAL === null ? NOT_YET('gate') : msgs(REAL.problems.filter((q) => q.kind === 'weaken')));
-check(`stage ${STAGE}: ${STAGE === 1 ? 'no record touches @root/TODO.md with a replacement or deletion (the closeout waits for the live acceptance)' : 'the TODO closeout is the only deletion'}`, shapeFrozen && Object.values(H31.AM31).every((r) => r.file !== '@root/TODO.md' || r.old === ''), shapeFrozen ? Object.entries(H31.AM31).filter(([, r]) => r.file === '@root/TODO.md' && r.old !== '').map(([id]) => id) : NOT_YET('AM31'));
+if (STAGE === 1) check('stage 1: no record touches @root/TODO.md with a replacement or deletion (the closeout waits for the live acceptance)', shapeFrozen && Object.values(H31.AM31).every((r) => r.file !== '@root/TODO.md' || r.old === ''), shapeFrozen ? Object.entries(H31.AM31).filter(([, r]) => r.file === '@root/TODO.md' && r.old !== '').map(([id]) => id) : NOT_YET('AM31'));
+else {
+  const ids = (pred) => (shapeFrozen ? Object.entries(H31.AM31).filter(([, r]) => pred(r)).map(([id]) => id) : null);
+  const want = JSON.stringify(Object.keys(APPROVED_STAGE2_EXTRA));
+  const dels = ids((r) => r.neu === ''); const todo = ids((r) => r.file === '@root/TODO.md');
+  check('stage 2: the TODO closeout is the only deletion (the one record with an empty neu) and the only record of @root/TODO.md', dels !== null && JSON.stringify(dels) === want && JSON.stringify(todo) === want, shapeFrozen ? { deletions: dels, todoRecords: todo } : NOT_YET('AM31'));
+}
 check('the allowlisted baseline ranges hold no RFC 2119 word (the pinned baseline text, derived by this spec\'s own reversal)', REAL !== null && Object.entries(ALLOW).every(([k, ranges]) => typeof REAL.baseline[k] === 'string' && ranges.every(([a, b]) => REAL.baseline[k].split('\n').slice(a - 1, b).every((l) => !KEYWORD.test(l)))), REAL === null ? NOT_YET('gate') : undefined);
 check('every approved pin\'s old text is whole baseline lines inside the allowlisted range of its file (judged on the independently pinned baseline)', REAL !== null && PIN_IDS.every((id) => { const p = APPROVED[id]; const base = REAL.baseline[p.file]; const rg = typeof base === 'string' ? lineRangeOf(base, p.old) : null; return rg !== null && (ALLOW[p.file] ?? []).some(([a, b]) => rg[0] >= a && rg[1] <= b); }), REAL === null ? NOT_YET('gate') : PIN_IDS.filter((id) => { const p = APPROVED[id]; const base = REAL.baseline[p.file]; return typeof base !== 'string' || lineRangeOf(base, p.old) === null; }));
 // R4 mutation controls on the REAL bytes. Each mutation is CONSISTENT: the helper record, the fixture and the actual file are changed together, so the
@@ -803,17 +844,19 @@ if (REAL !== null && shapeFrozen && fixReps !== null) {
     }
     check(`a consistent RENAME of a record id (helper, order and fixture renamed together) is rejected by the pins alone: the new id is unapproved and the pinned id has no record (${reps.length} of ${reps.length} approved records exercised)`, failures.length === 0, failures);
   }
+  // The anchor is EXTENDED by the adjacent whole line (prev + before, after + next), so the changed record still stands once at the same place: for a
+  // record with empty anchors this is exactly the adjacent line; for the stage-2 closeout (a deletion anchored on both sides) it keeps the anchor contiguous.
   sweep('a consistent change of the BEFORE anchor (still standing once, same baseline) is rejected by the pin alone', (id, r) => {
     const T = ACTUAL[r.file]; const at = T.indexOf(keyOf(r));
     if (at <= 0) return null;
     const head = T.slice(0, at); const prev = head.slice(head.lastIndexOf('\n', head.length - 2) + 1);
-    return runGate(withRec(id, { ...r, before: prev }), H31.FORWARD_ORDER31, ACTUAL, FIXOLD);
+    return runGate(withRec(id, { ...r, before: prev + r.before }), H31.FORWARD_ORDER31, ACTUAL, FIXOLD);
   }, /before differs from the pinned approved record/);
   sweep('a consistent change of the AFTER anchor (still standing once, same baseline) is rejected by the pin alone', (id, r) => {
     const T = ACTUAL[r.file]; const at = T.indexOf(keyOf(r)); const tail = T.slice(at + keyOf(r).length);
     const nl = tail.indexOf('\n');
     if (tail === '' || nl < 0) return null;
-    return runGate(withRec(id, { ...r, after: tail.slice(0, nl + 1) }), H31.FORWARD_ORDER31, ACTUAL, FIXOLD);
+    return runGate(withRec(id, { ...r, after: r.after + tail.slice(0, nl + 1) }), H31.FORWARD_ORDER31, ACTUAL, FIXOLD);
   }, /after differs from the pinned approved record/);
   { // A changed OLD text is rejected by the pin even when the fixture follows it (the old gate trusted the fixture, an editable file).
     const failures = []; let ran = 0;
@@ -851,6 +894,18 @@ if (REAL !== null && shapeFrozen && fixReps !== null) {
     const legacy = probe.filter((q) => q.kind !== 'approved');
     check('the review probe (RM31_6 gains an unapproved flag AND its id is renamed, helper, fixture and file consistent) leaves every legacy check satisfied and is rejected only by the pins', neu2 !== r.neu && legacy.length === 0 && probe.some((q) => q.kind === 'approved' && q.id === nid) && probe.some((q) => q.kind === 'approved' && q.id === 'RM31_6'), msgs(probe));
   }
+  if (STAGE === 2 && has(H31.AM31, 'TD31_1')) { // The TODO closeout on the real bytes: widened by one line on either side, consistently (record, fixture and file agree).
+    const TD = '@root/TODO.md'; const r = H31.AM31.TD31_1; const T = ACTUAL[TD];
+    const at = T.indexOf(r.before + r.after); const head = T.slice(0, at); const prev = head.slice(head.lastIndexOf('\n', head.length - 2) + 1);
+    const tail = T.slice(at + r.before.length + r.after.length); const next = tail.slice(0, tail.indexOf('\n') + 1);
+    for (const [label, rec, act] of [
+      ['widened upward over baseline line 71 (the integration item it anchors on)', { ...r, before: prev, old: r.before + r.old }, T.replace(prev + r.before + r.after, () => prev + r.after)],
+      ['widened downward over baseline line 76 (the acceptance-timeout item)', { ...r, old: r.old + r.after, after: next }, T.replace(r.before + r.after + next, () => r.before + next)],
+    ]) {
+      const out = runGate(withRec('TD31_1', rec), H31.FORWARD_ORDER31, { ...ACTUAL, [TD]: act }, { ...FIXOLD, TD31_1: rec.old });
+      check(`stage 2 control: the closeout ${label} is rejected by the approved pin and by the line-range allowlist, with no chain, pin or round-trip problem`, act !== T && out.some((q) => q.kind === 'approved' && q.id === 'TD31_1' && /old differs/.test(q.msg)) && out.some((q) => q.kind === 'range' && q.id === 'TD31_1' && /outside the allowlisted ranges/.test(q.msg)) && !out.some((q) => ['chain', 'pin', 'roundtrip'].includes(q.kind)), msgs(out));
+    }
+  }
 }
 for (const k of AMENDABLE) {
   const raw = ACTUAL[k];
@@ -867,16 +922,20 @@ for (const k of AMENDABLE) {
   check(`${k}: control: reversing the baseline again is refused`, ready && attempt(() => H31.reverseForFile(REAL.baseline[k], k)).text === null, ready ? undefined : NOT_YET('helper'));
   const ids = ready ? H31.FORWARD_ORDER31[k] : [];
   const last = ids.length > 0 ? H31.AM31[ids[ids.length - 1]] : null;
-  const altered = last !== null && last.neu.length > 1 ? ACTUAL[k].replace(last.before + last.neu + last.after, () => `${last.before}${last.neu.slice(0, -2)}#\n${last.after}`) : null;
+  // A deletion (the stage-2 TODO closeout, empty neu) has no text to alter or duplicate: its "altered" form puts a stray line between its anchors, its
+  // "duplicated" form repeats the anchored slice, and its "missing" form is the deletion not applied (the old lines back).
+  const isDel = last !== null && last.neu === '';
+  const keyLast = last === null ? '' : last.before + last.neu + last.after;
+  const altered = last !== null && last.neu.length > 1 ? ACTUAL[k].replace(keyLast, () => `${last.before}${last.neu.slice(0, -2)}#\n${last.after}`) : isDel ? ACTUAL[k].replace(keyLast, () => `${last.before}#\n${last.after}`) : null;
   check(`${k}: control: an altered amendment text is refused by the helper`, altered !== null && altered !== ACTUAL[k] && attempt(() => H31.reverseForFile(altered, k)).text === null, last === null ? NOT_YET('records') : undefined);
-  const dup = last !== null ? ACTUAL[k].replace(last.before + last.neu + last.after, () => `${last.before}${last.neu}${last.neu}${last.after}`) : null;
+  const dup = last === null ? null : isDel ? ACTUAL[k].replace(keyLast, () => `${keyLast}${keyLast}`) : ACTUAL[k].replace(keyLast, () => `${last.before}${last.neu}${last.neu}${last.after}`);
   // A duplicate next to a one-sided anchor still leaves its anchor standing once, so the helper alone cannot always refuse it; what must
   // hold is that the helper never gives the pinned baseline back for it (the pin comparison is the gate's, the helper only reverses).
   const dupBack = dup === null ? null : attempt(() => H31.reverseForFile(dup, k));
   check(`${k}: control: a duplicated amendment text is refused by the helper or does not reverse to the pinned baseline`, dup !== null && dup !== ACTUAL[k] && !failedAttempt(dupBack) && (dupBack.text === null || sha(dupBack.text) !== PIN_OF[k]), last === null ? NOT_YET('records') : undefined);
   // The same three mutations on the real bytes, judged by THIS spec's gate: every one must produce a problem for that file.
   const mutate = (text) => { const c = gate({ actual: { ...ACTUAL, [k]: text }, records: H31.AM31, forward: H31.FORWARD_ORDER31, allow: ALLOW, amendable: new Set(AMENDABLE), deleteOk: DELETE_OK, pins: PIN_OF }); return c.problems.some((q) => q.file === k && ['chain', 'pin', 'roundtrip'].includes(q.kind)); };
-  const missing = last !== null ? ACTUAL[k].replace(last.before + last.neu + last.after, () => last.before + last.after) : null;
+  const missing = last === null ? null : isDel ? ACTUAL[k].replace(keyLast, () => last.before + last.old + last.after) : ACTUAL[k].replace(keyLast, () => last.before + last.after);
   const moved = last !== null && last.neu.length > 0 ? `${last.neu}${ACTUAL[k].replace(last.neu, () => '')}` : null;
   // A mutation that leaves the file unchanged (moving the only line of VERSION) is not a mutation; at least three real ones must remain.
   const muts = [['missing', missing], ['duplicated', dup], ['altered', altered], ['moved', moved]].filter(([, m]) => m !== null && m !== ACTUAL[k]);
@@ -1081,7 +1140,8 @@ const TODO_CLOSEOUT = R('T.md', '- keep item.\n', '- competing homes item line o
 }
 
 // ===================================================== B2. controls for the notes and public-claims engines ====
-const NOTES_GOOD = [
+// The stage-1 synthetic notes (kept: the stage-1 controls below still run on them with the stage-1 contract).
+const NOTES_GOOD_STAGE1 = [
   '# project-setup 3.1.0', '', 'Documentation mapping for backend-standards projects.', '',
   '## Compatibility', '', 'Existing projects keep working; a project without the signals is unaffected.', '',
   '## Consolidation', '', 'Existing full documents are folded into 03 before any pointer replaces them.', '',
@@ -1091,23 +1151,62 @@ const NOTES_GOOD = [
   '## Limitations', '', 'A later backend-standards re-sync can overwrite consolidated documentation.', '',
   '## Provenance and release artifacts', '', 'Artifact identities are recorded in the acceptance evidence, not here.', '',
 ].join('\n');
+// The stage-2 synthetic notes: the same headings, the verification section carrying the dated, scoped results, the not-measured list and the claim,
+// and the limitations section carrying the known-issue list.
+const NOTES_RESULTS_HEAD = '### Measured live results (2026-11-14 to 2026-11-22)';
+const NOTES_GOOD = [
+  '# project-setup 3.1.0', '', 'Documentation mapping for backend-standards projects.', '',
+  '## Compatibility', '', 'Existing projects keep working; a project without the signals is unaffected.', '',
+  '## Consolidation', '', 'Existing full documents are folded into 03 before any pointer replaces them.', '',
+  '## Recovery', '', 'A PS-first project records what the backend-standards procedure did before proposing repairs.', '',
+  '## Rollback', '', 'Roll back the reviewed transaction as one unit.', '',
+  '## Verification', '', 'Live acceptance: measured, see below.', '',
+  NOTES_RESULTS_HEAD, '', 'Scope: Claude Code 2.1.330 and codex-cli 0.163.0 on one host.', '', '- Routing to 03 was measured on both hosts.', '',
+  '### Not measured', '', '- A second Codex reviewer sample.', '',
+  '### Claim', '', 'The Codex reviewer rates the seeded defect INFO, the open reviewer severity residual, so there is no full cross-host compatibility claim.', '',
+  '## Limitations', '', 'A later backend-standards re-sync can overwrite consolidated documentation.', '',
+  '### Known issues', '', '1. A kept docs-sync can edit a managed block. Fix in 3.1.x.', '',
+  '## Provenance and release artifacts', '', 'Artifact identities are recorded in the acceptance evidence, not here.', '',
+].join('\n');
 {
   const nb = (s) => Buffer.from(s, 'utf8');
-  check('notes control: the valid synthetic notes have no problem', notesProblems(nb(NOTES_GOOD)).length === 0, notesProblems(nb(NOTES_GOOD)));
-  const nctl = (name, buf, rx) => { const p = notesProblems(buf); check(`notes control: ${name}`, p.some((m) => rx.test(m)), p); };
-  nctl('a BOM is rejected', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), nb(NOTES_GOOD)]), /BOM/);
-  nctl('CRLF is rejected', nb(NOTES_GOOD.replace(/\n/g, '\r\n')), /CR/);
-  nctl('a missing final LF is rejected', nb(NOTES_GOOD.slice(0, -1)), /final LF/);
-  nctl('a second final LF is rejected', nb(`${NOTES_GOOD}\n`), /final LF/);
-  nctl('non-ASCII text is rejected', nb(NOTES_GOOD.replace('Existing', 'Exist\u00efng')), /non-ASCII/);
-  nctl('a standalone 40-hex ID is rejected', nb(`${NOTES_GOOD}Commit ${'a'.repeat(40)}\n`), /hex/);
-  nctl('a standalone 64-hex ID is rejected', nb(`${NOTES_GOOD}Digest ${'0123456789abcdef'.repeat(4)}\n`), /hex/);
-  nctl('a personal path is rejected', nb(`${NOTES_GOOD}See C:\\Users\\someone\\skills\n`), /personal path/);
-  nctl('a wrong title is rejected', nb(NOTES_GOOD.replace('# project-setup 3.1.0', '# project-setup 3.0.0')), /title/);
-  for (const [name, rx] of NOTES_TERMS) nctl(`a missing ${name} heading is rejected`, nb(NOTES_GOOD.split('\n').map((l) => (/^## /.test(l) && rx.test(l) ? '## Other' : l)).join('\n')), new RegExp(`no ## heading covers ${name}`));
-  nctl('stage 1: missing "pending evidence" is rejected', nb(NOTES_GOOD.replace('pending evidence', 'something else')), /pending evidence/);
-  nctl('stage 1: a resolved acceptance result is rejected', nb(`${NOTES_GOOD}Live acceptance passed on every scenario.\n`), /resolved acceptance/);
-  nctl('a missing re-sync overwrite limitation is rejected', nb(NOTES_GOOD.replace('re-sync can overwrite', 'run can change')), /re-sync overwrite limitation/);
+  check(`notes control: the valid synthetic stage-${STAGE} notes have no problem`, notesProblems(nb(STAGE === 1 ? NOTES_GOOD_STAGE1 : NOTES_GOOD)).length === 0, notesProblems(nb(STAGE === 1 ? NOTES_GOOD_STAGE1 : NOTES_GOOD)));
+  check('notes control: the valid synthetic stage-1 notes have no problem under the stage-1 contract', notesProblems(nb(NOTES_GOOD_STAGE1), '3.1.0', 1).length === 0, notesProblems(nb(NOTES_GOOD_STAGE1), '3.1.0', 1));
+  check('notes control: the valid synthetic stage-2 notes have no problem under the stage-2 contract', notesProblems(nb(NOTES_GOOD), '3.1.0', 2).length === 0, notesProblems(nb(NOTES_GOOD), '3.1.0', 2));
+  const nctl = (name, buf, rx, stage = STAGE) => { const p = notesProblems(buf, '3.1.0', stage); check(`notes control: ${name}`, p.some((m) => rx.test(m)), p); };
+  const NG = STAGE === 1 ? NOTES_GOOD_STAGE1 : NOTES_GOOD;
+  nctl('a BOM is rejected', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), nb(NG)]), /BOM/);
+  nctl('CRLF is rejected', nb(NG.replace(/\n/g, '\r\n')), /CR/);
+  nctl('a missing final LF is rejected', nb(NG.slice(0, -1)), /final LF/);
+  nctl('a second final LF is rejected', nb(`${NG}\n`), /final LF/);
+  nctl('non-ASCII text is rejected', nb(NG.replace('Existing', 'Exist\u00efng')), /non-ASCII/);
+  nctl('a standalone 40-hex ID is rejected', nb(`${NG}Commit ${'a'.repeat(40)}\n`), /hex/);
+  nctl('a standalone 64-hex ID is rejected', nb(`${NG}Digest ${'0123456789abcdef'.repeat(4)}\n`), /hex/);
+  nctl('a personal path is rejected', nb(`${NG}See C:\\Users\\someone\\skills\n`), /personal path/);
+  nctl('a wrong title is rejected', nb(NG.replace('# project-setup 3.1.0', '# project-setup 3.0.0')), /title/);
+  for (const [name, rx] of NOTES_TERMS) nctl(`a missing ${name} heading is rejected`, nb(NG.split('\n').map((l) => (/^## /.test(l) && rx.test(l) ? '## Other' : l)).join('\n')), new RegExp(`no ## heading covers ${name}`));
+  // The stage-1 contract, still proven on the stage-1 synthetic notes.
+  nctl('stage 1: missing "pending evidence" is rejected', nb(NOTES_GOOD_STAGE1.replace('pending evidence', 'something else')), /pending evidence/, 1);
+  nctl('stage 1: a resolved acceptance result is rejected', nb(`${NOTES_GOOD_STAGE1}Live acceptance passed on every scenario.\n`), /resolved acceptance/, 1);
+  nctl('a missing re-sync overwrite limitation is rejected', nb(NG.replace('re-sync can overwrite', 'run can change')), /re-sync overwrite limitation/);
+  // The stage-2 contract (each mutation applied to the valid stage-2 notes; the precondition says it changed them).
+  const n2 = (name, mutated, rx) => check(`notes control: stage 2: ${name}`, mutated !== NOTES_GOOD && notesProblems(nb(mutated), '3.1.0', 2).some((m) => rx.test(m)), notesProblems(nb(mutated), '3.1.0', 2));
+  n2('notes that still say "pending evidence" are rejected', `${NOTES_GOOD}The Codex P4 check is pending evidence.\n`, /still state the live acceptance as "pending evidence"/);
+  n2('the unchanged stage-1 notes are rejected (pending evidence, no results section)', NOTES_GOOD_STAGE1, /pending evidence/);
+  check('notes control: stage 2: the unchanged stage-1 notes are also rejected for the missing results section and lists', (() => { const p = notesProblems(nb(NOTES_GOOD_STAGE1), '3.1.0', 2); return p.some((m) => /Measured live results/.test(m)) && p.some((m) => /Not measured/.test(m)) && p.some((m) => /Known issues/.test(m)); })());
+  n2('a missing results section is rejected (heading and body removed)', NOTES_GOOD.replace(`${NOTES_RESULTS_HEAD}\n\nScope: Claude Code 2.1.330 and codex-cli 0.163.0 on one host.\n\n- Routing to 03 was measured on both hosts.\n\n`, ''), /no "### Measured live results" section/);
+  n2('a results section under another heading is rejected', NOTES_GOOD.replace(NOTES_RESULTS_HEAD, '### Live results'), /no "### Measured live results" section/);
+  n2('undated results are rejected', NOTES_GOOD.replace(' (2026-11-14 to 2026-11-22)', ''), /not dated/);
+  n2('results without the codex-cli version are rejected', NOTES_GOOD.replace('codex-cli 0.163.0', 'Codex'), /host versions/);
+  n2('results without the Claude Code version are rejected', NOTES_GOOD.replace('Claude Code 2.1.330', 'Claude Code'), /host versions/);
+  n2('a missing not-measured list is rejected (heading removed)', NOTES_GOOD.replace('### Not measured\n\n- A second Codex reviewer sample.\n\n', ''), /no "### Not measured" list/);
+  n2('a not-measured heading with no list item is rejected', NOTES_GOOD.replace('- A second Codex reviewer sample.\n', 'Nothing.\n'), /no "### Not measured" list/);
+  n2('a missing known-issue list is rejected (heading removed)', NOTES_GOOD.replace('### Known issues\n\n1. A kept docs-sync can edit a managed block. Fix in 3.1.x.\n\n', ''), /no "### Known issues" list/);
+  n2('a known-issue heading with no list item is rejected', NOTES_GOOD.replace('1. A kept docs-sync can edit a managed block. Fix in 3.1.x.\n', 'None.\n'), /no "### Known issues" list/);
+  n2('a missing reviewer severity residual is rejected', NOTES_GOOD.replace('the open reviewer severity residual', 'a known difference'), /reviewer severity residual/);
+  n2('a missing INFO rating is rejected', NOTES_GOOD.replace('the seeded defect INFO', 'the seeded defect lower'), /reviewer severity residual/);
+  n2('a full compatibility claim in place of the narrower one is rejected', NOTES_GOOD.replace('there is no full cross-host compatibility claim', 'both hosts are fully compatible'), /narrower claim/);
+  n2('a standalone 40-hex commit ID in the results is rejected', NOTES_GOOD.replace('- Routing to 03', `- Commit ${'b'.repeat(40)}. Routing to 03`), /hex/);
 }
 // The acceptance document (plan P3): it names the live helper, no personal path, and for user paths only the two skill directories.
 // A path inside one of those two directories is fine; a sibling directory (.codex, .claude\settings) or a home-relative spelling is not.
@@ -1218,6 +1317,27 @@ check('the C14 adoption sentences are read from the unchanged c14 source: 22 sen
   const want = STAGE === 1 ? [...keep, ...stage1Only] : keep;
   const miss = want.filter((s) => !squash(t).includes(s));
   check(`@root/TODO.md keeps the BS overwrite work, the integration items and the reviewer residuals${STAGE === 1 ? ', and the competing-homes subitem (stage 1 carries no closeout)' : ''}`, miss.length === 0 && t.length > 0, miss.length > 0 ? miss : t.length === 0 ? 'unreadable' : undefined);
+  if (STAGE === 2) {
+    // Line retention, judged on the independently pinned baseline (this spec's own reversal): the actual TODO is the baseline minus exactly lines 72-75.
+    const CLOSE = [72, 75];
+    const base = REAL === null ? null : REAL.baseline['@root/TODO.md'];
+    const closeoutOnly = (text) => { if (typeof base !== 'string' || typeof text !== 'string') return false; const b = lf(base).split('\n'); return JSON.stringify([...b.slice(0, CLOSE[0] - 1), ...b.slice(CLOSE[1])]) === JSON.stringify(lf(text).split('\n')); };
+    const ACT = actualText('@root/TODO.md');
+    check('stage 2: @root/TODO.md is its pinned baseline minus exactly the four lines 72-75 of the competing-document-homes subitem (every other baseline line kept, in order)', closeoutOnly(ACT) && stage1Only.every((s) => !squash(lf(ACT)).includes(s)), typeof base === 'string' ? stage1Only.filter((s) => squash(lf(ACT)).includes(s)) : NOT_YET('the TODO baseline'));
+    check('stage 2: the four closed lines hold no RFC 2119 word and are exactly the approved closeout\'s old text', typeof base === 'string' && (() => { const ls = lf(base).split('\n').slice(CLOSE[0] - 1, CLOSE[1]); return ls.every((l) => !KEYWORD.test(l)) && `${ls.join('\n')}\n` === APPROVED_STAGE2_EXTRA.TD31_1.old; })());
+    // Control: deleting any other baseline line alongside the closeout is rejected, by the line retention and by the gate (chain, pin or round trip).
+    if (typeof base === 'string' && shapeFrozen && orderOk) {
+      const b = lf(base).split('\n'); const kept = [...b.slice(0, CLOSE[0] - 1), ...b.slice(CLOSE[1])];
+      const misses = []; let ran = 0;
+      for (let i = 0; i < kept.length - 1; i++) { // the last element is the empty string after the final LF, not a line
+        const mut = [...kept.slice(0, i), ...kept.slice(i + 1)].join('\n');
+        ran += 1;
+        const g = gate({ actual: { ...ACTUAL, '@root/TODO.md': mut }, records: H31.AM31, forward: H31.FORWARD_ORDER31, allow: ALLOW, amendable: new Set(AMENDABLE), deleteOk: DELETE_OK, pins: PIN_OF, approved: APPROVED }).problems;
+        if (closeoutOnly(mut) || !g.some((q) => q.file === '@root/TODO.md' && ['chain', 'pin', 'roundtrip'].includes(q.kind))) misses.push(i < CLOSE[0] - 1 ? i + 1 : i + 1 + (CLOSE[1] - CLOSE[0] + 1));
+      }
+      check(`stage 2 control: deleting any other TODO line together with the closeout is rejected by the line retention and by the gate (${ran} of ${kept.length - 1} other baseline lines exercised)`, ran === kept.length - 1 && ran >= 50 && misses.length === 0, misses.length > 0 ? { baselineLines: misses.slice(0, 12) } : { ran });
+    }
+  }
 }
 {
   const cl = claimsProblems({ VERSION: ACTUAL.VERSION, SKILL: ACTUAL['SKILL.md'], PSREADME: ACTUAL['README.md'], CHANGELOG: ACTUAL['CHANGELOG.md'], ROOTREADME: ACTUAL['@root/README.md'], TREE: ACTUAL['@root/.ai/context/project-tree.md'], MODES: ACTUAL['references/modes.md'] });
@@ -1229,9 +1349,10 @@ check('the C14 adoption sentences are read from the unchanged c14 source: 22 sen
   const notesBytes = attempt(() => fs.readFileSync(path.join(SKILL, NOTES31)));
   check(`${NOTES31} exists`, Buffer.isBuffer(notesBytes), NOT_YET(NOTES31, failedAttempt(notesBytes) ? notesBytes.threw : undefined));
   const np = Buffer.isBuffer(notesBytes) ? notesProblems(notesBytes) : null;
-  check(`${NOTES31} keeps the notes contract (ASCII, LF, no BOM, one final LF, no 40- or 64-hex ID, no personal path, title, seven covered headings, pending evidence at stage 1, the re-sync overwrite limitation)`, np !== null && np.length === 0, np === null ? NOT_YET(NOTES31) : np);
+  check(`${NOTES31} keeps the notes contract (ASCII, LF, no BOM, one final LF, no 40- or 64-hex ID, no personal path, title, seven covered headings, ${STAGE === 1 ? 'pending evidence at stage 1' : 'at stage 2 no "pending evidence", the dated and scoped measured results, the not-measured and known-issue lists, the reviewer severity residual and the narrower claim'}, the re-sync overwrite limitation)`, np !== null && np.length === 0, np === null ? NOT_YET(NOTES31) : np);
   const cmdNotes = Buffer.isBuffer(notesBytes) ? notesBytes.toString('utf8') : '';
-  check(`${NOTES31} names the check that would close the live acceptance (it is pending, not measured) and keeps the unresolved-provenance contract of the builder`, /pending evidence/i.test(cmdNotes) && !/(?<![0-9A-Fa-f])[0-9A-Fa-f]{40}(?![0-9A-Fa-f])/.test(cmdNotes), Buffer.isBuffer(notesBytes) ? undefined : NOT_YET(NOTES31));
+  if (STAGE === 1) check(`${NOTES31} names the check that would close the live acceptance (it is pending, not measured) and keeps the unresolved-provenance contract of the builder`, /pending evidence/i.test(cmdNotes) && !/(?<![0-9A-Fa-f])[0-9A-Fa-f]{40}(?![0-9A-Fa-f])/.test(cmdNotes), Buffer.isBuffer(notesBytes) ? undefined : NOT_YET(NOTES31));
+  else check(`${NOTES31} states the live acceptance as measured (a results section, no "pending evidence"), names the results file and the acceptance procedure, and keeps the unresolved-provenance contract of the builder (no 40-hex commit ID)`, !/pending evidence/i.test(cmdNotes) && /^### Measured live results\b/m.test(cmdNotes) && cmdNotes.includes('2026-11-22-project-setup-v3.1-live-acceptance-results.md') && cmdNotes.includes('tests/live/BS-DOC-MAP-ACCEPTANCE.md') && !/(?<![0-9A-Fa-f])[0-9A-Fa-f]{40}(?![0-9A-Fa-f])/.test(cmdNotes), Buffer.isBuffer(notesBytes) ? undefined : NOT_YET(NOTES31));
   const acc = attempt(() => fs.readFileSync(path.join(SKILL, 'tests', 'live', 'BS-DOC-MAP-ACCEPTANCE.md'), 'utf8'));
   check('tests/live/BS-DOC-MAP-ACCEPTANCE.md exists, names no personal path (plan P3), uses only the two $env:USERPROFILE skill directories for user paths and names the live helper', typeof acc === 'string' && accProblems(acc).length === 0, typeof acc === 'string' ? accProblems(acc) : NOT_YET('tests/live/BS-DOC-MAP-ACCEPTANCE.md', acc.threw));
 }

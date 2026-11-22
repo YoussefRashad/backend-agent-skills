@@ -1,15 +1,16 @@
 // Exact 3.1.0 amendment literals and the verified reversal to the 3.0.0 bytes (test-only; never part of the installer payload).
 //
-// Plan: docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md, section 7 (section 12 amends it; stage 1, P2). The 3.1.0 source is the
+// Plan: docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md, section 7 (section 12 amends it; stage 2, P2). The 3.1.0 source is the
 // 3.0.0 source (commit fd7ae54) plus the records below: insertions by default, and only these exact named replacements:
 //   SK31_*  SKILL.md heading line (allowlisted line 6)          VR31_*  VERSION
 //   RM31_*  PS README title, opening release sentence (P1 a), acceptance sentence (P1 b) and the two release tag lines
 //   MD31_*  the stale modes.md scaffold observation (line 74), replaced by the scoped observation of plan section 6
 //   RR31_*  root README current version, install, notes, rollback and layout claims
 //   PT31_*  root project-tree current version claims
-// Every other record has an empty old (an insertion). No old holds MUST, SHOULD or MAY. Stage 1 carries no TODO.md record; the
-// competing-document-homes closeout is stage 2. tests/release-3.1.test.mjs judges all of this with its own engine and pins; this
-// module is never asked to decide pass or fail there.
+//   TD31_1  stage 2: the competing-document-homes closeout of root TODO.md (baseline lines 72-75), the only deletion (empty neu)
+// Every other record has an empty old (an insertion). No old holds MUST, SHOULD or MAY. Stage 2 (the sign-off after the live acceptance)
+// also restated the live-acceptance sentences of RM31_2, RM31_3, CL31_1, RR31_5 and PT31_3 as measured (same ids, files, anchors and
+// old). tests/release-3.1.test.mjs judges all of this with its own engine and pins; this module is never asked to decide pass or fail there.
 //
 // A record is { file, before, old, neu, after } exactly as in c17/c18-amendments.mjs: before + old + after is the 3.0.0 slice and
 // before + neu + after the 3.1.0 slice. Root files are keyed "@root/<path>"; every other key is relative to project-setup/.
@@ -68,14 +69,14 @@ export const AM31 = Object.freeze({
     file: "README.md",
     before: "",
     old: "**Release 3.0.0.** See RELEASE-NOTES-3.0.0.md for compatibility, acceptance requirements,\nthe rc.4 host measurement results and the remaining limitations.\n",
-    neu: "**Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards\ndocumentation mapping, acceptance requirements, pending live evidence and the remaining limitations.\n",
+    neu: "**Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards\ndocumentation mapping, acceptance requirements, the measured live results and the remaining limitations.\n",
     after: "",
   }),
   RM31_3: Object.freeze({
     file: "README.md",
     before: "",
     old: "",
-    neu: "## Backend-standards documentation mapping (3.1.0)\n\nOn a project with backend-standards provenance (a valid `.backend-standards.json` stamp, or the BS\nCLAUDE.md version sentence with its matching 03 import, or the exact owner decision in root\nAGENTS.md), `.ai/standards/03-project-architecture.md` owns the architecture facts. Setup turns the\noverlapping project-setup documents into self-sufficient pointers to named 03 sections and\nconsolidates their facts into 03 through one reviewed transaction. The rules are in\n`references/docs-generation.md` (\"Documentation source of truth on backend-standards projects\");\nrecovery after BS ran on a project-setup project is in `references/modes.md`.\n\nBackend-standards and the shipped canonical agents, wrappers and templates are unchanged. The\nstatic gates check the instructions and a test-only checker; whether a Claude or Codex agent\nfollows a pointer is measured live with `tests/live/BS-DOC-MAP-ACCEPTANCE.md` and the helper\n`tests/live/bs-doc-map.mjs`. That live acceptance is pending evidence for 3.1.0.\n\n",
+    neu: "## Backend-standards documentation mapping (3.1.0)\n\nOn a project with backend-standards provenance (a valid `.backend-standards.json` stamp, or the BS\nCLAUDE.md version sentence with its matching 03 import, or the exact owner decision in root\nAGENTS.md), `.ai/standards/03-project-architecture.md` owns the architecture facts. Setup turns the\noverlapping project-setup documents into self-sufficient pointers to named 03 sections and\nconsolidates their facts into 03 through one reviewed transaction. The rules are in\n`references/docs-generation.md` (\"Documentation source of truth on backend-standards projects\");\nrecovery after BS ran on a project-setup project is in `references/modes.md`.\n\nBackend-standards and the shipped canonical agents, wrappers and templates are unchanged. The\nstatic gates check the instructions and a test-only checker; whether a Claude or Codex agent\nfollows a pointer is measured live with `tests/live/BS-DOC-MAP-ACCEPTANCE.md` and the helper\n`tests/live/bs-doc-map.mjs`. That live acceptance was measured from 2026-11-14 to 2026-11-22; the\nresults are in `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md` of the\ndistribution repository. Reviewer and docs-sync routing was measured on both hosts, but the Codex\nreviewer still rates the seeded money defect INFO, so 3.1.0 makes a narrower claim than full\ncross-host compatibility; see RELEASE-NOTES-3.1.0.md.\n\n",
     after: "## Test first (no installation, no real config touched)\n",
   }),
   RM31_4: Object.freeze({
@@ -105,7 +106,7 @@ export const AM31 = Object.freeze({
     file: "CHANGELOG.md",
     before: "",
     old: "",
-    neu: "## 3.1.0\n\nOn a backend-standards project, `.ai/standards/03-project-architecture.md` (03) becomes the\ndocumentation source of truth. Project-setup detects the layout separately from the setup mode\n(a valid stamp, or the BS CLAUDE.md version sentence with its matching 03 import, or an exact\nowner decision recorded in root AGENTS.md) and turns nine overlapping documents into\nself-sufficient pointers to named 03 sections. Backend-standards itself is unchanged.\n\nSafeguards: substantive content is inventoried and consolidated into 03 through one reviewed\ntransaction before any original is replaced; declined consolidation keeps the originals and is\nreported incomplete. Malformed or conflicting signals hold activation. Pointers and changed 03\nrequest merged ownership, and an undrafted 03 and the instruction files activation relies on are\ndeclared as transaction inputs. A project where BS ran after project-setup is measured first and\nthen recovered per file (CLAUDE.md, reviewer wrapper, docs-sync wrapper). Read-only agents report\na missing destination in their output and write nothing.\n\nCanonical agents, wrappers, templates, scripts, installer and release builder are unchanged.\nStatic checks: tests/bs-doc-map.test.mjs and tests/release-3.1.test.mjs. Live acceptance in both\nhosts is pending evidence (tests/live/BS-DOC-MAP-ACCEPTANCE.md).\n\nLimitations: a later BS re-sync can overwrite consolidated 03 content and PS instructions or\nwrappers; the stamp is reconfirmed before prepare but not bound atomically; no safe 03 size\nceiling is established.\n\nSee RELEASE-NOTES-3.1.0.md.\n\n",
+    neu: "## 3.1.0\n\nOn a backend-standards project, `.ai/standards/03-project-architecture.md` (03) becomes the\ndocumentation source of truth. Project-setup detects the layout separately from the setup mode\n(a valid stamp, or the BS CLAUDE.md version sentence with its matching 03 import, or an exact\nowner decision recorded in root AGENTS.md) and turns nine overlapping documents into\nself-sufficient pointers to named 03 sections. Backend-standards itself is unchanged.\n\nSafeguards: substantive content is inventoried and consolidated into 03 through one reviewed\ntransaction before any original is replaced; declined consolidation keeps the originals and is\nreported incomplete. Malformed or conflicting signals hold activation. Pointers and changed 03\nrequest merged ownership, and an undrafted 03 and the instruction files activation relies on are\ndeclared as transaction inputs. A project where BS ran after project-setup is measured first and\nthen recovered per file (CLAUDE.md, reviewer wrapper, docs-sync wrapper). Read-only agents report\na missing destination in their output and write nothing.\n\nCanonical agents, wrappers, templates, scripts, installer and release builder are unchanged.\nStatic checks: tests/bs-doc-map.test.mjs and tests/release-3.1.test.mjs. Live acceptance was\nmeasured in both hosts from 2026-11-14 to 2026-11-22 (tests/live/BS-DOC-MAP-ACCEPTANCE.md; results\nin docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md of the distribution\nrepository): reviewer and docs-sync routing held on both, but the Codex reviewer still rates the\nseeded money defect INFO, so the claim is narrower than full cross-host compatibility.\n\nLimitations: a later BS re-sync can overwrite consolidated 03 content and PS instructions or\nwrappers; the stamp is reconfirmed before prepare but not bound atomically; no safe 03 size\nceiling is established.\n\nSee RELEASE-NOTES-3.1.0.md.\n\n",
     after: "## 3.0.0\n",
   }),
 
@@ -183,7 +184,7 @@ export const AM31 = Object.freeze({
     file: "@root/README.md",
     before: "",
     old: "The rc.4 host measurement results and limitations are in the 3.0.0 release notes.\n",
-    neu: "The 3.1.0 live acceptance is pending evidence; its scope and limitations are in the 3.1.0 release notes.\n",
+    neu: "The 3.1.0 live acceptance was measured on both hosts and supports a narrower claim than full cross-host compatibility; its scope, results and limitations are in the 3.1.0 release notes.\n",
     after: "",
   }),
   RR31_6: Object.freeze({
@@ -220,8 +221,17 @@ export const AM31 = Object.freeze({
     file: "@root/.ai/context/project-tree.md",
     before: "",
     old: "",
-    neu: "Since 3.1.0, on a project with backend-standards provenance, `project-setup` treats\n`.ai/standards/03-project-architecture.md` as the documentation source of truth and emits pointer\ndocuments (`project-setup/references/docs-generation.md`). Its standalone gates are\n`tests/bs-doc-map.test.mjs`, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs`; the live\nacceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) is pending\nevidence, see project-setup/RELEASE-NOTES-3.1.0.md.\n\n",
+    neu: "Since 3.1.0, on a project with backend-standards provenance, `project-setup` treats\n`.ai/standards/03-project-architecture.md` as the documentation source of truth and emits pointer\ndocuments (`project-setup/references/docs-generation.md`). Its standalone gates are\n`tests/bs-doc-map.test.mjs`, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs`; the live\nacceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) was measured\non both hosts from 2026-11-14 to 2026-11-22 with a narrower claim than full cross-host\ncompatibility, see project-setup/RELEASE-NOTES-3.1.0.md.\n\n",
     after: "## `backend-standards/`\n",
+  }),
+
+  // @root/TODO.md (stage 2: the competing-document-homes closeout, baseline lines 72-75; the only deletion)
+  TD31_1: Object.freeze({
+    file: "@root/TODO.md",
+    before: "    backend-standards 3.1.0. Not exercised: the agents themselves, Codex, or PS then BS.\n",
+    old: "  - The two skills use different doc homes. BS ships `.ai/standards/`; PS's canonical\n    docs-sync and AGENTS.md navigation expect `.ai/context/*` and `docs/*`, so on a BS\n    scaffold PS validate fails `reference-exists` until PS generates its docs or drops the\n    references. The 4.0.0 integration has to pick one map.\n",
+    neu: "",
+    after: "- **`project-setup` acceptance timeout headroom needs a C16 measurement.**\n",
   }),
 });
 
@@ -235,6 +245,7 @@ export const FORWARD_ORDER31 = Object.freeze({
   "references/report.md": Object.freeze(["RP31_1", "RP31_2"]),
   "@root/README.md": Object.freeze(["RR31_1", "RR31_2", "RR31_3", "RR31_4", "RR31_5", "RR31_6", "RR31_7"]),
   "@root/.ai/context/project-tree.md": Object.freeze(["PT31_1", "PT31_2", "PT31_3"]),
+  "@root/TODO.md": Object.freeze(["TD31_1"]),
 });
 export const REVERSAL_ORDER31 = Object.freeze(Object.fromEntries(Object.entries(FORWARD_ORDER31).map(([f, ids]) => [f, Object.freeze([...ids].reverse())])));
 export const AMENDED_FILES31 = Object.freeze(Object.keys(FORWARD_ORDER31));

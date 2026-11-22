@@ -17,8 +17,11 @@ then recovered per file (CLAUDE.md, reviewer wrapper, docs-sync wrapper). Read-o
 a missing destination in their output and write nothing.
 
 Canonical agents, wrappers, templates, scripts, installer and release builder are unchanged.
-Static checks: tests/bs-doc-map.test.mjs and tests/release-3.1.test.mjs. Live acceptance in both
-hosts is pending evidence (tests/live/BS-DOC-MAP-ACCEPTANCE.md).
+Static checks: tests/bs-doc-map.test.mjs and tests/release-3.1.test.mjs. Live acceptance was
+measured in both hosts from 2026-11-14 to 2026-11-22 (tests/live/BS-DOC-MAP-ACCEPTANCE.md; results
+in docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md of the distribution
+repository): reviewer and docs-sync routing held on both, but the Codex reviewer still rates the
+seeded money defect INFO, so the claim is narrower than full cross-host compatibility.
 
 Limitations: a later BS re-sync can overwrite consolidated 03 content and PS instructions or
 wrappers; the stamp is reconfirmed before prepare but not bound atomically; no safe 03 size

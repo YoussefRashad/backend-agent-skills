@@ -123,6 +123,11 @@
       "file": "@root/.ai/context/project-tree.md",
       "old": "(`project-setup/VERSION` is `3.0.0`) with its own layout: `SKILL.md`,\n",
       "oldSha256": "02c548a2503dfadd41b4cb4439c50561b4d8751300da9e3b3b3e1290c3738d7b"
+    },
+    "TD31_1": {
+      "file": "@root/TODO.md",
+      "old": "  - The two skills use different doc homes. BS ships `.ai/standards/`; PS's canonical\n    docs-sync and AGENTS.md navigation expect `.ai/context/*` and `docs/*`, so on a BS\n    scaffold PS validate fails `reference-exists` until PS generates its docs or drops the\n    references. The 4.0.0 integration has to pick one map.\n",
+      "oldSha256": "3bf1185bff514feecd1f84c41c52694001744a47521571083c558260daf0a8ea"
     }
   }
 }
