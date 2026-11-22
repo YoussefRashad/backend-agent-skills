@@ -69,10 +69,6 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
     overwriting them. Lint-staged reformatting PS-managed files into drift, the missing
     `.gitignore` and raw Git in the BS docs-sync were fixed in toolchain-config 2.1.0 and
     backend-standards 3.1.0. Not exercised: the agents themselves, Codex, or PS then BS.
-  - The two skills use different doc homes. BS ships `.ai/standards/`; PS's canonical
-    docs-sync and AGENTS.md navigation expect `.ai/context/*` and `docs/*`, so on a BS
-    scaffold PS validate fails `reference-exists` until PS generates its docs or drops the
-    references. The 4.0.0 integration has to pick one map.
 - **`project-setup` acceptance timeout headroom needs a C16 measurement.**
   `tests/accept-rc1.mjs` allows 1,800,000 ms. The post-C12 runs took 1435 s and 1540 s;
   the rc.2 runs on the same host took 1189 s (C14) and 1222-1242 s (C15, 2026-10-24),

@@ -4133,23 +4133,24 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   const TRUST = 'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.';
   const MATRIX_ROWS = [
     '| Case | Claude Code | Codex |', '|---|---|---|',
-    '| P1 Nest CLI scaffold versions | pending evidence | pending evidence |',
-    '| P2 BS procedure selected; stamp/provenance state | pending evidence | pending evidence |',
-    '| P7 PS-first state after BS (per file, validate and drift) | pending evidence | pending evidence |',
-    '| Canonical docs-sync: explicit range, facts in 03, navigation-only pointers | pending evidence | pending evidence |',
-    '| Reviewer: seeded money defect, 03 citation, finding and severity | pending evidence | pending evidence |',
-    '| Read-only missing destination: gap reported, no file changed | pending evidence | pending evidence |',
-    '| Documentation-writing missing destination: TODO entry, no unsupported fact | pending evidence | pending evidence |',
-    '| Retained BS docs-sync: definition, routing, incomplete PS status | pending evidence | pending evidence |',
-    '| Blank section, renamed heading, deleted pointer, local-instruction conflict | pending evidence | pending evidence |',
-    '| Unchanged rerun: zero document and manifest diff | pending evidence | pending evidence |',
-    '| Factual accuracy and invariants against permitted code | pending evidence | pending evidence |',
-    '| Agent, wrapper and approved-extension bytes unchanged during docs-sync | pending evidence | pending evidence |',
-    '| P3/P4 context loading (self-report labeled) | pending evidence | pending evidence |',
-    '| P5 03 preload size observations | pending evidence | not applicable |',
-    '| P8 Codex ownership grant | not applicable | pending evidence |',
+    // Stage 2 (sign-off): the measured outcomes of docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md, in brief; no cell is left "pending evidence".
+    '| P1 Nest CLI scaffold versions | 2026-11-14: bs-new pinned Nest CLI 11 (`@nestjs/common` 11.2.10); not recorded for the other fixtures | not measured (Codex fixtures are clones) |',
+    '| P2 BS procedure selected; stamp/provenance state | 2026-11-14: existing-project on bs-existing, new-service on bs-new; stamp on ps-first and bs-new, none on bs-existing (results file finding 6) | not measured |',
+    '| P7 PS-first state after BS (per file, validate and drift) | 2026-11-14: merge branch only; 22 PS files unchanged; validate 16 pass, 0 fail | not measured |',
+    '| Canonical docs-sync: explicit range, facts in 03, navigation-only pointers | 2026-11-14: facts in 03 and TODO.md; pointers untouched; parent 0 edits | 2026-11-22: facts in 03, known-deviations.md and TODO.md; pointers untouched; definition inferred |',
+    '| Reviewer: seeded money defect, 03 citation, finding and severity | 2026-11-14: HIGH lost update citing 03 Lock order; no file modified | 2026-11-22: cites 03 Lock order; INFO with block verdict, one sample (open residual) |',
+    '| Read-only missing destination: gap reported, no file changed | not measured | not measured |',
+    '| Documentation-writing missing destination: TODO entry, no unsupported fact | not measured | not measured |',
+    '| Retained BS docs-sync: definition, routing, incomplete PS status | 2026-11-21: incomplete update reported; facts in 03; definition inferred; known issues in results file findings 1 and 2 | not measured |',
+    '| Blank section, renamed heading, deleted pointer, local-instruction conflict | 2026-11-22: each held, resolved after approval; validate 0 fail; headless auto-mode deviation | not measured |',
+    '| Unchanged rerun: zero document and manifest diff | 2026-11-22: zero diff, manifest included, after four clone-artifact proposals were declined | not measured |',
+    '| Factual accuracy and invariants against permitted code | 2026-11-14: ps-first checked by the maintainer; the other rows not independently checked | not measured |',
+    '| Agent, wrapper and approved-extension bytes unchanged during docs-sync | 2026-11-14: hashes equal; 2026-11-21: equal except docs-sync edits to AGENTS.md and CLAUDE.md | 2026-11-22: hashes identical before and after |',
+    '| P3/P4 context loading (self-report labeled) | 2026-11-14 and 2026-11-21: init events show the project agents and no PS or BS skill; no self-report | not measured (P4 not run) |',
+    '| P5 03 preload size observations | sizes recorded 2026-11-14 to 2026-11-22; no preload measurement or ceiling | not applicable |',
+    '| P8 Codex ownership grant | not applicable | not obtainable: a global wildcard `safe.directory` entry already exists |',
   ];
-  const MATRIX_SHA = '7274697ac6acebc4351de1db632071fc5f09e4f39310ca4d9cb4e4ccf071690f';
+  const MATRIX_SHA = '197c7eeb30bf9ddadcc42e4cd7f234c312186e8e6e7a8d287b20a2b700704e8d';
   // The one dedicated invariant fence: the single ```markdown fence of section 6, compared byte for byte (LF) with the shared constant the positive seed tests use.
   const fenceOf = (raw6) => {
     const lines = lf(raw6).split('\n'); const found = []; let cur = null;
@@ -4215,7 +4216,7 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   const failsWith = (doc, id) => { if (doc === null) return false; const p = attempt(() => procProblems(doc)); return Array.isArray(p) && p.includes(id); };
 
   // The checker and its constants, before the document.
-  G('the matrix rows pinned here are the existing matrix, byte for byte (17 lines: header, separator and 15 cases, every cell "pending evidence" or "not applicable")', MATRIX_ROWS.length === 17 && sha(MATRIX_ROWS.join('\n')) === MATRIX_SHA && MATRIX_ROWS.slice(2).every((r) => r.split('|').length === 5), sha(MATRIX_ROWS.join('\n')));
+  G('the matrix rows pinned here are the stage-2 matrix, byte for byte (17 lines: header, separator and 15 cases, three cells each, no cell left "pending evidence")', MATRIX_ROWS.length === 17 && sha(MATRIX_ROWS.join('\n')) === MATRIX_SHA && MATRIX_ROWS.slice(2).every((r) => r.split('|').length === 5) && MATRIX_ROWS.slice(2).every((r) => !/pending evidence/i.test(r)), sha(MATRIX_ROWS.join('\n')));
   G('the invariant constant of this spec is the dedicated fence of the reference document and the unit the seed fixtures use (one constant for the document pin and the positive seed tests)', fenceOf(sectionsOf(REF)['6'].raw).content === LOCK_ORDER_BLOCK && with03Invariant(BS03).includes(LOCK_ORDER_BLOCK));
   G('the checker accepts the reference document (every requirement met), so a removal below is the only thing that can fail', JSON.stringify(procProblems(REF)) === '[]', procProblems(REF));
   G('the reference document holds every requirement once (a removal below removes exactly one occurrence)', REQS.every(([, , t]) => REF.split(t).length === 2), REQS.filter(([, , t]) => REF.split(t).length !== 2).map(([id]) => id));
@@ -4308,7 +4309,8 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   for (const [id, c] of O3_CLAUSES) G(`mutant: the probe paragraph without its clause "${c.slice(0, 40)}..." fails ${id} and the full-paragraph pin`, (() => { const d = remove(REF, c); return failsWith(d, id) && failsWith(d, 'O3-paragraph'); })());
   G('mutant: the probe date changed (2026-11-15 to 2026-11-14 in the paragraph) fails the full-paragraph pin', failsWith(change(REF, 'On 2026-11-15, the orchestrator', 'On 2026-11-14, the orchestrator'), 'O3-paragraph'));
   G('mutant: the introduction removed fails; the stale blanket statement put back fails its own pin', failsWith(remove(REF, INTRO), 'intro') && failsWith(change(REF, INTRO, `${INTRO} Nothing below has been run for 3.1.0 yet.`), 'intro-stale-statement'));
-  G('mutant: a matrix cell changed fails the matrix pin; a deleted row fails it; a row added fails it', failsWith(change(REF, '| P1 Nest CLI scaffold versions | pending evidence | pending evidence |', '| P1 Nest CLI scaffold versions | recorded | pending evidence |'), 'matrix') && failsWith(remove(REF, `${MATRIX_ROWS[5]}\n`), 'matrix') && failsWith(change(REF, MATRIX_ROWS[16], `${MATRIX_ROWS[16]}\n| P9 extra | pending evidence | pending evidence |`), 'matrix'));
+  G('mutant: a matrix cell changed fails the matrix pin; a deleted row fails it; a row added fails it', failsWith(change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace('| not measured (Codex fixtures are clones) |', '| recorded |')), 'matrix') && failsWith(remove(REF, `${MATRIX_ROWS[5]}\n`), 'matrix') && failsWith(change(REF, MATRIX_ROWS[16], `${MATRIX_ROWS[16]}\n| P9 extra | not measured | not measured |`), 'matrix'));
+  G('mutant: a measured cell put back to "pending evidence" fails the matrix pin (P1 Claude Code cell, and the Codex reviewer cell)', failsWith(change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace(/^(\| P1 Nest CLI scaffold versions \| )[^|]+\|/, '$1pending evidence |')), 'matrix') && failsWith(change(REF, MATRIX_ROWS[6], MATRIX_ROWS[6].replace(/\| [^|]+ \|$/, '| pending evidence |')), 'matrix') && change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace(/^(\| P1 Nest CLI scaffold versions \| )[^|]+\|/, '$1pending evidence |')) !== REF);
 
   // The invariant fence: the shared constant, byte for byte. Each substantive alteration fails, and so does a missing, doubled or unclosed fence.
   const block = LOCK_ORDER_BLOCK.slice(0, -1);

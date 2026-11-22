@@ -43,8 +43,9 @@ Since 3.1.0, on a project with backend-standards provenance, `project-setup` tre
 `.ai/standards/03-project-architecture.md` as the documentation source of truth and emits pointer
 documents (`project-setup/references/docs-generation.md`). Its standalone gates are
 `tests/bs-doc-map.test.mjs`, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs`; the live
-acceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) is pending
-evidence, see project-setup/RELEASE-NOTES-3.1.0.md.
+acceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) was measured
+on both hosts from 2026-11-14 to 2026-11-22 with a narrower claim than full cross-host
+compatibility, see project-setup/RELEASE-NOTES-3.1.0.md.
 
 ## `backend-standards/`
 

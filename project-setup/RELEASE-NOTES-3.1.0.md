@@ -4,9 +4,11 @@ On a backend-standards (BS) project, `.ai/standards/03-project-architecture.md` 
 documentation source of truth. Project-setup writes navigation pointers for the documents that
 overlap 03 instead of a second full description. Backend-standards is unchanged.
 
-Status: stage 1 (the implementation). The static gates below check the instructions, a test-only
-checker and the release bytes. The live acceptance in Claude Code and Codex is pending evidence;
-no host measurement is claimed in these notes.
+Status: stage 2 (the live acceptance is recorded). The static gates below check the instructions,
+a test-only checker and the release bytes. The dated live acceptance in Claude Code and Codex is
+recorded under Verification, with its scope, what was not measured and the residuals; it supports
+a narrower claim than full cross-host compatibility. Tagging and publication remain separate
+authorized actions.
 
 ## Compatibility
 
@@ -69,10 +71,57 @@ no host measurement is claimed in these notes.
   3.0.0 view), plus the complete strict gate `node tests/accept-rc1.mjs`.
 - These prove the instructions and the checker, not agent behavior. Whether a Claude or Codex
   reviewer and docs-sync follow a pointer is a live measurement.
-- Live acceptance: pending evidence. The procedure, scenarios and exact prompts are in
-  `tests/live/BS-DOC-MAP-ACCEPTANCE.md`. Until both hosts are measured for reviewer and docs-sync
-  routing, no full compatibility claim is made, and the recorded 3.0.0 reviewer residuals remain
-  open.
+- Live acceptance: measured, see below. The procedure, scenarios and exact prompts are in
+  `tests/live/BS-DOC-MAP-ACCEPTANCE.md`; the per-row results, dates and unverified scope are in
+  `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md` of the distribution
+  repository (the results file).
+
+### Measured live results (2026-11-14 to 2026-11-22)
+
+Scope: one Windows 11 host, Node v24.14.1. Claude Code 2.1.325 for the 2026-11-14 runs, 2.1.328
+for the declined adopt of 2026-11-21 and 2.1.330 for the later agent runs, the controls and the
+2026-11-22 rows. Codex: codex-cli 0.163.0 on 2026-11-22, on two fixtures cloned from untouched
+baseline commits of the Claude Code fixtures. Agent measurements used the exact section 5 prompts
+in new sessions started at the fixture root; contaminated runs were kept and not counted.
+
+- Canonical docs-sync, both hosts: the facts went to 03 (and to TODO.md; on Codex also to
+  known-deviations.md), the pointers were left untouched, and the agent, wrapper and extension
+  bytes were unchanged. On Codex the invoked definition is inferred, not observed.
+- Reviewer on the seeded money defect, both hosts: both cited the 03 Lock order rule and modified
+  no file. Claude Code rated the defect HIGH; the Codex reviewer rated it INFO with a block
+  verdict because nothing calls the function (one sample).
+- Retained BS docs-sync (Claude Code, 2026-11-21): PS reported the incomplete agent update and the
+  retained agent routed the facts to 03; the invoked definition is inferred.
+- PS rows (Claude Code): the PS-first state after BS (merge branch only; the other 22 PS files
+  unchanged), the BS procedure and stamp states, a blank section, a renamed heading, a deleted
+  pointer and a local-instruction conflict (each held for a disposition, then resolved after
+  approval) and an unchanged rerun with zero diff, manifest included. The five 2026-11-22 rows ran
+  headless in auto permission mode, a recorded deviation from the interactive procedure.
+- Controls (Claude Code, 2026-11-21): hook self-test 3 PASS / 0 FAIL; a raw Git command was
+  blocked by the project hook and a read under the secrets path was refused by the project Read
+  deny rule.
+- Context loading (Claude Code): the init events show the project agents loaded and no PS or BS
+  skill; no self-report was collected. 03 sizes were recorded; no preload ceiling is claimed.
+
+### Not measured
+
+- The Codex P4 context check.
+- The read-only and the documentation-writing missing-destination cases, on either host.
+- Codex PS rows: Codex ran only docs-sync and the reviewer.
+- Interactive default-mode PS rows for the blank section, renamed heading, deleted pointer,
+  local-instruction conflict and unchanged rerun cases.
+- A second Codex reviewer sample.
+- The P8 Codex ownership grant: not obtainable as specified, because a wildcard `safe.directory`
+  entry already existed in the global Git configuration.
+- The overwrite branch of the PS-first recovery: only the merge branch was observed.
+
+### Claim
+
+Reviewer and docs-sync routing to 03 was measured on both hosts. The Codex reviewer still rates
+the unreachable seeded money defect INFO with a block verdict: the 3.0.0 reviewer severity
+residual, which stays open in TODO.md. There is therefore no full cross-host compatibility claim;
+3.1.0 claims the documentation mapping and pointer routing only as measured above, on the stated
+versions.
 
 ## Limitations
 
@@ -85,6 +134,26 @@ no host measurement is claimed in these notes.
 - No safe 03 size ceiling is established. Sizes are recorded before and after consolidation and a
   review threshold applies; facts are never truncated to meet an assumed limit.
 - Static checks cannot prove that an agent discovered every fact of a project.
+
+### Known issues (from the live acceptance)
+
+1. A kept BS docs-sync makes the CLAUDE.md Subagents line false (no partial-layer variant;
+   validate reports `claude-block-content`). Fix in 3.1.x.
+2. A kept BS docs-sync is not bound by the managed-block rule and can edit the PS-managed AGENTS.md
+   `overview` block, which a later PS update may rewrite. Fix in 3.1.x.
+3. Update and adopt differ for evidence-less topics and the per-variable requiredness table of 03
+   Configuration, and adopt omitted tsconfig strictness: no 3.1.0 adopt on a real many-variable
+   service before 3.1.1.
+4. The shipped secret-path policy lacks `env/**` and `cert/**`, which BS 00 section 5.3 names;
+   add them to `.ai/security-paths.json` by hand until 3.1.x.
+5. Claude Code discovers the installer backup, a sibling in the skills directory, as a second and
+   older project-setup skill. detect.mjs fix in 3.1.x; the backup location is a candidate change.
+6. The same BS 3.1.0 wrote its stamp on the PS-first fixture but not on the BS existing-project
+   fixture. Recorded for backend-standards.
+7. Open, recorded only: Phase 0 of the declined adopt listed critical-modules as skipped for lack
+   of evidence, yet the applied tree has a critical-modules pointer.
+8. Open: the reviewer severity residual (confirmed again on Codex on 2026-11-22) and the launch
+   rule residual of the 3.0.0 host measurements stay in TODO.md.
 
 ## Provenance and release artifacts
 
