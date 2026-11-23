@@ -166,7 +166,10 @@ The first three run in the working tree. The historical gates (`tests/run-tests.
 scripts and data and are byte-pinned, so they run only through the view runner
 `tests/run-310-view.mjs`, which reconstructs the 3.1.0 tree outside the repository; run directly
 in the 3.2.0 working tree they are expected to fail. `--out` is an empty directory outside the
-repository and outside the temp directory. CI does not run any of these gates: it runs only the
+repository and outside the temp directory. For the `accept-rc1` gate only, the runner first adds
+what the strict gate reads besides the skill files: the 3.1.0 `docs/plans/` records (taken from
+the base commit) and a git repository holding the local `project-setup-v*` tags of the repository
+it runs in plus one commit of the view. A repository without those tags cannot run that gate. CI does not run any of these gates: it runs only the
 format check and the version-stamp guard, so the gates are enforced by whoever prepares the
 release.
 

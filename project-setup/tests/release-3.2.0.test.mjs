@@ -186,7 +186,7 @@ const NOW_FILES = Object.freeze({
   "@root/TODO.md": '9cf6bc7ddf4df7987d6670fec1d3d916506397b12e8272be723f974ab02a7819',
   "CHANGELOG.md": '4f0b4e2f8d83227b1604e0b3028a89e8c9abc325473c6ce12963b69d5580b8b7',
   "README.md": 'f5ebe51eb46016874eaa3e57066cc9550cc34ec20b354f3ae3b13d003cf0b503',
-  "RELEASE-NOTES-3.2.0.md": '30362aee507a258a827d8d1ca06d503083206e316b515bebff8b25c640a42409',
+  "RELEASE-NOTES-3.2.0.md": 'cfce0ab5639ca65bf8871af35ac310c769b83b9ff7ca3455e01628bed731a495',
   "SKILL.md": 'f1a74c034ddd4ec56651568a2726763cfc335e50fc8013acd52eeae1f4911483',
   "VERSION": '33bdaf9e2d6bcbde2e4e613e865e403f8fe21fc621078d34c30b0bdc7f68d903',
   "assets/agents/reviewer.md": 'a0a82fb1d05829950fd98a4ebcce78f47dc5a8fde7ba2e37d0caeb68ae18cb2f',
@@ -777,6 +777,159 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
     check('runner control: the gates the runner can start are exactly release-3.1, c18, bs-doc-map and accept-rc1, run from tests/', JSON.stringify(Object.keys(RUN.GATES).sort()) === '["accept-rc1","bs-doc-map","c18","release-3.1"]' && Object.values(RUN.GATES).every((f) => /^[a-z0-9.-]+\.mjs$/.test(f)));
   }
 }
+// BEGIN bootstrap controls (tests session 3)
+// The accept-rc1 bootstrap (a recorded deviation from plan 4.3 / 5.4, found by the first full view run): the strict gate reads docs/plans/ (the 3.1.0 records) and a git repository (the tags,
+// one commit) that a bare view lacks. bootstrapStrictGate runs REAL git here, on synthetic repositories; the runView controls inject the gate spawn (and, where named, the bootstrap) and
+// build the view from the real tree (a read of it, as section G does), passing tmp so that a scratch under the OS temp directory (V320_SCRATCH unset) is not refused.
+{
+  if (RUN === null || H === null) check('bootstrap controls need tests/run-310-view.mjs and the helper', false, NOT_YET('tests/run-310-view.mjs', LR.err ?? LH.err));
+  else {
+    check('bootstrap control: the runner exports bootstrapStrictGate, parseTar, planPathProblem and writePlans as functions', ['bootstrapStrictGate', 'parseTar', 'planPathProblem', 'writePlans'].every((n) => typeof RUN[n] === 'function'), ['bootstrapStrictGate', 'parseTar', 'planPathProblem', 'writePlans'].filter((n) => typeof RUN[n] !== 'function'));
+    const gitOut = (env, cwd, args, buffer = false) => spawnSync('git', args, { cwd, env, encoding: buffer ? 'buffer' : 'utf8', shell: false, windowsHide: true, timeout: 180000, maxBuffer: 1 << 26 });
+    const listFiles = (root) => { const out = []; (function walk(d, rel) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const r = rel === '' ? e.name : `${rel}/${e.name}`; if (e.isDirectory()) walk(path.join(d, e.name), r); else out.push(r); } })(root, ''); return out.sort(); };
+    const fingerprint = (root) => sha(listFiles(root).map((r) => `${r}:${sha(fs.readFileSync(path.join(root, ...r.split('/'))))}`).join('\n'));
+    const withEnv = (vars, fn) => { const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]])); try { Object.assign(process.env, vars); return fn(); } finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } };
+    const slashed = (p) => p.replace(/\\/g, '/');
+    // A synthetic repository: root commit (README only), base commit (docs/plans), head commit (docs/plans changed), an uncommitted edit; tags: all | none | other.
+    const LONG_PAX = `docs/plans/${'segment-'.repeat(13)}end.md`; // a name over 100 bytes: git archive writes a pax "path" record
+    const LONG_PREFIX = `docs/plans/${'d'.repeat(45)}/${'e'.repeat(45)}.md`; // over 100 bytes in all, the name part under 100: a ustar prefix
+    const BASE_PLANS = { 'docs/plans/a.md': 'base a\n', 'docs/plans/sub/b.md': 'base b\n', [LONG_PAX]: 'pax path\n', [LONG_PREFIX]: 'prefix path\n', 'docs/plans/crlf.txt': Buffer.from('one\r\ntwo\r\n'), 'docs/plans/bin.dat': Buffer.from([0, 1, 2, 255, 254, 13, 10, 0]) };
+    const bootRepo = (label, { tags = 'all' } = {}) => {
+      const tmp = scratchDir(label); const env = gitEnv(tmp); const repo = path.join(tmp, 'repo'); fs.mkdirSync(repo);
+      const g = (...a) => gitOut(env, repo, a);
+      g('init', '-q'); put(repo, 'README.md', 'root\n'); g('add', '-A'); g('commit', '-qm', 'root');
+      const root = g('rev-parse', 'HEAD').stdout.trim();
+      for (const [rel, data] of Object.entries(BASE_PLANS)) put(repo, rel, data);
+      g('add', '-A'); g('commit', '-qm', 'base');
+      const base = g('rev-parse', 'HEAD').stdout.trim();
+      if (tags !== 'none') g('tag', tags === 'other' ? 'v9' : 'project-setup-v2.0.0');
+      put(repo, 'docs/plans/c-new.md', 'head new\n'); put(repo, 'docs/plans/a.md', 'head a\n'); fs.rmSync(path.join(repo, 'docs', 'plans', 'sub', 'b.md'));
+      g('add', '-A'); g('commit', '-qm', 'head');
+      if (tags === 'all') { g('tag', '-a', 'project-setup-v3.1.0', '-m', 'annotated'); g('tag', 'v9'); }
+      put(repo, 'docs/plans/a.md', 'working a\n');
+      return { tmp, env, repo, root, base, g, ready: /^[0-9a-f]{40}$/.test(root) && /^[0-9a-f]{40}$/.test(base) };
+    };
+    const bootView = (label) => { const d = scratchDir(label); put(d, 'project-setup/x.md', '# x\n'); put(d, 'project-setup/crlf.md', Buffer.from('a\r\nb\r\n')); put(d, 'project-setup/sub/note.md', 'note\n'); put(d, 'README.md', '# view readme\n'); return d; };
+    const F = bootRepo('boot-good');
+    const V = bootView('boot-view');
+    const pre = { files: Object.fromEntries(H.viewManifest(V)) };
+    const repoBefore = fingerprint(F.repo);
+    const res = RUN.bootstrapStrictGate(V, F.repo, { baseCommit: F.base });
+    const repoAfter = fingerprint(F.repo);
+    const gv = (...a) => gitOut(F.env, V, a);
+    const baseList = gitOut(F.env, F.repo, ['ls-tree', '-r', '-z', '--name-only', F.base, 'docs/plans']).stdout.split('\0').filter(Boolean).sort();
+    check('bootstrap control: on a synthetic view and repository it succeeds and reports the plan files, the project-setup-v* tags and the one commit', F.ready && res.ok === true && res.plans === 6 && baseList.length === 6 && res.tags === 2 && /^[0-9a-f]{40}$/.test(String(res.commit)) && res.commit === gv('rev-parse', 'HEAD').stdout.trim(), { ready: F.ready, res, baseList });
+    const present = fs.existsSync(path.join(V, 'docs')) ? listFiles(path.join(V, 'docs')).map((r) => `docs/${r}`) : [];
+    check('bootstrap control: docs/plans/ is exactly the base commit (same files, same bytes, CRLF and binary kept, a path over 100 bytes by pax record and by ustar prefix) and not the working tree', JSON.stringify(present) === JSON.stringify(baseList) && baseList.length === 6 && baseList.every((rel) => Buffer.compare(fs.readFileSync(path.join(V, ...rel.split('/'))), gitOut(F.env, F.repo, ['cat-file', 'blob', `${F.base}:${rel}`], true).stdout) === 0) && fs.readFileSync(path.join(V, 'docs', 'plans', 'a.md'), 'utf8') === 'base a\n' && present.includes('docs/plans/sub/b.md') && !present.includes('docs/plans/c-new.md'), { present, baseList });
+    const tagsIn = gv('tag', '-l').stdout.split('\n').filter(Boolean).sort();
+    check('bootstrap control: every tag of the repository is in the view repository (lightweight and annotated, project-setup-v* and others), at the same commits', JSON.stringify(tagsIn) === JSON.stringify(['project-setup-v2.0.0', 'project-setup-v3.1.0', 'v9']) && gv('rev-parse', '--verify', 'refs/tags/project-setup-v2.0.0^{commit}').stdout.trim() === F.base && gv('rev-parse', '--verify', 'refs/tags/project-setup-v3.1.0^{commit}').stdout.trim() === F.g('rev-parse', '--verify', 'refs/tags/project-setup-v3.1.0^{commit}').stdout.trim() && F.base !== '', tagsIn);
+    const tracked = gv('ls-files').stdout.split('\n').filter(Boolean);
+    check('bootstrap control: the view is one clean commit: status empty, one commit, every view file and plan tracked, CRLF bytes kept, the fixed identity, no hooks directory', gv('status', '--porcelain').stdout === '' && gv('rev-list', '--count', 'HEAD').stdout.trim() === '1' && ['project-setup/x.md', 'project-setup/crlf.md', 'project-setup/sub/note.md', 'README.md', 'docs/plans/a.md', LONG_PAX].every((f) => tracked.includes(f)) && Buffer.compare(gitOut(F.env, V, ['cat-file', 'blob', 'HEAD:project-setup/crlf.md'], true).stdout, Buffer.from('a\r\nb\r\n')) === 0 && gv('log', '-1', '--format=%an <%ae>').stdout.trim() === 'run-310-view <run-310-view@example.invalid>' && !fs.existsSync(path.join(V, '.git', 'hooks')), { status: gv('status', '--porcelain').stdout.slice(0, 200), tracked: tracked.length });
+    check('bootstrap control: the repository is only read: every file under it (its .git and its working tree) is byte for byte what it was, and its uncommitted edit is still there', repoBefore === repoAfter && fs.readFileSync(path.join(F.repo, 'docs', 'plans', 'a.md'), 'utf8') === 'working a\n' && F.g('status', '--porcelain').stdout.includes('docs/plans/a.md'), { repoBefore, repoAfter });
+    check('bootstrap control: the pinned manifest check is unaffected: after the bootstrap the view still has no extra, missing or changed file (docs/ and .git are outside the manifest)', JSON.stringify(H.verifyView(V, pre)) === JSON.stringify({ extra: [], missing: [], changed: [] }), H.verifyView(V, pre));
+    // Refusals. Each returns { ok: false, error } with one line; before the git init no .git exists, and before the plans are written no docs/ exists.
+    const bad = (name, rx, { repo = F.repo, base = F.base, prep = null, view = bootView(`bad-${seq}`), keepsGit = false, writes = false } = {}) => {
+      if (prep !== null) prep(view);
+      const r = RUN.bootstrapStrictGate(view, repo, base === null ? {} : { baseCommit: base });
+      check(`bootstrap control: ${name}`, r.ok === false && typeof r.error === 'string' && r.error !== '' && !r.error.includes('\n') && rx.test(r.error) && (keepsGit || !fs.existsSync(path.join(view, '.git'))) && (writes || !fs.existsSync(path.join(view, 'docs'))), r);
+      return view;
+    };
+    bad('a base commit that is not in the repository is refused (git archive fails) and nothing is written to the view', /git archive/, { base: '1'.repeat(40) });
+    bad('a base commit that holds no docs/plans (the root commit) is refused (git archive fails) and nothing is written to the view', /git archive/, { base: F.root });
+    for (const [label, value] of [['HEAD', 'HEAD'], ['a short id', F.base.slice(0, 12)], ['an option (--output=injected.tar)', '--output=injected.tar'], ['empty', '']]) {
+      bad(`a base commit that is ${label} (not a full 40-hex id) is refused before any git call`, /40-hex/, { base: value });
+    }
+    check('bootstrap control: an option given as the base commit is not passed to git (no injected.tar anywhere)', !fs.existsSync(path.join(F.repo, 'injected.tar')) && !fs.existsSync(path.join(process.cwd(), 'injected.tar')), undefined);
+    { const g0 = bootRepo('boot-notag', { tags: 'none' }); bad('a repository with no tag at all is refused with a message naming project-setup-v*', /no project-setup-v\* tag/, { repo: g0.repo, base: g0.base, keepsGit: true, writes: true }); }
+    { const g1 = bootRepo('boot-othertag', { tags: 'other' }); bad('a repository whose only tag is not project-setup-v* is refused too', /no project-setup-v\* tag/, { repo: g1.repo, base: g1.base, keepsGit: true, writes: true }); }
+    bad('a directory that is not a repository is refused (git archive fails)', /git archive/, { repo: scratchDir('plain-src') });
+    { const v = bad('a view that already holds docs/ is refused and left as it was', /fresh view/, { prep: (d) => put(d, 'docs/plans/mine.md', 'mine\n'), writes: true }); check('bootstrap control: the refused view still holds only its own docs/plans/mine.md and has no .git', JSON.stringify(listFiles(path.join(v, 'docs'))) === '["plans/mine.md"]' && fs.readFileSync(path.join(v, 'docs', 'plans', 'mine.md'), 'utf8') === 'mine\n' && !fs.existsSync(path.join(v, '.git')), listFiles(path.join(v, 'docs'))); }
+    { const v = bad('a view that already holds .git is refused and left as it was', /fresh view/, { prep: (d) => fs.mkdirSync(path.join(d, '.git')), keepsGit: true }); check('bootstrap control: the refused view still has an empty .git and no docs/', fs.readdirSync(path.join(v, '.git')).length === 0 && !fs.existsSync(path.join(v, 'docs')), undefined); }
+    { const inside = bootRepo('boot-inside'); const v = path.join(inside.repo, 'inside-view'); fs.mkdirSync(v); put(v, 'project-setup/x.md', 'x\n'); bad('a view directory inside the repository is refused and no repository is created there', /inside the repository/, { repo: inside.repo, base: inside.base, view: v }); }
+    bad('a view directory that does not exist is refused', /ENOENT|no such file|not a directory/i, { view: path.join(scratchDir('absent-view'), 'nope') });
+    // The environment: a runner started from a git hook inherits GIT_DIR and friends; a hostile global configuration must change nothing.
+    { const f = bootRepo('boot-env'); const decoy = bootRepo('boot-decoy'); const v = bootView('boot-env-view'); const decoyBefore = fingerprint(decoy.repo);
+      const r = withEnv({ GIT_DIR: path.join(decoy.repo, '.git'), GIT_WORK_TREE: decoy.repo, GIT_INDEX_FILE: path.join(decoy.repo, '.git', 'index') }, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base }));
+      const gx = (...a) => gitOut(f.env, v, a);
+      check('bootstrap control: GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE in the caller environment (a runner started from a git hook) do not redirect it: the view gets its own repository and the other repository is untouched', r.ok === true && gx('rev-parse', '--git-dir').stdout.trim() === '.git' && gx('rev-list', '--count', 'HEAD').stdout.trim() === '1' && gx('ls-files').stdout.includes('project-setup/x.md') && fingerprint(decoy.repo) === decoyBefore, { r, decoyTouched: fingerprint(decoy.repo) !== decoyBefore });
+    }
+    { const f = bootRepo('boot-global'); const v = bootView('boot-global-view'); const gd = scratchDir('boot-global-cfg'); const marker = path.join(gd, 'marker.txt'); const hooks = path.join(gd, 'hooks'); fs.mkdirSync(hooks);
+      for (const h of ['pre-commit', 'commit-msg', 'post-commit', 'post-index-change']) fs.writeFileSync(path.join(hooks, h), `#!/bin/sh\necho ${h} >> "${slashed(marker)}"\nexit 1\n`);
+      const excl = path.join(gd, 'excludes'); fs.writeFileSync(excl, '*.md\n');
+      const cfg = path.join(gd, 'gitconfig'); fs.writeFileSync(cfg, `[core]\n\thooksPath = ${slashed(hooks)}\n\tautocrlf = true\n\texcludesFile = ${slashed(excl)}\n[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = ${slashed(gd)}/no-such-gpg\n[user]\n\tname = Global Person\n\temail = global@example.invalid\n`);
+      const r = withEnv({ GIT_CONFIG_GLOBAL: cfg }, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base }));
+      const gx = (...a) => gitOut(f.env, v, a); const ls = gx('ls-files').stdout.split('\n');
+      check('bootstrap control: a hostile global git configuration (hooks, signing, autocrlf, a global ignore file, another identity) changes nothing: it commits, runs no hook, keeps the CRLF bytes, tracks every view file and uses the fixed identity', r.ok === true && !fs.existsSync(marker) && Buffer.compare(gitOut(f.env, v, ['cat-file', 'blob', 'HEAD:project-setup/crlf.md'], true).stdout, Buffer.from('a\r\nb\r\n')) === 0 && ls.includes('project-setup/x.md') && ls.includes('README.md') && gx('status', '--porcelain').stdout === '' && gx('log', '-1', '--format=%an').stdout.trim() === 'run-310-view', { r, hooksRan: fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8') : null, ls });
+    }
+    // The tar reader and the writer, on crafted streams.
+    const tarHeader = ({ name, size = 0, type = '0', prefix = '', edit = null }) => {
+      const h = Buffer.alloc(512);
+      h.write(name, 0, 100, 'utf8'); h.write('0000644\0', 100); h.write('0000000\0', 108); h.write('0000000\0', 116); h.write(`${size.toString(8).padStart(11, '0')}\0`, 124); h.write('00000000000\0', 136);
+      h.fill(0x20, 148, 156); h.write(type, 156); h.write('ustar\0', 257); h.write('00', 263); h.write(prefix, 345, 155, 'utf8');
+      if (edit !== null) edit(h);
+      let sum = 0; for (const x of h) sum += x;
+      h.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148);
+      return h;
+    };
+    const tarOf = (entries, { end = true } = {}) => Buffer.concat([...entries.flatMap((e) => { const data = e.data ?? Buffer.alloc(0); return [tarHeader({ ...e, size: data.length }), data, Buffer.alloc((512 - (data.length % 512)) % 512)]; }), ...(end ? [Buffer.alloc(1024)] : [])]);
+    const paxRec = (p) => { const body = ` path=${p}\n`; let len = body.length + 1; while (String(len).length + body.length !== len) len = String(len).length + body.length; return Buffer.from(`${len}${body}`); };
+    { const entries = attempt(() => RUN.parseTar(tarOf([{ name: 'pax_global_header', type: 'g', data: Buffer.from(`52 comment=${'0123456789abcdef'.repeat(2)}01234567\n`) }, { name: 'docs/', type: '5' }, { name: 'docs/plans/', type: '5' }, { name: 'docs/plans/a.md', data: Buffer.from('A\n') }, { name: 'PaxHeader', type: 'x', data: paxRec(LONG_PAX) }, { name: 'short-name-replaced-by-pax', data: Buffer.from('P') }, { name: 'e.md', prefix: 'docs/plans/pre', data: Buffer.alloc(600, 66) }])));
+      check('tar control: parseTar skips a pax global header, strips the trailing slash of directories, reads a file, a pax path record over the entry name, a ustar prefix and a body over one block', !failedAttempt(entries) && JSON.stringify(entries.map((e) => [e.path, e.type, e.data === null ? null : e.data.length])) === JSON.stringify([['docs', 'dir', null], ['docs/plans', 'dir', null], ['docs/plans/a.md', 'file', 2], [LONG_PAX, 'file', 1], ['docs/plans/pre/e.md', 'file', 600]]) && entries[2].data.toString('utf8') === 'A\n' && entries[4].data.equals(Buffer.alloc(600, 66)), entries);
+    }
+    { const one = (opts, data) => tarOf([{ name: 'docs/plans/a.md', data: data ?? Buffer.from('x'), ...opts }]);
+      const flipped = Buffer.from(one({})); flipped[3] ^= 1;
+      const cases = [['a header checksum that does not match', flipped, /checksum/], ['a stream cut inside a body', tarOf([{ name: 'docs/plans/a.md', data: Buffer.alloc(600, 65) }]).subarray(0, 700), /truncated/], ['a stream without its end marker', tarOf([{ name: 'docs/plans/a.md', data: Buffer.from('x') }], { end: false }), /end marker/], ['a symbolic link', one({ type: '2', data: Buffer.alloc(0) }), /type "2"/], ['a hard link', one({ type: '1', data: Buffer.alloc(0) }), /type "1"/], ['a character device', one({ type: '3', data: Buffer.alloc(0) }), /type "3"/], ['a size that is not octal', one({ edit: (h) => h.write('zzzzzzzzzzz\0', 124) }), /octal/], ['a base-256 size', one({ edit: (h) => { h[124] = 0x80; } }), /base-256/], ['a pax record with a bad length', tarOf([{ name: 'PaxHeader', type: 'x', data: Buffer.from('999 path=docs/plans/z.md\n') }, { name: 'a', data: Buffer.from('x') }]), /pax/]];
+      const got = cases.map(([name, buf, rx]) => { try { RUN.parseTar(buf); return [name, 'parsed']; } catch (e) { return [name, rx.test(String(e.message)) ? 'refused' : `wrong error: ${e.message}`]; } });
+      check('tar control: parseTar refuses a header checksum that does not match, a truncated stream, a missing end marker, a link, a device, a size that is not octal, a base-256 size and a malformed pax record, each with its own error', got.every(([, v]) => v === 'refused') && failedAttempt(attempt(() => RUN.parseTar('not a buffer'))), got);
+    }
+    { const refused = ['', '../x.md', 'docs/plans/../../x.md', '/etc/x', 'C:/x', 'D:x', 'docs\\plans\\x.md', 'docs/plans/x:y', 'docs/plans//x.md', 'docs/plans/./x.md', 'docs/other/x.md', 'other/x.md', 'docs/plans/con.md', 'docs/plans/nul', 'docs/plans/x.', 'docs/plans/x ', 'docs/plans/a\0b', 'docs/plans/a*b', 'docs/plansx/a.md', 'docs/plans/'];
+      const accepted = ['docs', 'docs/plans', 'docs/plans/a.md', 'docs/plans/sub/b.md', 'docs/plans/console.md', LONG_PAX];
+      const wrong = [...refused.filter((p) => RUN.planPathProblem(p) === null).map((p) => `accepted ${JSON.stringify(p)}`), ...accepted.filter((p) => RUN.planPathProblem(p) !== null).map((p) => `refused ${JSON.stringify(p)}`)];
+      check('path control: planPathProblem accepts docs, docs/plans and plain paths below it, and refuses an empty path, a parent segment, an absolute or drive path, a backslash, a colon, an empty or "." segment, a path outside docs/plans, a Windows device name and a trailing dot or space', wrong.length === 0 && RUN.planPathProblem(undefined) !== null, wrong);
+    }
+    { const ent = (p, d) => ({ path: p, type: d === undefined ? 'dir' : 'file', data: d === undefined ? null : Buffer.from(d) });
+      const w1 = scratchDir('wp-good'); const okRes = attempt(() => RUN.writePlans([ent('docs'), ent('docs/plans'), ent('docs/plans/a.md', 'A\n'), ent('docs/plans/s/b.md', 'B\n')], w1));
+      const again = attempt(() => RUN.writePlans([ent('docs/plans/a.md', 'other\n')], w1));
+      check('write control: writePlans writes the validated entries and returns the number of files, and never writes over an existing file', okRes === 2 && JSON.stringify(listFiles(w1)) === '["docs/plans/a.md","docs/plans/s/b.md"]' && failedAttempt(again) && fs.readFileSync(path.join(w1, 'docs', 'plans', 'a.md'), 'utf8') === 'A\n', { okRes, again });
+      const refusals = [['a parent segment (leaves the view directory)', [ent('docs/plans/ok.md', 'ok'), ent('docs/plans/../../evil.md', 'x')]], ['a path outside docs/plans', [ent('docs/plans/ok.md', 'ok'), ent('other/x.md', 'x')]], ['two paths that differ only in letter case', [ent('docs/plans/A.md', 'A'), ent('docs/plans/a.md', 'a')]], ['no file at all (directories only)', [ent('docs'), ent('docs/plans')]]];
+      const got = refusals.map(([name, entries]) => { const parent = scratchDir('wp-bad'); const d = path.join(parent, 'v'); fs.mkdirSync(d); const r = attempt(() => RUN.writePlans(entries, d)); return [name, failedAttempt(r) && listFiles(d).length === 0 && !fs.existsSync(path.join(d, 'docs')) && !fs.existsSync(path.join(parent, 'evil.md')) ? 'refused' : { r, files: listFiles(d) }]; });
+      check('write control: writePlans refuses a parent segment, a path outside docs/plans, two paths that differ only in letter case and an archive with no file, and writes nothing (every entry is validated before the first is written, and nothing lands next to the view)', got.every(([, v]) => v === 'refused'), got);
+    }
+    // The runner: runView with the real tree as the repository (read only), the gate spawn injected, and the bootstrap injected where the control is about the call itself.
+    { const incl = process.env.V320_INCLUDE_UNTRACKED === '1' ? ['--include-untracked'] : [];
+      const notTmp = path.join(scratch, 'not-the-temp-dir');
+      const outOf = (label) => path.join(scratchDir(label), 'v');
+      const stdout = '3 PASS / 0 FAIL / 0 SKIP\n';
+      const drive = (label, run, bootstrap, extra = {}) => {
+        const c = { spawn: [], boot: [], logged: [] }; const out = outOf(label);
+        const opts = { repoRoot: REPO, tmp: notTmp, log: (s) => c.logged.push(s), spawn: (cmd, args, o) => { c.spawn.push({ cmd, args, cwd: o.cwd, bootsSoFar: c.boot.length, seen: extra.atGate ? extra.atGate(o.cwd) : null }); return { status: 0, stdout }; } };
+        if (bootstrap !== null) opts.bootstrap = (...a) => { c.boot.push({ a, seen: c.logged.slice(), git: fs.existsSync(path.join(a[0], '.git')), docs: fs.existsSync(path.join(a[0], 'docs')) }); return bootstrap(...a); };
+        const r = attempt(() => RUN.runView(['--out', out, ...incl, '--run', run], opts));
+        return { c, out, r, lines: failedAttempt(r) ? [] : r.lines, shown: failedAttempt(r) ? r : { code: r.code, lines: r.lines.slice(0, 8) } };
+      };
+      const fakeOk = () => ({ ok: true, plans: 53, tags: 7, commit: 'x' });
+      { const d = drive('rv-plain', 'release-3.1,c18,bs-doc-map', fakeOk);
+        check('runner control: a run without accept-rc1 never calls the bootstrap: all three gates start from a view without .git and docs/', !failedAttempt(d.r) && d.r.code === 0 && d.c.boot.length === 0 && d.c.spawn.length === 3 && !d.lines.some((l) => /BOOTSTRAP/.test(l)) && !fs.existsSync(path.join(d.out, '.git')) && !fs.existsSync(path.join(d.out, 'docs')), { run: d.shown, boot: d.c.boot.length, spawn: d.c.spawn.length }); }
+      { const d = drive('rv-accept', 'accept-rc1', fakeOk); const at = (rx) => d.lines.findIndex((l) => rx.test(l)); const [m, b, g] = [at(/^MANIFEST {2}OK /), at(/^BOOTSTRAP {2}OK /), at(/^GATE {2}accept-rc1 /)];
+        check('runner control: a run that names accept-rc1 calls the bootstrap exactly once, with the view directory and the repository root, after the manifest check (which found the view without .git and docs/) and before the gate', !failedAttempt(d.r) && d.r.code === 0 && d.c.boot.length === 1 && path.resolve(d.c.boot[0].a[0]) === path.resolve(d.out) && path.resolve(d.c.boot[0].a[1]) === path.resolve(REPO) && d.c.boot[0].seen.some((l) => /^MANIFEST {2}OK /.test(l)) && !d.c.boot[0].git && !d.c.boot[0].docs && m >= 0 && m < b && b < g && d.c.spawn.length === 1 && d.c.spawn[0].bootsSoFar === 1 && /accept-rc1\.mjs$/.test(d.c.spawn[0].args[0]), { run: d.shown, indexes: [m, b, g], boot: d.c.boot.length, spawn: d.c.spawn.length }); }
+      { const d = drive('rv-fail', 'release-3.1,accept-rc1', () => ({ ok: false, error: 'boom\nsecond line' }));
+        check('runner control: a bootstrap failure is a runner failure: exit 1, the RUN-310-VIEW BOOTSTRAP FAIL line with the first line of the error, and no gate runs (not even one listed before accept-rc1)', !failedAttempt(d.r) && d.r.code === 1 && d.lines.some((l) => /^RUN-310-VIEW {2}BOOTSTRAP FAIL {2}boom$/.test(l)) && d.c.spawn.length === 0 && !d.lines.some((l) => /^GATE /.test(l)) && !d.lines.some((l) => /^BOOTSTRAP {2}OK/.test(l)), d.shown); }
+      { const t = drive('rv-throw', 'accept-rc1', () => { throw new Error('exploded'); }); const n = drive('rv-null', 'accept-rc1', () => null);
+        check('runner control: a bootstrap that throws, and one that returns no result, are runner failures too (exit 1, the BOOTSTRAP FAIL line, no gate)', [t, n].every((d) => !failedAttempt(d.r) && d.r.code === 1 && d.lines.some((l) => /^RUN-310-VIEW {2}BOOTSTRAP FAIL {2}\S/.test(l)) && d.c.spawn.length === 0) && t.lines.some((l) => /exploded/.test(l)), { thrown: t.shown, none: n.shown }); }
+      { const genv = gitEnv(scratchDir('rv-genv'));
+        const atGate = (cwd) => { const gg = (...a) => gitOut(genv, cwd, a); return { head: gg('rev-parse', '--verify', 'HEAD^{commit}').stdout.trim(), v2: gg('show-ref', '--verify', '--quiet', 'refs/tags/project-setup-v2.0.0').status, status: gg('status', '--porcelain').stdout, count: gg('rev-list', '--count', 'HEAD').stdout.trim() }; };
+        const d = drive('rv-e2e', 'accept-rc1', null, { atGate });
+        const seen = d.c.spawn.length === 1 ? d.c.spawn[0].seen : null;
+        const baseNow = gitOut(genv, REPO, ['ls-tree', '-r', '-z', '--name-only', H.BASE_COMMIT320, 'docs/plans']).stdout.split('\0').filter(Boolean).sort();
+        const here = fs.existsSync(path.join(d.out, 'docs')) ? listFiles(path.join(d.out, 'docs')).map((r) => `docs/${r}`) : [];
+        const same = baseNow.length > 0 && JSON.stringify(here) === JSON.stringify(baseNow) && baseNow.every((rel) => Buffer.compare(fs.readFileSync(path.join(d.out, ...rel.split('/'))), gitOut(genv, REPO, ['cat-file', 'blob', `${H.BASE_COMMIT320}:${rel}`], true).stdout) === 0);
+        const prechange = attempt(() => JSON.parse(fs.readFileSync(path.join(REPO, 'project-setup', 'tests', 'fixtures', 'v320-prechange.json'), 'utf8')));
+        const manifest = failedAttempt(prechange) ? prechange : attempt(() => H.verifyView(d.out, prechange));
+        check('runner control: end to end with the real bootstrap, the strict gate would start in a view that holds the base commit\'s docs/plans (byte for byte, and not the 3.2.0 plan), a repository with the project-setup-v2.0.0 tag and one clean commit, and the manifest check found no extra file', !failedAttempt(d.r) && d.r.code === 0 && d.lines.some((l) => /^MANIFEST {2}OK /.test(l)) && d.lines.some((l) => /^BOOTSTRAP {2}OK /.test(l)) && seen !== null && /^[0-9a-f]{40}$/.test(seen.head) && seen.v2 === 0 && seen.status === '' && seen.count === '1' && same && !failedAttempt(manifest) && JSON.stringify(manifest) === JSON.stringify({ extra: [], missing: [], changed: [] }), { run: d.shown, seen, plansEqualBase: same, baseCount: baseNow.length, here: here.length, manifest }); }
+    }
+  }
+}
+// END bootstrap controls (tests session 3)
 // Notes, claims and acceptance engines: a valid synthetic document passes and each defect is rejected.
 const NOTES_GOOD = Buffer.from([
   '# project-setup 3.2.0', '', '## Compatibility', '', 'Projects installed by 3.1.0 update in place.', '', '## What changed', '', '- Item A.', '', '## Upgrading', '',
