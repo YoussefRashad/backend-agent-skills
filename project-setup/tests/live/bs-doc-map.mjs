@@ -757,9 +757,16 @@ export function agentLayerOf(evidenceAgents, installedTexts) {
   if (docsSync) return 'reviewer-retained';
   return 'both-retained';
 }
+// Plan A1 item 2 and 11.1 R2-10: the order of the agents block is fixed. The template sentence below, then the layer sentence (a partial layer only) as its own line directly after it,
+// then the two template paragraphs, the delegation paragraph [AT320_2] and the managed-block marker paragraph [AT320_1].
+export const AGENTS_LAYER_ANCHOR = 'Do not create an ad-hoc agent for the same job.';
+const AGENTS_DELEGATE_PREFIX = 'When you delegate to `reviewer` or `docs-sync`';
+const AGENTS_MARKER_PREFIX = 'Text between `<!-- project-setup:begin';
 /**
  * Findings (code agents-layer-sentence) for the AGENTS.md agents block against the layer: a partial layer needs exactly the one matching sentence, a full layer carries none of the
- * three, no other wording is accepted (a near miss is a finding) and a sentence the reader cannot see (inside an HTML comment) does not count. Position is not judged here.
+ * three, no other wording is accepted (a near miss is a finding) and a sentence the reader cannot see (inside an HTML comment) does not count. Position is judged for a partial layer
+ * whose one sentence is present: it MUST be the line directly after the template sentence AGENTS_LAYER_ANCHOR and before the delegation paragraph and the marker paragraph (details
+ * start with "position:"). A sentence before the anchor, after both paragraphs, between them or separated from the anchor by a line is a finding; so is a block without the anchor.
  */
 export function checkAgentsLayerSentence({ agentsText, agentLayer }) {
   const f = [];
@@ -775,6 +782,13 @@ export function checkAgentsLayerSentence({ agentsText, agentLayer }) {
   const raw = normalizeEol(blk[0].inner).split('\n').filter(isCandidate).map((l) => l.trim());
   const seen = normalizeEol(visibleText(blk[0].inner)).split('\n').filter(isCandidate).map((l) => l.trim());
   const exactly = (list, s) => list.filter((l) => l === s).length;
+  // Order of the two template paragraphs (plan A1 item 2: [AT320_2] then [AT320_1]) holds in every layer.
+  {
+    const ls = normalizeEol(blk[0].inner).split('\n');
+    const dI = ls.findIndex((l) => l.startsWith(AGENTS_DELEGATE_PREFIX));
+    const mI = ls.findIndex((l) => l.startsWith(AGENTS_MARKER_PREFIX));
+    if (dI !== -1 && mI !== -1 && mI < dI) add('position: the managed-block marker paragraph is before the delegation paragraph; the delegation paragraph comes first, then the marker paragraph');
+  }
   if (agentLayer === 'full') {
     if (raw.length > 0) add(`a full layer carries no layer sentence, found ${raw.length}`);
     return f;
@@ -783,6 +797,22 @@ export function checkAgentsLayerSentence({ agentsText, agentLayer }) {
   if (exactly(seen, want) === 0) add(`the ${agentLayer} layer needs this sentence in the agents block: ${want}`);
   if (raw.length > 1) add(`a partial layer carries exactly one sentence, found ${raw.length}`);
   for (const l of raw) if (l !== want) add(sentences.includes(l) ? `a sentence of another layer: ${l.slice(0, 80)}` : `a near miss, not one of the three sentences: ${l.slice(0, 80)}`);
+  // Position (R3): judged on the lines of the block as written, and only when the sentence is there exactly once (a missing or repeated sentence is already a finding above).
+  const lines = normalizeEol(blk[0].inner).split('\n');
+  const at = lines.flatMap((l, i) => (l.trim() === want ? [i] : []));
+  if (at.length === 1) {
+    const anchors = lines.flatMap((l, i) => (l.includes(AGENTS_LAYER_ANCHOR) ? [i] : []));
+    if (anchors.length !== 1) add(`position: the template sentence "${AGENTS_LAYER_ANCHOR}" is expected exactly once in the agents block, found ${anchors.length}, so the place of the layer sentence cannot be established`);
+    else {
+      const s = at[0]; const a = anchors[0];
+      if (s < a) add('position: the layer sentence is before the template sentence; it goes directly after "Do not create an ad-hoc agent for the same job."');
+      else if (s !== a + 1) add(`position: the layer sentence is ${s - a - 1} line(s) after the line of the template sentence; it is the line directly after it`);
+      for (const [name, prefix] of [['delegation', AGENTS_DELEGATE_PREFIX], ['managed-block marker', AGENTS_MARKER_PREFIX]]) {
+        const p = lines.findIndex((l) => l.startsWith(prefix));
+        if (p !== -1 && s > p) add(`position: the layer sentence is after the ${name} paragraph; it goes before both template paragraphs`);
+      }
+    }
+  }
   return f;
 }
 
@@ -1032,7 +1062,8 @@ export const STRICT_FLAGS = Object.freeze(['strictNullChecks', 'strictFunctionTy
  * architectureText: the target project's 03; tsconfigText: the root tsconfig.json as written; declined: the owner declined the proposal (nothing is judged: setup reports the
  * omission and writes nothing). Not declined: the "CI/CD and tooling" section states the compiler strictness as written: strict and each individual strict flag that is set
  * (shapes "strict: true", "strict = true", "strict is true"), or "strict not set", and names the extended file when tsconfig.json extends one. Findings strictness-missing (no
- * statement) and strictness-mismatch (a value, a flag or the "not set" claim differs from the file, or the extended file is not named).
+ * statement) and strictness-mismatch (a value, a flag or the "not set" claim differs from the file, or the extended file is not named, or the file does not parse: unavailable evidence,
+ * reported before any statement is judged).
  */
 export function checkStrictness({ architectureText, tsconfigText, declined = false }) {
   if (declined === true) return [];
@@ -1041,7 +1072,14 @@ export function checkStrictness({ architectureText, tsconfigText, declined = fal
   const r = resolveHeading(doc, parseBulletRef('CI/CD and tooling'));
   const section = r.status === 'ok' ? sectionText(doc, r.heading) : '';
   const ts = parseTsconfig(tsconfigText);
-  const co = ts !== null && typeof ts === 'object' && ts.compilerOptions !== null && typeof ts.compilerOptions === 'object' ? ts.compilerOptions : {};
+  // A tsconfig.json that does not parse (a truncated file, a literal that is not an object) is unavailable evidence: no statement can be judged against it, and reading it as "no
+  // options" would accept an unsupported "strict not set" (R4). A compilerOptions that is present and not an object is the same: it is not "no options".
+  const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(ts) || (ts.compilerOptions !== undefined && !isObj(ts.compilerOptions))) {
+    f.push({ code: 'strictness-mismatch', detail: 'tsconfig.json does not parse as a tsconfig (not a JSON object, or compilerOptions is not an object): the strictness statement cannot be checked against it' });
+    return f;
+  }
+  const co = isObj(ts.compilerOptions) ? ts.compilerOptions : {};
   const mentions = (name) => new RegExp(`\\b${name}\\b`, 'i');
   const stated = normalizeEol(section).split('\n').filter((l) => mentions('strict').test(l) || STRICT_FLAGS.some((x) => mentions(x).test(l))).join('\n');
   if (stated === '') { f.push({ code: 'strictness-missing', detail: 'the CI/CD and tooling section states no compiler strictness' }); return f; }

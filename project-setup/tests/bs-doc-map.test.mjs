@@ -1067,8 +1067,10 @@ const AT320_2 = ['When you delegate to `reviewer` or `docs-sync`, state in every
 const LAYER_ANCHOR = 'Do not create an ad-hoc agent for the same job.'; // assets/templates/AGENTS.md:79, the sentence every layer sentence follows
 const claudeForLayer = (layer, base = MERGED_CLAUDE) => base.replace(A1_LINES.full, A1_LINES[layer]);
 const agentsWithSentence = (text, sentence) => text.replace(LAYER_ANCHOR, `${LAYER_ANCHOR}\n${sentence}`);
-// The 3.2.0 shape of the agents block: line 79, the layer sentence when there is one, then [AT320_2], then [AT320_1] (fixed order, plan A1 item 2 and R2-10).
-const agents320 = (layer) => renderAgents(false).replace(LAYER_ANCHOR, `${LAYER_ANCHOR}${layer === 'full' ? '' : `\n${A1_SENTENCES[layer]}`}\n\n${AT320_2}\n\n${AT320_1}`);
+// The 3.2.0 shape of the agents block: line 79, the layer sentence when there is one, then [AT320_2], then [AT320_1] (fixed order, plan A1 item 2 and R2-10). The shipped template already carries
+// the two paragraphs after line 79, so they are added only when the template lacks them (a second copy would give a block that no setup writes).
+const withParagraphs = (text) => (text.includes(AT320_1) && text.includes(AT320_2) ? text : text.replace(LAYER_ANCHOR, `${LAYER_ANCHOR}\n\n${AT320_2}\n\n${AT320_1}`));
+const agents320 = (layer) => { const base = withParagraphs(renderAgents(false)); return layer === 'full' ? base : base.replace(LAYER_ANCHOR, `${LAYER_ANCHOR}\n${A1_SENTENCES[layer]}`); };
 const rcLayer = (text, layer) => H.checkClaudeRecovery({ text, templateText: PS_CLAUDE_TEMPLATE, bsImports: BS_IMPORTS, bsVersionSentence: BS_SENTENCE, userLines: [USER_LINE], ...(layer === undefined ? {} : { agentLayer: layer }) });
 const lfT = (s) => String(s).replace(/\r\n?/g, '\n');
 const squashT = (s) => lfT(s).replace(/\s+/g, ' ').trim();
@@ -1131,13 +1133,42 @@ const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code ??
   }
   G('AC-A1-5: a sentence outside the agents block, inside an HTML comment, or wrapped over two lines does not count as the sentence', PARTIAL_LAYERS.every((l) => { const s = A1_SENTENCES[l]; const half = s.indexOf(' and '); return SC(`${BASE_AGENTS}\n${s}\n`, l).length > 0 && SC(agentsWithSentence(BASE_AGENTS, `<!-- ${s} -->`), l).length > 0 && SC(agentsWithSentence(BASE_AGENTS, `${s.slice(0, half)}\n${s.slice(half + 1)}`), l).length > 0; }));
   G('AC-A1-5: a broken agents block (a missing end marker) and an unknown layer are findings, never a pass', SC(BASE_AGENTS.replace('<!-- project-setup:end id=agents -->', ''), 'full').length > 0 && SC(BASE_AGENTS, 'bogus').length > 0 && SC(BASE_AGENTS, undefined).length > 0);
+  // R3 (plan A1 item 2, 11.1 R2-10): position. The sentence is the line directly after the template sentence and before both template paragraphs. The right sentence exactly once in a wrong place
+  // is reported by its position alone: the sentence checks above are satisfied, so only a position finding can fail these cases.
+  const END_AGENTS = '<!-- project-setup:end id=agents -->';
+  const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const count = (hay, needle) => hay.split(needle).length - 1;
+  const posF = (text, l) => SC(text, l).filter((x) => x.code === 'agents-layer-sentence' && x.detail.startsWith('position:'));
+  const onlyPos = (text, l) => { const all = SC(text, l); return all.length > 0 && all.length === posF(text, l).length; };
+  const WRONG = [
+    ['before the template sentence (on the line before it)', (l) => agents320('full').replace(new RegExp(`^(.*${reEsc(LAYER_ANCHOR)})$`, 'm'), `${A1_SENTENCES[l]}\n$1`), ['before the template sentence'], []],
+    ['after both template paragraphs (last line of the block)', (l) => agents320('full').replace(END_AGENTS, `${A1_SENTENCES[l]}\n${END_AGENTS}`), ['after the delegation paragraph', 'after the managed-block marker paragraph'], ['before the template sentence']],
+    ['between the two template paragraphs', (l) => agents320('full').replace(`${AT320_2}\n\n${AT320_1}`, `${AT320_2}\n\n${A1_SENTENCES[l]}\n\n${AT320_1}`), ['after the delegation paragraph'], ['after the managed-block marker paragraph', 'before the template sentence']],
+    ['between the two template paragraphs with no blank line above it', (l) => agents320('full').replace(`${AT320_2}\n\n${AT320_1}`, `${AT320_2}\n${A1_SENTENCES[l]}\n\n${AT320_1}`), ['after the delegation paragraph'], ['after the managed-block marker paragraph']],
+    ['separated from the template sentence by a blank line', (l) => agents320('full').replace(LAYER_ANCHOR, `${LAYER_ANCHOR}\n\n${A1_SENTENCES[l]}`), ['line(s) after the line of the template sentence'], ['before the template sentence']],
+    ['directly after the delegation paragraph with the template sentence moved below the paragraphs', (l) => agents320('full').replace(LAYER_ANCHOR, 'Agents are named in the lists above.').replace(END_AGENTS, `${LAYER_ANCHOR}\n${A1_SENTENCES[l]}\n${END_AGENTS}`), ['after the delegation paragraph', 'after the managed-block marker paragraph'], []],
+  ];
+  G('R3: precondition: the base block holds the template sentence once, then [AT320_2] once, then [AT320_1] once (no paragraph is doubled)', (() => { const b = agents320('full'); return count(b, LAYER_ANCHOR) === 1 && count(b, AT320_2) === 1 && count(b, AT320_1) === 1 && b.indexOf(LAYER_ANCHOR) < b.indexOf(AT320_2) && b.indexOf(AT320_2) < b.indexOf(AT320_1); })(), { anchor: count(agents320('full'), LAYER_ANCHOR), at2: count(agents320('full'), AT320_2), at1: count(agents320('full'), AT320_1) });
+  G('R3: control: the sentence in its place (directly after the template sentence, before both paragraphs) has no finding in each partial layer', PARTIAL_LAYERS.every((l) => SC(agents320(l), l).length === 0));
+  for (const [label, build, must, mustNot] of WRONG) {
+    G(`R3: the right sentence ${label} is a position finding and nothing else, in each partial layer`, PARTIAL_LAYERS.every((l) => { const t = build(l); const d = posF(t, l).map((x) => x.detail).join('\n'); return t !== agents320('full') && t.includes(A1_SENTENCES[l]) && onlyPos(t, l) && must.every((m) => d.includes(m)) && mustNot.every((m) => !d.includes(m)); }), PARTIAL_LAYERS.map((l) => SC(build(l), l)));
+  }
+  G('R3: a block without the template sentence cannot place the layer sentence: a position finding in each partial layer (the sentence itself is right)', PARTIAL_LAYERS.every((l) => { const t = agents320(l).replace(LAYER_ANCHOR, 'Create agents freely.'); return t !== agents320(l) && onlyPos(t, l) && posF(t, l)[0].detail.includes(LAYER_ANCHOR); }), PARTIAL_LAYERS.map((l) => SC(agents320(l).replace(LAYER_ANCHOR, 'Create agents freely.'), l)));
+  G('R3: the full layer has no position rule (no sentence, no position finding, with or without the template sentence)', SC(agents320('full'), 'full').length === 0 && SC(agents320('full').replace(LAYER_ANCHOR, 'Create agents freely.'), 'full').length === 0);
+  G('R3: the helper anchor equals this spec\'s independent copy of the template sentence', H.AGENTS_LAYER_ANCHOR === LAYER_ANCHOR);
+  {
+    // Review pass 2: the order of the two template paragraphs ([AT320_2] then [AT320_1]) is enforced in every layer; a reversed pair is a position finding.
+    const swapAt = (t) => t.replace(AT320_2, () => '\u0001SWAP\u0001').replace(AT320_1, () => AT320_2).replace('\u0001SWAP\u0001', () => AT320_1);
+    G('R3: the two template paragraphs in reversed order are a position finding naming the order, in every layer (full included)', ['full', ...PARTIAL_LAYERS].every((l) => { const t = swapAt(agents320(l)); const d = SC(t, l).filter((x) => x.detail.startsWith('position:')).map((x) => x.detail).join('\n'); return t !== agents320(l) && d.includes('managed-block marker paragraph is before the delegation paragraph'); }), ['full', ...PARTIAL_LAYERS].map((l) => SC(swapAt(agents320(l)), l)));
+    G('R3: the two template paragraphs in their order (control) have no order finding in every layer', ['full', ...PARTIAL_LAYERS].every((l) => !SC(agents320(l), l).some((x) => x.detail.includes('before the delegation paragraph'))));
+  }
   // AC-A1-7: references/modes.md.
   const MD320_3 = 'The "required source-template content" in the table above is the template claude block with the Subagents line selected under "Subagents line variants" in references/docs-generation.md. In a partial agent layer the full-layer line is not the expected content.';
   const MODES = lfT(TXT.modes);
   const ROW_94_SHA = '57edf86500b3f528962ad30b9399369f270c68ec7768f6f82a06abd986639ad1'; // the 3.1.0 table row of modes.md line 94, byte for byte (LF); it moves by the [MD320_1] insertion, so it is pinned by content
   G('AC-A1-7: references/modes.md holds the [MD320_3] paragraph exactly once', squashT(MODES).split(squashT(MD320_3)).length === 2);
   G('AC-A1-7: the paragraph follows the "successful root recovery." paragraph and precedes "Before candidate PS, record:"', (() => { const s = squashT(MODES); const i = s.indexOf(squashT(MD320_3)); return i > s.indexOf('not successful root recovery.') && s.indexOf('not successful root recovery.') > 0 && i < s.indexOf('Before candidate PS, record:'); })());
-  G('AC-A1-7: the 3.1.0 table row (line 94, "required source-template content") is unchanged: exactly one line of modes.md has its digest', MODES.split('\n').filter((l) => sha(l) === ROW_94_SHA).length === 1 && MODES.split('\n').filter((l) => l.includes('required source-template content')).length === 1);
+  G('AC-A1-7: the 3.1.0 table row (line 94, "required source-template content") is unchanged: exactly one line of modes.md has its digest', MODES.split('\n').filter((l) => sha(l) === ROW_94_SHA).length === 1 && MODES.split('\n').filter((l) => l.includes('required source-template content')).length === 2);
 }
 
 {
@@ -1221,6 +1252,63 @@ const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code ??
   ]) G(`AC-A3-1 mutant: ${label} fails ${id}`, (() => { const m = syn(fn); return m !== null && apProblems(m).includes(id); })(), (() => { const m = syn(fn); return m === null ? 'the mutation did not apply' : apProblems(m); })());
   G('AC-A3-1 mutant: the [SK320_2] sentence written twice, or removed, is not "exactly once"', flat(`${TXT.skill}\n${SK320_2}\n${SK320_2}\n`).split(squashT(SK320_2)).length !== 2 && flat('SKILL text without the sentence').split(squashT(SK320_2)).length !== 2);
 
+  // ---- the fix round of review 1 (R1, R5, R6): three texts outside the contiguous Applicability block pinned above. ----
+  // R1 (an advisor decision, a recorded deviation from the plan's exact text): the empty-repository paragraph. R5: the extended-tsconfig sentence. R6: the integrations evidence row.
+  const FX_R1 = 'While the repository has no tracked source files (detect `project.sourceFileCount` is 0), setup MUST NOT write a pointer or add content to 03 on source-section evidence alone, and MUST leave an existing document at the PS path unchanged, because a pointer drafted before any code exists cannot be confirmed by the Phase 1 evidence reads; this keeps the empty-repository rule above and the empty-repo mode in `references/modes.md`.';
+  const FX_R5 = 'When `tsconfig.json` extends another file, setup MUST state what the root `tsconfig.json` says and name the extended file, and MUST NOT resolve the chain, because the statement is taken from `tsconfig.json` only.';
+  const FX_ROW_PREFIX = '| `docs/integrations/<vendor>.md` | The vendor\'s client code:';
+  const FX_ROW = "| `docs/integrations/<vendor>.md` | The vendor's client code: auth approach, endpoints used, timeouts, retry policy, idempotency, circuit breaking and fallback, logging and redaction, quirks from code comments | Outbound integrations, scoped to the vendor; Observability |";
+  const FX_ROW_TOKENS = ['circuit breaking', 'fallback', 'logging and redaction', 'quirks from code comments'];
+  const STRICT_END = 'If the owner declines, setup reports the omission and does not write it.'; // the last sentence of the strictness paragraph, the last text of the contiguous block
+  /** The ids of the fix-round checks a docs-generation.md text does not meet ([] = all met). */
+  const fxProblems = (doc) => {
+    const d = lfT(doc); const f = flat(d); const bad = [];
+    const n1 = f.split(squashT(FX_R1)).length - 1;
+    if (n1 !== 1) bad.push(n1 === 0 ? 'r1-missing' : 'r1-duplicated');
+    const n5 = f.split(squashT(FX_R5)).length - 1;
+    if (n5 !== 1) bad.push(n5 === 0 ? 'r5-missing' : 'r5-duplicated');
+    // Positions are judged on the squashed text of the document: the contiguous block (AP320) ends at the strictness paragraph, R5 and R1 follow it, and "### Pointer format" follows them. A paragraph
+    // inside the block breaks the block's contiguity, so "outside the contiguous Applicability block" is the same check as "the block is whole and the paragraph starts after its end".
+    const endAp = f.indexOf(squashT(AP320)) + squashT(AP320).length; const i1 = f.indexOf(squashT(FX_R1)); const i5 = f.indexOf(squashT(FX_R5)); const iEnd = f.indexOf('### Pointer format');
+    if (n1 === 1 && !(f.indexOf(squashT(AP320)) >= 0 && i1 >= endAp && f.indexOf(squashT(STRICT_END)) >= 0 && i1 > f.indexOf(squashT(STRICT_END)) && iEnd > i1)) bad.push('r1-position');
+    if (n5 === 1 && !(f.indexOf(squashT(AP320)) >= 0 && i5 >= endAp && iEnd > i5)) bad.push('r5-position');
+    const rows = d.split('\n').filter((l) => l.startsWith(FX_ROW_PREFIX));
+    if (rows.length !== 1) bad.push(rows.length === 0 ? 'r6-row-missing' : 'r6-row-duplicated');
+    else for (const t of FX_ROW_TOKENS) if (!rows[0].includes(t)) bad.push(`r6-row-lacks:${t}`);
+    return bad;
+  };
+  const SYN_FX = SYN.replace(`${AP320}\n\n### Pointer format`, `${AP320}\n\n${FX_R5}\n\n${FX_R1}\n\n| PS document | Code evidence | Source sections (03) |\n|---|---|---|\n${FX_ROW}\n\n### Pointer format`);
+  const synFx = (fn) => { const m = fn(SYN_FX); return m === SYN_FX ? null : m; };
+  G('R1/R5/R6: preconditions: the synthetic reference document carries the three texts and still meets every applicability contract check', SYN_FX !== SYN && JSON.stringify(apProblems(SYN_FX)) === '[]' && JSON.stringify(fxProblems(SYN_FX)) === '[]', { ap: apProblems(SYN_FX), fx: fxProblems(SYN_FX) });
+  const realFx = fxProblems(TXT.docs);
+  for (const id of ['r1-missing', 'r1-duplicated', 'r1-position', 'r5-missing', 'r5-duplicated', 'r5-position', 'r6-row-missing', 'r6-row-duplicated', ...FX_ROW_TOKENS.map((t) => `r6-row-lacks:${t}`)]) G(`R1/R5/R6: references/docs-generation.md: ${id} is met`, !realFx.includes(id), realFx);
+  G('R1: references/docs-generation.md holds the "While the repository has no tracked source files" paragraph exactly once, after the strictness paragraph and before "### Pointer format", outside the contiguous Applicability block', flat(lfT(TXT.docs)).split(squashT(FX_R1)).length === 2 && !realFx.some((x) => x.startsWith('r1-')), realFx);
+  G('R1: the paragraph names the repository state (detect project.sourceFileCount is 0), forbids a pointer and a 03 addition on source-section evidence alone, and leaves an existing document unchanged', ['project.sourceFileCount', 'is 0', 'MUST NOT write a pointer or add content to 03 on source-section evidence alone', 'MUST leave an existing document at the PS path unchanged'].every((t) => FX_R1.includes(t)) && flat(lfT(TXT.docs)).includes(squashT(FX_R1)));
+  G('R5: references/docs-generation.md holds the tsconfig-extends sentence exactly once, after the contiguous Applicability block and before "### Pointer format"', flat(lfT(TXT.docs)).split(squashT(FX_R5)).length === 2 && !realFx.some((x) => x.startsWith('r5-')), realFx);
+  G('R6: the integrations evidence row names circuit breaking and fallback, logging and redaction, and quirks from code comments (one row, whole text)', lfT(TXT.docs).split('\n').filter((l) => l === FX_ROW).length === 1 && !realFx.some((x) => x.startsWith('r6-')), realFx);
+  // Mutants: each fails its own id on the synthetic document (a check that never fails is not a check).
+  for (const [label, id, fn] of [
+    ['the R1 paragraph removed', 'r1-missing', (d) => d.replace(`${FX_R1}\n\n`, '')],
+    ['the R1 paragraph written twice', 'r1-duplicated', (d) => d.replace(FX_R1, `${FX_R1}\n\n${FX_R1}`)],
+    ['the R1 paragraph placed before the strictness paragraph (inside the contiguous block)', 'r1-position', (d) => d.replace(`${FX_R1}\n\n`, '').replace('When `tsconfig.json` exists and the mapping is active', `${FX_R1}\n\nWhen \`tsconfig.json\` exists and the mapping is active`)],
+    ['the R1 paragraph placed after the "### Pointer format" heading', 'r1-position', (d) => d.replace(`${FX_R1}\n\n`, '').replace('### Pointer format\n', `### Pointer format\n\n${FX_R1}\n`)],
+    ['the R1 paragraph placed before the Applicability block', 'r1-position', (d) => d.replace(`${FX_R1}\n\n`, '').replace('#### Applicability (one rule for every mode)', `${FX_R1}\n\n#### Applicability (one rule for every mode)`)],
+    ['"MUST NOT write a pointer" weakened to "SHOULD NOT"', 'r1-missing', (d) => d.replace('setup MUST NOT write a pointer or add content to 03 on source-section', 'setup SHOULD NOT write a pointer or add content to 03 on source-section')],
+    ['"MUST leave an existing document" weakened to "MAY leave"', 'r1-missing', (d) => d.replace('MUST leave an existing document at the PS path unchanged', 'MAY leave an existing document at the PS path unchanged')],
+    ['"is 0" changed to "is 1"', 'r1-missing', (d) => d.replace('project.sourceFileCount` is 0', 'project.sourceFileCount` is 1')],
+    ['the R5 sentence removed', 'r5-missing', (d) => d.replace(`${FX_R5}\n\n`, '')],
+    ['the R5 sentence written twice', 'r5-duplicated', (d) => d.replace(FX_R5, `${FX_R5}\n\n${FX_R5}`)],
+    ['"MUST NOT resolve the chain" weakened to "MAY resolve the chain"', 'r5-missing', (d) => d.replace('MUST NOT resolve the chain', 'MAY resolve the chain')],
+    ['the R5 sentence placed after the "### Pointer format" heading', 'r5-position', (d) => d.replace(`${FX_R5}\n\n`, '').replace('### Pointer format\n', `### Pointer format\n\n${FX_R5}\n`)],
+    ['the R5 sentence placed before the Applicability block', 'r5-position', (d) => d.replace(`${FX_R5}\n\n`, '').replace('#### Applicability (one rule for every mode)', `${FX_R5}\n\n#### Applicability (one rule for every mode)`)],
+    ['the integrations row removed', 'r6-row-missing', (d) => d.replace(`${FX_ROW}\n`, '')],
+    ['the integrations row written twice', 'r6-row-duplicated', (d) => d.replace(`${FX_ROW}\n`, `${FX_ROW}\n${FX_ROW}\n`)],
+    ['"circuit breaking and fallback" dropped from the row', 'r6-row-lacks:circuit breaking', (d) => d.replace('circuit breaking and fallback, ', '')],
+    ['"fallback" dropped from the row ("circuit breaking" kept)', 'r6-row-lacks:fallback', (d) => d.replace('circuit breaking and fallback', 'circuit breaking')],
+    ['"logging and redaction" dropped from the row', 'r6-row-lacks:logging and redaction', (d) => d.replace('logging and redaction, ', '')],
+    ['"quirks from code comments" dropped from the row', 'r6-row-lacks:quirks from code comments', (d) => d.replace(', quirks from code comments', '')],
+  ]) G(`R1/R5/R6 mutant: ${label} fails ${id}`, (() => { const m = synFx(fn); return m !== null && fxProblems(m).includes(id); })(), (() => { const m = synFx(fn); return m === null ? 'the mutation did not apply' : fxProblems(m); })());
+
   // ---- the checkers (AC-A3-2): a positive case, then each named finding by its negative case, including the boundary. ----
   const ARCH = (cfg, ci = '- `strict`: true') => `# Architecture\n\n## 1. Overview\n\nText.\n\n## 3. Configuration\n\n${cfg}\n\n---\n\n## 4. Module layout\n\nText.\n\n## 12. CI/CD and tooling\n\n${ci}\n`;
   const HEAD = '| Variable | Required | Classification | Used by | Description | Source |';
@@ -1261,6 +1349,16 @@ const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code ??
   }
   G('AC-A3-2 strictness: naming the extended file (and stating the root file as written) is clean; the chain is not resolved', ST(ARCH(GOOD, '- `strict`: true (this file extends ./tsconfig.base.json; not resolved)'), TS({ strict: true }, '"extends": "./tsconfig.base.json",\n  ')).length === 0);
   G('AC-A3-2 strictness: a declined proposal judges nothing (no finding whatever the section or the file says)', ST(ARCH(GOOD, 'nothing'), STRICT_TS, true).length === 0 && ST('', 'not json', true).length === 0);
+  // R4: a tsconfig.json that does not parse is unavailable evidence, never "no options". The unsupported statement "strict not set" (and any other statement) is reported as strictness-mismatch.
+  const BAD_TS = [['a truncated file', '{"compilerOptions":'], ['an unterminated string', '{"compilerOptions": {"strict'], ['a missing closing brace', '{"compilerOptions": {"strict": true}'], ['an empty file', ''], ['whitespace only', ' \n'], ['text that is not JSON', 'not json'], ['a literal null', 'null'], ['an array', '[]'], ['a number', '5'], ['compilerOptions that is a number', '{"compilerOptions": 5}'], ['compilerOptions that is null', '{"compilerOptions": null}'], ['compilerOptions that is an array', '{"compilerOptions": []}']];
+  for (const [label, ts] of BAD_TS) {
+    const claims = [['"strict not set"', 'Compiler strictness: strict not set.'], ['strict true', '- `strict`: true'], ['strict false', '- `strict`: false']];
+    G(`R4: tsconfig.json as ${label} is strictness-mismatch (unavailable evidence), whatever the statement says`, claims.every(([, ci]) => { const f = ST(ARCH(GOOD, ci), ts); return f.length === 1 && f[0].code === 'strictness-mismatch' && f[0].detail.includes('cannot be checked'); }), claims.map(([, ci]) => ST(ARCH(GOOD, ci), ts)));
+  }
+  G('R4: a tsconfig.json that does not parse is reported even when 03 states nothing (the evidence problem comes first; the missing statement is judged once the file parses)', cc(ST(ARCH(GOOD, '| Lint | CI | yes |'), '{"compilerOptions":')).join() === 'strictness-mismatch');
+  G('R4: parseTsconfig returns null for each of the malformed texts that is not JSON after comment and comma removal, and keeps returning the object for a commented tsconfig with trailing commas', ['{"compilerOptions":', '', 'not json', '{"compilerOptions": {"strict'].every((t) => H.parseTsconfig(t) === null) && JSON.stringify(H.parseTsconfig('{ // c\n "compilerOptions": { /* x */ "strict": true, },\n}\n')) === JSON.stringify({ compilerOptions: { strict: true } }));
+  G('R4: controls: the tolerant parser still accepts a commented tsconfig with trailing commas and no options ("strict not set" is clean), an empty object, and an empty compilerOptions', ST(ARCH(GOOD, 'strict not set.'), '{ // c\n "compilerOptions": { /* x */ "target": "ES2023", },\n}\n').length === 0 && ST(ARCH(GOOD, 'strict not set.'), '{}').length === 0 && ST(ARCH(GOOD, 'strict not set.'), '{"compilerOptions": {}}').length === 0 && ST(ARCH(GOOD, '- `strict`: true'), '{ /* c */ "compilerOptions": { "strict": true, // c\n }, }').length === 0);
+  G('R4: a declined proposal still judges nothing when the file does not parse', BAD_TS.every(([, ts]) => ST(ARCH(GOOD, 'nothing'), ts, true).length === 0));
 
   const AP = (o) => H.checkApplicability({ approved: ['docs/database.md', '.ai/context/glossary.md'], confirmed: ['docs/database.md', '.ai/context/glossary.md'], pointers: ['docs/database.md', '.ai/context/glossary.md'], navigationRefs: ['docs/database.md'], ...o });
   G('AC-A3-2 applicability: the positive case (installed pointers are the approved set, Phase 1 confirmed it, navigation references only installed documents) has no finding, in any order', AP({}).length === 0 && AP({ confirmed: ['.ai/context/glossary.md', 'docs/database.md'], pointers: ['.ai/context/glossary.md', 'docs/database.md'] }).length === 0 && AP({ approved: [], confirmed: [], pointers: [], navigationRefs: [] }).length === 0);

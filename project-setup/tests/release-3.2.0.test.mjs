@@ -11,7 +11,7 @@
 //     engine below is THIS FILE's own: it never asks the helper to decide pass or fail, every identity is pinned here (not read from the helper or the fixture), and the helper
 //     and the fixture are compared against these pins, never the reverse.
 //  B. The gate and the view are proven by mutation controls on synthetic data, each checked for the intended failure kind (plan 5.2 items 1, 2, 11), without any pin.
-//  C. Actual obligations: every 3.1.0 normative line survives (D-4 scope), the root TODO holds exactly its five records, the reviewer and template insertions stand once at their
+//  C. Actual obligations: every 3.1.0 normative line survives (D-4 scope), the root TODO holds exactly its six records, the reviewer and template insertions stand once at their
 //     anchors, the shipped policy data is strengthening only (AC-A4-2).
 //  D. VERSION, headings and the current public claims say 3.2.0, historical claims stay, and RELEASE-NOTES-3.2.0.md keeps its contract.
 //  E. Every other file equals its pinned 3.1.0 bytes and the project-setup file set is the 3.1.0 set plus exactly the eight new files (historical tests and both runners included).
@@ -61,8 +61,8 @@ const AMEND_ROOT = ['@root/README.md', '@root/TODO.md', '@root/.ai/context/proje
 const AMENDABLE = [...AMEND_SKILL, ...AMEND_LIVE, ...AMEND_ROOT];
 const NOTES320 = 'RELEASE-NOTES-3.2.0.md';
 const NEW_FILES = ['tests/helpers/v320-amendments.mjs', 'tests/fixtures/v320-prechange.json', 'tests/fixtures/v320-policy-3.1.0.json', 'tests/fixtures/v320-compat-expected.json', 'tests/release-3.2.0.test.mjs', 'tests/v320.test.mjs', 'tests/run-310-view.mjs', NOTES320];
-const TODO_RECORDS = ['TD320_1', 'TD320_2', 'TD320_3', 'TD320_4', 'TD320_5'];
-const TODO_EXCEPTIONS = ['TD320_2']; // the one non-insertion record of @root/TODO.md at stage 1 (plan 4.5 C)
+const TODO_RECORDS = ['TD320_1', 'TD320_2', 'TD320_3', 'TD320_4', 'TD320_5', 'TD320_6']; // TD320_6 is the sixth record, added by the fix round of review 1 (the apply.mjs block-edit limitation, SR-01)
+const TODO_EXCEPTIONS = ['TD320_2']; // the one non-insertion record of @root/TODO.md at stage 1 (plan 4.5 C); TD320_6 is an insertion, so the closed list of replacements does not grow
 const INCLUDE = ['SKILL.md', 'VERSION', 'CHANGELOG.md', 'references', 'assets', 'data', 'scripts']; // install/install.mjs:29
 const NORMATIVE_SCOPE = (rel) => rel === 'SKILL.md' || /^(?:references|assets\/agents|assets\/templates|data)\//.test(rel); // plan 4.5 C (D-4)
 
@@ -612,22 +612,24 @@ needPins('every 3.1.0 normative line (a line holding MUST, SHOULD or MAY) of SKI
   const lost = Object.entries(NORMATIVE_LINES).map(([k, digests]) => { const have = new Set(lf(actualText(k)).split('\n').map(lineDigest)); return [k, digests.filter((d) => !have.has(d)).length]; }).filter(([, n]) => n > 0);
   return [Object.keys(NORMATIVE_LINES).every(NORMATIVE_SCOPE) && lost.length === 0, lost];
 });
-// The root TODO (AC-C3-1, AC-A6-1): the 3.1.0 bytes plus exactly five records; lines 25 to 32 byte-identical; the texts of the plan present once.
+// The root TODO (AC-C3-1, AC-A6-1): the 3.1.0 bytes plus exactly six records (the plan's five and TD320_6 of the fix round, dispositions of review 1, SR-01); lines 25 to 32 byte-identical; the texts present once.
 {
   const todo = lf(actualText('@root/TODO.md'));
   const lines = todo.split('\n');
   check('AC-C3-1: @root/TODO.md lines 25 to 32 (the reviewer-residuals item) are byte-identical to the 3.1.0 lines (the pinned digest)', lines.length >= 33 && sha(`${lines.slice(24, 32).join('\n')}\n`) === TODO_RESIDUAL_SHA, lines.length >= 33 ? sha(`${lines.slice(24, 32).join('\n')}\n`) : 'the file is too short');
-  check('AC-C3-1: the helper holds exactly the five @root/TODO.md records TD320_1 to TD320_5 and TD320_2 is the only replacement among them', H !== null && hasRecords && JSON.stringify(Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md').map(([id]) => id).sort()) === JSON.stringify(TODO_RECORDS) && JSON.stringify(Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md' && r.old !== '').map(([id]) => id)) === JSON.stringify(TODO_EXCEPTIONS), H === null ? NOT_YET('helper') : hasRecords ? Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md').map(([id]) => id) : `${PENDING}: AM320 is empty`);
+  check('AC-C3-1: the helper holds exactly the six @root/TODO.md records TD320_1 to TD320_6, TD320_2 is the only replacement among them and TD320_6 is an insertion', H !== null && hasRecords && JSON.stringify(Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md').map(([id]) => id).sort()) === JSON.stringify(TODO_RECORDS) && TODO_RECORDS.length === 6 && JSON.stringify(Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md' && r.old !== '').map(([id]) => id)) === JSON.stringify(TODO_EXCEPTIONS) && H.AM320.TD320_6?.old === '' && H.AM320.TD320_6?.neu !== '', H === null ? NOT_YET('helper') : hasRecords ? Object.entries(H.AM320).filter(([, r]) => r.file === '@root/TODO.md').map(([id]) => id) : `${PENDING}: AM320 is empty`);
   const S = squash(todo);
   const T = {
     TD320_1: 'Status 2026-11-22: project-setup 3.2.0 ships both fixes as text only (the money-severity rule of the canonical reviewer and the delegated-agent launch bullet); neither is measured. This item stays until measurements D1 and D2 of docs/plans/2026-11-22-project-setup-v3.2.0-plan.md are recorded.',
     TD320_2: 'The 3.1.0 live acceptance (2026-11-14 to 2026-11-22) exercised the agents on both hosts and PS then BS (merge branch only). Not exercised: the BS overwrite branch and Codex PS rows.',
     TD320_3: 'backend-standards stamp behaviour differs between two existing-project runs. BS 3.1.0 wrote .backend-standards.json on the PS-first fixture and not on the BS existing-project fixture (2026-11-14). The existing-project procedure is documented as writing no stamp. Decide which is intended and make the skill do it every time; project-setup accepts both signals.',
     TD320_4: 'project-setup installer backups live inside the skills directory. 3.2.0 makes detect report them and documents the manual move. Moving the backup location out of host discovery is a candidate for the next minor and needs the recorded skill-discovery probe (D8 of the 3.2.0 plan) first.',
+    TD320_6: 'project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block without `--approve-user-content` (the normal `--approved-plan` approval at commit still applies): `onlyAddsBlocks` in `apply.mjs` compares only the text outside blocks, so the 3.2.0 block-edit protection is instruction-level only. A machine check needs a planned `apply.mjs` change and a deliberate update of the c16 case that pins today\'s behaviour.',
   };
   for (const [id, text] of Object.entries(T)) check(`AC-C3-1: the ${id} text of plan C3 is present exactly once in @root/TODO.md${id === 'TD320_3' ? ' (AC-A6-1: the stamp-behaviour entry)' : ''}`, S.split(text).length === 2, S.split(text).length - 1);
   check('AC-C3-1: the TD320_2 replacement removed the 3.1.0 sentence "Not exercised: the agents themselves, Codex, or PS then BS."', !S.includes('Not exercised: the agents themselves, Codex, or PS then BS.'));
   check('AC-C3-1: the TD320_5 entry lists the 3.1.0 rows that were not measured (the entry names "3.1.0 rows not measured")', /project-setup 3\.1\.0 rows not measured/.test(S) && S.split('project-setup 3.1.0 rows not measured').length === 2, undefined);
+  check('AC-C3-1: the TD320_6 entry (the recorded deviation of AC-A2-2: apply.mjs onlyAddsBlocks) is the last item of "Needs manual review", after the TD320_5 entry and before "## Missing information"', (() => { const f6 = todo.indexOf('- project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block'); const f5 = todo.indexOf('- project-setup 3.1.0 rows not measured'); const miss = todo.indexOf('\n## Missing information'); return f6 > 0 && f5 > 0 && miss > 0 && f5 < f6 && f6 < miss && todo.split('- project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block').length === 2 && /^\n?(?:  [^\n]*\n)+\n## Missing information/.test(todo.slice(todo.indexOf('\n', f6))); })(), { tD6: todo.indexOf('- project-setup `apply.mjs prepare`'), tD5: todo.indexOf('- project-setup 3.1.0 rows not measured') });
   check('AC-C3-1: the TD320_1 status sentence sits inside the reviewer-residuals item (directly after line 32, before the next item)', (() => { const a = lines.findIndex((l) => l.startsWith('- **`project-setup` 3.0.0 reviewer residuals.**')); const next = lines.findIndex((l, i) => i > a && /^- \*\*/.test(l)); const at = lines.findIndex((l) => l.includes('Status 2026-11-22')); return a === 24 && at > 31 && next > at; })(), undefined);
 }
 // The reviewer and the templates: insertion points and the line caps (AC-B1-1, AC-B2-1; behaviour is tests/v320.test.mjs).
