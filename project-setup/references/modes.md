@@ -74,6 +74,8 @@ invalid. A BS name or marker is not v1 provenance.
 A real Nest CLI 11 scaffold was exercised with BS followed by PS adopt on 2026-11-11. Prepare
 held CLAUDE.md and both standalone Claude agents for approval. That run did not exercise the
 agents, Codex, or PS followed by BS, and did not verify the 3.1 pointer workflow.
+The 3.1.0 live acceptance (2026-11-14 to 2026-11-22) later exercised the agents on both hosts
+and PS followed by BS (merge branch only); see RELEASE-NOTES-3.1.0.md.
 
 **backend-standards documentation mapping (adopt and update).** The mode decides the workflow;
 the documentation layout is a separate policy. In adopt and in update, assess the BS layout
@@ -101,6 +103,11 @@ The root-start rule and the reviewed installation of the managed `claude` block 
 Missing blocks are not silently recreated. Marker errors stop for repair; removed blocks or
 files require disposition. Keeping deficient CLAUDE.md is a held/incomplete result, not
 successful root recovery.
+
+The "required source-template content" in the table above is the template claude block
+with the Subagents line selected under "Subagents line variants" in
+references/docs-generation.md. In a partial agent layer the full-layer line is not the
+expected content.
 
 Before candidate PS, record:
 
@@ -130,6 +137,12 @@ changes.
 - `removed-by-user`: do not re-add; ask.
 - marker errors: stop; ask the user to repair markers first (show line numbers).
 Bump nothing if the outputs are identical: a no-op run must produce zero diff, including the manifest.
+
+An edit made by an agent inside a managed block is an `edited-by-user` block like any
+other: validate warns `drift`, and the next update MUST show the installed text next to
+the new content and offer keep theirs, take new, or merge. Setup MUST NOT rewrite the
+block without that disposition. Keep theirs leaves the block and its recorded hash
+unchanged, so the warning stays and the report MUST list the block as kept with drift.
 
 From a schema-2 manifest, also follow `references/migration-v2.md`: verify the shipped v2.0.0 comparison data with
 `scripts/check-agent-baselines.mjs` before comparing installed agents or wrappers, give every installed

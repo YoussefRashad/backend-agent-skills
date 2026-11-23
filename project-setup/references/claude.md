@@ -314,6 +314,12 @@ Facts learned live:
 - A session continued with `--continue` keeps the skill list it started with. Confirm active copies in a NEW session.
 - The `/plugin` skill toggle writes `.claude/settings.local.json` in the project; it is user-owned and the skill never
   writes it (write denylist).
+- Claude Code 2.1.325 to 2.1.330 listed an installer backup (`.project-setup.bak-*`, inside the skills
+  directory) as another `project-setup` skill. `detect.mjs` reports such backups in `installerBackups`
+  with one warning per tool. Move each backup directory together with its `.meta.json` sibling out of
+  the skills directory and record the original path; before `install.mjs rollback`, move both back
+  unmodified (rollback verifies the recorded digest). Confirm one active copy in a new session.
+  Whether Codex discovers an installer backup as a skill is unverified.
 
 Install this version next to v1 only after v1 is retired: start a new session, confirm one `project-setup`, run
 Phase 0 on a test repo. Rollback: undo the override (or re-enable) and `install.mjs rollback`.
