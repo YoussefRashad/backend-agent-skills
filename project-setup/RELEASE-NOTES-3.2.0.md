@@ -144,7 +144,6 @@ node tests/bs-doc-map.test.mjs
 node tests/run-310-view.mjs --out <empty-dir-1> --run release-3.1,c18,bs-doc-map
 node tests/run-310-view.mjs --out <empty-dir-2> --run accept-rc1
 node tests/run-310-view.mjs --out <empty-dir-3> --label scripts --overlay scripts/detect.mjs,scripts/migrate-security-paths.mjs --run accept-rc1
-node tests/run-310-view.mjs --out <empty-dir-4> --label scripts+data --overlay scripts/detect.mjs,scripts/migrate-security-paths.mjs,data/secret-paths.json --run accept-rc1
 ```
 
 Then run the format and version-stamp check from the repository root (the parent of
@@ -154,12 +153,16 @@ Then run the format and version-stamp check from the repository root (the parent
 npm run check
 ```
 
-The two labelled runs are the backward-compatibility runs: they run the 3.1.0 strict gate in the
-view with the changed scripts, and then also the changed policy data, overlaid. `accept-rc1`
-exits 1 in an overlay run by design; the runner compares the set of failure strings with the
-pinned list of that label in `tests/fixtures/v320-compat-expected.json`, and an unlisted or a
-listed but absent failure is a defect. Before each labelled run, confirm that `detect.mjs`
-reports an empty `installerBackups`.
+The labelled run is the backward-compatibility run: it runs the 3.1.0 strict gate in the
+view with the two changed scripts overlaid. `accept-rc1` exits 1 in an overlay run by design;
+the runner compares the set of failure strings with the pinned list of that label in
+`tests/fixtures/v320-compat-expected.json`, and an unlisted or a listed but absent failure is a
+defect. Before the labelled run, confirm that `detect.mjs` reports an empty `installerBackups`.
+A second run that also overlays `data/secret-paths.json` is not part of the release gate: the
+3.1.0 gate hard-codes the 20-entry policy (entry count, coverage decision ids 0, 7 and 18,
+anchor `any` for every omission), so it fails in four components for that reason alone, and
+pinning those failures would hide later ones. The 3.2.0 policy data is covered by
+`tests/v320.test.mjs` (the A4 criteria) instead.
 
 The first three run in the working tree. The historical gates (`tests/run-tests.mjs`,
 `tests/accept-rc1.mjs`, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs`) read the 3.1.0
