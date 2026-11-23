@@ -292,6 +292,27 @@ function scanSkillCopies(base, maxDepth) {
   return found;
 }
 
+/**
+ * 3.2.0 (plan A5): installer leftovers that a host can list as a second project-setup skill. Scans the top-level
+ * entries of one skills base only (no recursion) and returns the real directories (links are skipped, not followed)
+ * whose name matches ^\.project-setup\.(bak|rolledback)- and which contain SKILL.md, each as { dir, kind }.
+ * Reads entry names and the existence of SKILL.md only, never file content. An unreadable base gives no entry.
+ */
+const LEFTOVER_NAME = /^\.project-setup\.(bak|rolledback)-/;
+function scanInstallerLeftovers(base) {
+  let entries = [];
+  try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { return []; }
+  const found = [];
+  for (const e of entries) {
+    if (e.isSymbolicLink() || !e.isDirectory()) continue;
+    const m = LEFTOVER_NAME.exec(e.name);
+    if (!m) continue;
+    const dir = path.join(base, e.name);
+    if (fs.existsSync(path.join(dir, 'SKILL.md'))) found.push({ dir, kind: m[1] });
+  }
+  return found;
+}
+
 function readJsonQuiet(p) { try { return readJsonFile(p); } catch { return null; } }
 
 /** skillOverrides set to "off" in any Claude settings layer this session would load. */
@@ -379,6 +400,32 @@ function findSkillInstalls() {
   return found;
 }
 
+/**
+ * 3.2.0 (plan A5): installer backups inside the skills bases that findSkillInstalls scans (not the plugins base).
+ * Kept apart from installs and installConflicts: their host identity and disabled state cannot be known from the
+ * filesystem. Sorted by path, deduplicated by canonical path per tool.
+ */
+function findInstallerBackups() {
+  const bases = [
+    { tool: 'claude', scope: 'user', base: path.join(claudeHome, 'skills') },
+    { tool: 'claude', scope: 'repo', base: path.join(root, '.claude', 'skills') },
+    { tool: 'codex', scope: 'user', base: path.join(home, '.agents', 'skills') },
+    { tool: 'codex', scope: 'user-legacy', base: path.join(codexHome, 'skills') },
+    { tool: 'codex', scope: 'repo', base: path.join(root, '.agents', 'skills') },
+  ];
+  const out = [];
+  const seen = new Set();
+  for (const b of bases) {
+    for (const { dir, kind } of scanInstallerLeftovers(b.base)) {
+      const key = `${b.tool}|${canonicalPath(dir)}`;
+      if (seen.has(key)) continue; // same directory reached twice (e.g. CODEX_HOME == ~/.agents) is one entry
+      seen.add(key);
+      out.push({ tool: b.tool, scope: b.scope, path: toPosix(dir), kind });
+    }
+  }
+  return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
 // ---- mode classification (evidence-based) --------------------------------------
 const evidence = [];
 const rootClaude = instructionFiles.find((f) => f.path === 'CLAUDE.md' || f.path === '.claude/CLAUDE.md');
@@ -427,6 +474,11 @@ for (const i of installs.filter((x) => x.scope === 'repo' && x.disabled)) {
 for (const [tool, list] of Object.entries(installConflicts)) {
   warnings.push(`${tool}: ${list.length} project-setup copies are visible to the same tool (${list.join('; ')}); keep exactly one`);
 }
+const installerBackups = findInstallerBackups();
+for (const tool of ['claude', 'codex']) {
+  const mine = installerBackups.filter((b) => b.tool === tool).map((b) => b.path);
+  if (mine.length > 0) warnings.push(`${tool}: ${mine.length} project-setup installer backup(s) with SKILL.md are inside the skills directory (${mine.join('; ')}); the host can list each as another project-setup skill. Move them out of the skills directory, move them back before install.mjs rollback, and confirm one active copy in a new session`);
+}
 // C7 plan 3.5: the allow warn and fail details last, in result order; the personal-settings info row is never a warning.
 // Discovery stays an inventory: a fail row does not change its exit code.
 for (const r of allows.results) if (r.level === 'warn' || r.level === 'fail') warnings.push(r.detail);
@@ -446,6 +498,7 @@ ok({
   secrets: { trackedSecretPaths, envTemplates, presentSecretPaths, contentRiskFiles },
   installs,
   installConflicts,
+  installerBackups,
   invalidOverrides,
   installsNote: 'Filesystem scan (incl. synced subfolders) plus Claude skillOverrides "off" and Codex config.toml [[skills.config]] enabled=false. Copies disabled only in a Codex profile are reported but still counted, because the profile applies only when Codex is started with -p. Skills synced from claude.ai can appear only after the first restart. The skill list reported by a NEW session of the running tool is authoritative.',
 });
