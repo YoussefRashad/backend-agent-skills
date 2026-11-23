@@ -1044,6 +1044,251 @@ const rootCheck = (agentsText, o = {}) => H.checkRootInstructions({ agentsText, 
   G('the canonical CLAUDE.md template, agents and wrappers carry no pointer routing (pointers supply their own)', ['assets/templates/CLAUDE.md', 'assets/agents/reviewer.md', 'assets/agents/docs-sync.md', 'assets/wrappers/claude-reviewer.md', 'assets/wrappers/claude-docs-sync.md', 'assets/wrappers/codex-reviewer.toml', 'assets/wrappers/codex-docs_sync.toml'].every((p) => !/documentation[- ]pointer/.test(rd(path.join(SKILL, ...p.split('/'))))));
 }
 
+// ============================================================== GROUPS: 3.2.0 A1, A3 and B2 (the live helper and the instruction contract) ====
+// Plan docs/plans/2026-11-22-project-setup-v3.2.0-plan.md: A1 (AC-A1-2 to 7), A3 (AC-A3-1 to 3), B2 (AC-B2-2). The helper checkers are test-only (tests/live/bs-doc-map.mjs) and are exercised on
+// literal inputs; the instruction-contract checks read the SHIPPED references and are red until the implement lane ships the text (expected, plan C2, "tests lane runs first").
+// The closed sets below are an independent copy of the plan's text: a typo in the helper or in a reference shows up as a difference, not as agreement with itself.
+const A1_LAYERS = ['full', 'docs-sync-retained', 'reviewer-retained', 'both-retained'];
+const A1_LINES = {
+  full: '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both load their canonical definition from `.ai/agents/`.',
+  'docs-sync-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `reviewer` loads its canonical definition from `.ai/agents/`. `docs-sync` is a retained project agent (incomplete project-setup agent update).',
+  'reviewer-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `docs-sync` loads its canonical definition from `.ai/agents/`. `reviewer` is a retained project agent (incomplete project-setup agent update).',
+  'both-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both are retained project agents and neither loads a canonical definition from `.ai/agents/` (incomplete project-setup agent update).',
+};
+const A1_SENTENCES = {
+  'docs-sync-retained': 'Exception in Claude Code: `docs-sync` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).',
+  'reviewer-retained': 'Exception in Claude Code: `reviewer` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).',
+  'both-retained': 'Exception in Claude Code: `reviewer` and `docs-sync` are retained project agents and do not load their canonical definitions (incomplete project-setup agent update).',
+};
+const PARTIAL_LAYERS = A1_LAYERS.filter((l) => l !== 'full');
+// [AT320_1] and [AT320_2] (plan A2 item 1 and B2): the two paragraphs that follow the layer sentence in the 3.2.0 agents block. [AT320_1] says "retained project agent" in its own words.
+const AT320_1 = ['Text between `<!-- project-setup:begin ... -->` and `<!-- project-setup:end ... -->`', 'markers in AGENTS.md, CLAUDE.md and .gitignore is managed by project-setup. Every', 'agent, including a retained project agent that does not load a canonical definition,', 'MUST NOT add, remove or move these markers, and MUST change text inside a block only', 'when a code change makes that text wrong. It MUST then name the file and the block', 'id in its output, because the next project-setup update shows that edit for a keep,', 'take-new or merge decision and can otherwise replace it.'].join('\n');
+const AT320_2 = ['When you delegate to `reviewer` or `docs-sync`, state in every brief the session\'s', 'original start directory, the repository root and the current directory. Do not invent', 'a start directory you were not given; say that it is unknown instead.'].join('\n');
+const LAYER_ANCHOR = 'Do not create an ad-hoc agent for the same job.'; // assets/templates/AGENTS.md:79, the sentence every layer sentence follows
+const claudeForLayer = (layer, base = MERGED_CLAUDE) => base.replace(A1_LINES.full, A1_LINES[layer]);
+const agentsWithSentence = (text, sentence) => text.replace(LAYER_ANCHOR, `${LAYER_ANCHOR}\n${sentence}`);
+// The 3.2.0 shape of the agents block: line 79, the layer sentence when there is one, then [AT320_2], then [AT320_1] (fixed order, plan A1 item 2 and R2-10).
+const agents320 = (layer) => renderAgents(false).replace(LAYER_ANCHOR, `${LAYER_ANCHOR}${layer === 'full' ? '' : `\n${A1_SENTENCES[layer]}`}\n\n${AT320_2}\n\n${AT320_1}`);
+const rcLayer = (text, layer) => H.checkClaudeRecovery({ text, templateText: PS_CLAUDE_TEMPLATE, bsImports: BS_IMPORTS, bsVersionSentence: BS_SENTENCE, userLines: [USER_LINE], ...(layer === undefined ? {} : { agentLayer: layer }) });
+const lfT = (s) => String(s).replace(/\r\n?/g, '\n');
+const squashT = (s) => lfT(s).replace(/\s+/g, ' ').trim();
+const codeOf = (fn) => { try { fn(); return null; } catch (e) { return e.code ?? String(e.message); } };
+{
+  const G = grp('3.2.0 A1: partial agent layers');
+  G('preconditions: the template Subagents line is the full-layer line (found by content, once) and the merged fixture carries it once', PS_CLAUDE_TEMPLATE.split('\n').filter((l) => l === A1_LINES.full).length === 1 && MERGED_CLAUDE.split(A1_LINES.full).length === 2);
+  G('the four lines are distinct, ASCII and one line each (the closed set of plan A1 item 2)', new Set(Object.values(A1_LINES)).size === 4 && Object.values(A1_LINES).every((l) => /^[\x20-\x7e]+$/.test(l) && l.startsWith('- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; ')) && new Set(Object.values(A1_SENTENCES)).size === 3 && Object.values(A1_SENTENCES).every((l) => /^[\x20-\x7e]+$/.test(l)));
+  G('the helper constants equal this spec\'s independent copy of the plan text (four layers in order, four lines, three sentences)', JSON.stringify(H.AGENT_LAYERS) === JSON.stringify(A1_LAYERS) && JSON.stringify(H.SUBAGENTS_LINES) === JSON.stringify(A1_LINES) && JSON.stringify(H.AGENTS_LAYER_SENTENCES) === JSON.stringify(A1_SENTENCES), { layers: H.AGENT_LAYERS });
+  G('the layer sentences name no file path in backticks (reference-exists gets no new target) and each begins "Exception in Claude Code:"', Object.values(A1_SENTENCES).every((s) => s.startsWith('Exception in Claude Code: ') && [...s.matchAll(/`([^`]+)`/g)].every((m) => !/[/.]/.test(m[1]))));
+  // AC-A1-2: the 4 x 4 matrix. A block is accepted under exactly the layer whose line it carries, so exactly four blocks are accepted in total.
+  for (const layer of A1_LAYERS) for (const line of A1_LAYERS) {
+    const f = rcLayer(claudeForLayer(line), layer);
+    G(`AC-A1-2: under the ${layer} layer a block with the ${line} Subagents line ${layer === line ? 'has no findings' : 'is claude-block-content and nothing else'}`, layer === line ? f.length === 0 : f.length === 1 && has(f, 'claude-block-content'), f);
+  }
+  G('AC-A1-2: the layer defaults to full (no argument): the full block passes and a partial line is claude-block-content', rcLayer(MERGED_CLAUDE, undefined).length === 0 && PARTIAL_LAYERS.every((l) => has(rcLayer(claudeForLayer(l), undefined), 'claude-block-content')));
+  // AC-A1-3: a fifth wording (one character changed) is rejected under every layer.
+  const ONE_CHAR = [['the final period is a comma', (s) => s.replace(/\.$/, ',')], ['"canonical" has a capital I for the l', (s) => s.replace('canonical', 'canonicaI')], ['"Subagents" ends in the digit 5', (s) => s.replace('Subagents', 'Subagent5')]];
+  for (const line of A1_LAYERS) for (const [what, fn] of ONE_CHAR) {
+    const mutated = fn(A1_LINES[line]);
+    G(`AC-A1-3: a fifth wording (the ${line} line, ${what}) is claude-block-content under every layer`, mutated !== A1_LINES[line] && A1_LAYERS.every((layer) => has(rcLayer(MERGED_CLAUDE.replace(A1_LINES.full, mutated), layer), 'claude-block-content')));
+  }
+  // AC-A1-4: the block mutants of the root-start rule and of a weakened rule keep failing when a partial line is present (the partial line does not relax the rest of the block).
+  const BLOCK_MUTANTS = [['the root-start rule removed from the block', (t) => t.replace("You MUST start Claude Code at this repository's root.", 'Start anywhere.')], ['a rule of the block weakened', (t) => t.replace('You MUST NOT infer a subdirectory start', 'You may infer a subdirectory start')]];
+  for (const layer of A1_LAYERS) {
+    G(`AC-A1-4: control: the unmutated ${layer} block has no findings`, rcLayer(claudeForLayer(layer), layer).length === 0);
+    for (const [what, fn] of BLOCK_MUTANTS) { const m = fn(claudeForLayer(layer)); G(`AC-A1-4: with the ${layer} line present, ${what} is claude-block-content`, m !== claudeForLayer(layer) && has(rcLayer(m, layer), 'claude-block-content')); }
+  }
+  G('AC-A1-4: the root-start rule duplicated outside the block is still duplicate-instructions under a partial layer', PARTIAL_LAYERS.every((l) => has(rcLayer(`${claudeForLayer(l)}\nYou MUST start Claude Code at this repository's root.\n`, l), 'duplicate-instructions')));
+  // Y inconsistent / boundary: an unknown layer compares nothing; a missing block is a block-count finding; a template without the Subagents line cannot be matched.
+  for (const bad of ['bogus', 'FULL', 'full ', '', null, 0]) G(`an unknown layer ${JSON.stringify(bad)} is the finding agent-layer and no block comparison is reported`, (() => { const f = rcLayer(MERGED_CLAUDE, bad); return has(f, 'agent-layer') && !has(f, 'claude-block-content'); })());
+  G('a missing claude block is claude-block-count under a partial layer (never a content finding)', PARTIAL_LAYERS.every((l) => { const f = rcLayer(MERGED_CLAUDE.replace(/<!-- project-setup:begin id=claude -->[\s\S]*<!-- project-setup:end id=claude -->\n?/, ''), l); return has(f, 'claude-block-count') && !has(f, 'claude-block-content'); }));
+  G('a template with no Subagents line cannot yield a partial block: the partial layers are claude-block-content, the full layer is judged on the template as it is', PARTIAL_LAYERS.every((l) => has(H.checkClaudeRecovery({ text: claudeForLayer(l), templateText: PS_CLAUDE_TEMPLATE.replace(`${A1_LINES.full}\n`, ''), bsImports: BS_IMPORTS, bsVersionSentence: BS_SENTENCE, userLines: [USER_LINE], agentLayer: l }), 'claude-block-content')));
+  // AC-A1-6: agentLayerOf.
+  const ag = (r, d) => ({ reviewer: { disposition: r }, 'docs-sync': { disposition: d } });
+  const TX = (rt, dt) => ({ reviewer: rt, 'docs-sync': dt });
+  const CANON_R = `${WRAPPER.reviewer}\n## Project rules\nkeep\n`;
+  const CANON_D = `${WRAPPER['docs-sync']}\n## Project rules\nkeep\n`;
+  G('AC-A1-6: take-new and take-new is full', H.agentLayerOf(ag('take-new', 'take-new'), TX(WRAPPER.reviewer, WRAPPER['docs-sync'])) === 'full');
+  G('AC-A1-6: take-new and keep is docs-sync-retained; keep and take-new is reviewer-retained; keep and keep is both-retained', H.agentLayerOf(ag('take-new', 'keep'), TX(WRAPPER.reviewer, BS_AGENT['docs-sync'])) === 'docs-sync-retained' && H.agentLayerOf(ag('keep', 'take-new'), TX(BS_AGENT.reviewer, WRAPPER['docs-sync'])) === 'reviewer-retained' && H.agentLayerOf(ag('keep', 'keep'), TX(BS_AGENT.reviewer, BS_AGENT['docs-sync'])) === 'both-retained');
+  G('AC-A1-6: merge is canonical only when the installed text still references .ai/agents/<name>.md (reviewer, with docs-sync take-new)', H.agentLayerOf(ag('merge', 'take-new'), TX(CANON_R, WRAPPER['docs-sync'])) === 'full' && H.agentLayerOf(ag('merge', 'take-new'), TX(BS_AGENT.reviewer, WRAPPER['docs-sync'])) === 'reviewer-retained');
+  G('AC-A1-6: merge is canonical only when the installed text still references .ai/agents/<name>.md (docs-sync, with reviewer take-new)', H.agentLayerOf(ag('take-new', 'merge'), TX(WRAPPER.reviewer, CANON_D)) === 'full' && H.agentLayerOf(ag('take-new', 'merge'), TX(WRAPPER.reviewer, BS_AGENT['docs-sync'])) === 'docs-sync-retained');
+  G('AC-A1-6: both merged: both references give full, neither gives both-retained, one gives the other agent as retained', H.agentLayerOf(ag('merge', 'merge'), TX(CANON_R, CANON_D)) === 'full' && H.agentLayerOf(ag('merge', 'merge'), TX(BS_AGENT.reviewer, BS_AGENT['docs-sync'])) === 'both-retained' && H.agentLayerOf(ag('merge', 'merge'), TX(CANON_R, BS_AGENT['docs-sync'])) === 'docs-sync-retained' && H.agentLayerOf(ag('merge', 'merge'), TX(BS_AGENT.reviewer, CANON_D)) === 'reviewer-retained');
+  G('AC-A1-6: a merge whose text references only the OTHER agent\'s definition, an absent text, or no texts at all is retained', H.agentLayerOf(ag('merge', 'take-new'), TX('see .ai/agents/docs-sync.md', WRAPPER['docs-sync'])) === 'reviewer-retained' && H.agentLayerOf(ag('merge', 'take-new'), TX(null, WRAPPER['docs-sync'])) === 'reviewer-retained' && H.agentLayerOf(ag('merge', 'take-new'), undefined) === 'reviewer-retained' && H.agentLayerOf(ag('merge', 'take-new'), {}) === 'reviewer-retained');
+  G('AC-A1-6: the disposition decides for take-new and keep, never the installed text (a kept agent whose text names the canonical file is still retained)', H.agentLayerOf(ag('keep', 'take-new'), TX(WRAPPER.reviewer, WRAPPER['docs-sync'])) === 'reviewer-retained' && H.agentLayerOf(ag('take-new', 'take-new'), TX(BS_AGENT.reviewer, BS_AGENT['docs-sync'])) === 'full');
+  G('AC-A1-6: an unknown or missing disposition, or a missing agent, is the coded error AGENT_LAYER (a layer is never guessed)', [ag('maybe', 'take-new'), ag('take-new', undefined), ag('', 'keep'), { reviewer: { disposition: 'take-new' } }, {}, null].every((e) => codeOf(() => H.agentLayerOf(e, TX(WRAPPER.reviewer, WRAPPER['docs-sync']))) === 'AGENT_LAYER'));
+  // AC-A1-5: checkAgentsLayerSentence, on the template agents block as it is and on its 3.2.0 shape (the A2 paragraph says "retained project agent" and must not count).
+  const SC = (text, layer) => H.checkAgentsLayerSentence({ agentsText: text, agentLayer: layer });
+  const BASE_AGENTS = renderAgents(false);
+  G('AC-A1-5: precondition: the layer anchor is on one line of the template agents block', BASE_AGENTS.split(LAYER_ANCHOR).length === 2);
+  G('AC-A1-5: the four correct cases pass (no sentence in the full layer, the matching sentence in each partial layer)', SC(BASE_AGENTS, 'full').length === 0 && PARTIAL_LAYERS.every((l) => SC(agentsWithSentence(BASE_AGENTS, A1_SENTENCES[l]), l).length === 0));
+  G('AC-A1-5: the four correct cases pass in the 3.2.0 shape (sentence, then [AT320_2], then [AT320_1]); the A2 paragraph is not a layer sentence', A1_LAYERS.every((l) => SC(agents320(l), l).length === 0), A1_LAYERS.map((l) => SC(agents320(l), l)));
+  G('AC-A1-5: a missing sentence is the finding in each partial layer (the template block, and the 3.2.0 block without it)', PARTIAL_LAYERS.every((l) => SC(BASE_AGENTS, l).some((f) => f.code === 'agents-layer-sentence') && SC(agents320('full'), l).some((f) => f.code === 'agents-layer-sentence')));
+  G('AC-A1-5: a sentence in the full layer is the finding (each of the three)', PARTIAL_LAYERS.every((l) => SC(agentsWithSentence(BASE_AGENTS, A1_SENTENCES[l]), 'full').some((f) => f.code === 'agents-layer-sentence')));
+  for (const layer of PARTIAL_LAYERS) for (const other of PARTIAL_LAYERS.filter((x) => x !== layer)) G(`AC-A1-5: under ${layer} the ${other} sentence is the finding`, SC(agentsWithSentence(BASE_AGENTS, A1_SENTENCES[other]), layer).some((f) => f.code === 'agents-layer-sentence'));
+  G('AC-A1-5: two sentences are the finding (the right one twice; the right one and another layer\'s)', PARTIAL_LAYERS.every((l) => { const s = A1_SENTENCES[l]; const o = A1_SENTENCES[PARTIAL_LAYERS.find((x) => x !== l)]; return SC(agentsWithSentence(BASE_AGENTS, `${s}\n${s}`), l).length > 0 && SC(agentsWithSentence(BASE_AGENTS, `${s}\n${o}`), l).length > 0; }));
+  for (const layer of PARTIAL_LAYERS) for (const [what, fn] of [['the final period is a comma', (s) => s.replace(/\.$/, ',')], ['the first word has an l for the i', (s) => s.replace('Exception', 'Exceptlon')], ['"canonical" has a capital I for the l', (s) => s.replace('canonical', 'canonicaI')]]) {
+    const near = fn(A1_SENTENCES[layer]);
+    G(`AC-A1-5: under ${layer} a sentence with one changed character (${what}) is the finding, and so is it in the full layer`, near !== A1_SENTENCES[layer] && SC(agentsWithSentence(BASE_AGENTS, near), layer).length > 0 && SC(agentsWithSentence(BASE_AGENTS, near), 'full').length > 0);
+  }
+  G('AC-A1-5: a sentence outside the agents block, inside an HTML comment, or wrapped over two lines does not count as the sentence', PARTIAL_LAYERS.every((l) => { const s = A1_SENTENCES[l]; const half = s.indexOf(' and '); return SC(`${BASE_AGENTS}\n${s}\n`, l).length > 0 && SC(agentsWithSentence(BASE_AGENTS, `<!-- ${s} -->`), l).length > 0 && SC(agentsWithSentence(BASE_AGENTS, `${s.slice(0, half)}\n${s.slice(half + 1)}`), l).length > 0; }));
+  G('AC-A1-5: a broken agents block (a missing end marker) and an unknown layer are findings, never a pass', SC(BASE_AGENTS.replace('<!-- project-setup:end id=agents -->', ''), 'full').length > 0 && SC(BASE_AGENTS, 'bogus').length > 0 && SC(BASE_AGENTS, undefined).length > 0);
+  // AC-A1-7: references/modes.md.
+  const MD320_3 = 'The "required source-template content" in the table above is the template claude block with the Subagents line selected under "Subagents line variants" in references/docs-generation.md. In a partial agent layer the full-layer line is not the expected content.';
+  const MODES = lfT(TXT.modes);
+  const ROW_94_SHA = '57edf86500b3f528962ad30b9399369f270c68ec7768f6f82a06abd986639ad1'; // the 3.1.0 table row of modes.md line 94, byte for byte (LF); it moves by the [MD320_1] insertion, so it is pinned by content
+  G('AC-A1-7: references/modes.md holds the [MD320_3] paragraph exactly once', squashT(MODES).split(squashT(MD320_3)).length === 2);
+  G('AC-A1-7: the paragraph follows the "successful root recovery." paragraph and precedes "Before candidate PS, record:"', (() => { const s = squashT(MODES); const i = s.indexOf(squashT(MD320_3)); return i > s.indexOf('not successful root recovery.') && s.indexOf('not successful root recovery.') > 0 && i < s.indexOf('Before candidate PS, record:'); })());
+  G('AC-A1-7: the 3.1.0 table row (line 94, "required source-template content") is unchanged: exactly one line of modes.md has its digest', MODES.split('\n').filter((l) => sha(l) === ROW_94_SHA).length === 1 && MODES.split('\n').filter((l) => l.includes('required source-template content')).length === 1);
+}
+
+{
+  const G = grp('3.2.0 A3: applicability, configuration and strictness');
+  // ---- the instruction contract (AC-A3-1): the plan's exact texts, placed in the mapping section, in order, once. ----
+  const AP320 = [
+    '#### Applicability (one rule for every mode)', '',
+    'A mapped PS document is applicable when at least one of these holds:', '',
+    '1. Code evidence: the source named for that document in the tables above yields at', '   least one fact from permitted reads.',
+    '2. Source-section evidence: at least one of its mapped 03 sections resolves and its', '   body states at least one fact for the topic. A blank body, template placeholders', '   in angle brackets, or a table with no filled row is not a fact.',
+    '3. An existing document at the PS path, whoever wrote it. Existing-content', '   consolidation below applies before it becomes a pointer.', '',
+    'Phase 0 applicability is provisional. Setup MUST derive it only from what Phase 0 may', 'read: the manifest, the lockfile name, tsconfig.json, docker-compose structure, the', 'src/ tree listing, the framework entrypoint, detect output, existing documents and the', 'resolved 03 sections. Setup MUST show the provisional list in Phase 0 with the evidence', 'kind for each entry (tree listing, source section, existing document) or "not', 'applicable: no evidence", and MUST label it provisional. This rule adds no Phase 0 read.', '',
+    'Phase 1 confirms applicability with the evidence reads it already performs. Setup MUST', 'draft exactly the confirmed set. If the confirmed set differs from the list approved in', 'Phase 0, setup MUST stop and ask again, because a report that says "skipped" beside an', 'installed pointer cannot be reviewed.', '',
+    'Setup MUST apply this rule identically in every mode. The mode decides ownership and', 'the approval workflow; it never decides which documents exist.', '',
+    'For a document that is not applicable, setup MUST NOT write a pointer, MUST NOT add', 'content to 03 for that topic, and MUST remove the navigation row and any reference to', 'that path from the text it drafts, so validate does not fail on a missing target.', 'For an applicable document whose mapped section is blank while code evidence exists,', 'setup completes the section through the reviewed consolidation and identifies', 'unknowns explicitly. An installed pointer whose evidence later disappears is', 'preserved and reported; it is never deleted or expanded automatically, and no age', 'limit applies.', '',
+    '`docs/integrations/<vendor>.md` is decided per vendor. `docs/business-rules/<flow>.md`,', 'code patterns, development rules, ADRs and TODO.md keep their own rules above.', '',
+    'When the configuration document is applicable, setup MUST propose, through the reviewed', 'consolidation of the target project\'s 03, a Configuration table with one row per', 'variable name evidenced by config or validation code or by', '`env-keys.mjs keys --template auto`, with: variable, required (yes, no, conditional', 'with the condition, or unknown), classification (secret or non-secret), used by,', 'description and source. Setup MUST make this proposal in adopt and in update alike. A', 'requiredness that the code does not establish is written `unknown` and listed in', 'TODO.md; it is never guessed. Values never appear. If the owner declines the proposal,', 'the configuration conversion is incomplete: setup keeps any original, writes no claim of', 'completion and reports it.', '',
+    'When `tsconfig.json` exists and the mapping is active, setup MUST propose, through the', 'same reviewed consolidation, a statement of the compiler strictness as written (`strict`', 'and each individual strict flag that is set, or "strict not set") under **CI/CD and', 'tooling**, taken from `tsconfig.json` only, in every mode. It is a stated value, never', 'an inference from code style. If the owner declines, setup reports the omission and', 'does not write it.',
+  ].join('\n');
+  const DG320_3 = 'This applies when critical-modules is applicable under "Applicability" above. When it is not, remove the reference from the critical rule\'s last sentence and the navigation row, keep the rule itself, and record the absence in TODO.md.';
+  const DG320_7 = 'That sentence describes 3.1.0. 3.2.0 changes two production scripts for other reasons (policy baseline recognition and installer-backup reporting) and still adds no atomic stamp binding.';
+  const SK320_2 = 'The assessment lists every mapped document as provisionally applicable (with its evidence kind) or not applicable, as defined in references/docs-generation.md ("Applicability"); Phase 1 confirms the list.';
+  // The sentences of 3.1.0 that stay (plan A3: "Lines 257 and 259 are unchanged", the :162 policy sentence, the :357 and :416 sentences).
+  const KEEP = [['line-257-kept', 'For an activated mapping, setup MUST generate each applicable mapped PS document as a pointer and consolidate its evidenced architectural facts into the mapped sections of 03, because separate detailed descriptions drift.'], ['line-259-kept', 'Setup MUST preserve the information requirements of the original PS document. A shorter BS table MUST NOT justify losing configuration inventories, transaction details, error transformations, integration safeguards or critical-module invariants.'], ['line-162-kept', 'This mapping is a documentation policy layered over the detected mode.'], ['line-357-kept', 'That document becomes a self-sufficient pointer.'], ['line-416-kept', 'This release adds neither atomic stamp binding nor a production-script change.']];
+  const flat = (doc) => squashT(lfT(doc).split('\n').map((l) => l.replace(/^\s*(?:>\s?)+/, '')).join('\n'));
+  /** The ids of the contract checks a docs-generation.md text does not meet ([] = all met). */
+  const apProblems = (doc) => {
+    const d = lfT(doc); const bad = []; const f = flat(d);
+    const n = f.split(squashT(AP320)).length - 1;
+    if (n !== 1) bad.push(n === 0 ? 'applicability-missing' : 'applicability-duplicated');
+    const sec = d.search(/^### Document mapping\s*$/m); const end = d.search(/^### Pointer format\s*$/m); const at = d.indexOf('#### Applicability (one rule for every mode)');
+    if (!(sec >= 0 && end > sec && at > sec && at < end)) bad.push('applicability-outside-mapping-section');
+    const i259 = d.indexOf('Setup MUST preserve the information requirements of the original PS document.');
+    if (!(i259 >= 0 && at > i259)) bad.push('applicability-order');
+    if (at >= 0 && end > at && /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten)\s+modes\b/i.test(d.slice(at, end))) bad.push('applicability-mode-count');
+    for (const [id, text] of KEEP) if (!f.includes(squashT(text))) bad.push(id);
+    const sec3 = d.search(/^## Documentation source of truth on backend-standards projects\s*$/m); const sec4 = d.search(/^## Ownership hints\s*$/m);
+    const i3 = d.indexOf(DG320_3); const i7 = d.indexOf(DG320_7);
+    // [DG320_3] sits after the :357 sentence, inside "Conditional root routing" (not in the mapping section, where the applicability rule is).
+    const secR = d.search(/^### Conditional root routing\s*$/m); const secC = d.search(/^### Canonical agents and extensions\s*$/m);
+    if (flat(d).split(squashT(DG320_3)).length !== 2 || !(secR >= 0 && secC > secR && i3 > secR && i3 < secC && i3 > d.indexOf(KEEP[3][1]) && i3 > sec3 && i3 < sec4)) bad.push('dg320-3');
+    if (flat(d).split(squashT(DG320_7)).length !== 2 || !(i7 > d.indexOf('This release adds neither atomic stamp binding') && i7 < sec4)) bad.push('dg320-7');
+    return bad;
+  };
+  // A reference document made of the plan's texts and the 3.1.0 sentences around them, independent of what the real file holds now.
+  const SYN = [
+    '# Generating documentation', '', '## Root AGENTS.md (template)', '', 'Reference text.', '',
+    '## Documentation source of truth on backend-standards projects', '', 'Intro.', '', KEEP[2][1], '',
+    '### Document mapping', '', `> ${KEEP[0][1]}`, '>', `> ${KEEP[1][1]}`, '', AP320, '', '### Pointer format', '', 'Reference text.', '',
+    '### Conditional root routing', '', `Preserve the existing money/auth critical rule. ${KEEP[3][1]}`, '', DG320_3, '', '### Canonical agents and extensions', '', 'Reference text.', '',
+    '### Source binding', '', `**Accepted limitation:** the stamp can change between that check and commit. ${KEEP[4][1]}`, '', DG320_7, '',
+    '## Ownership hints', '', 'Reference text.', '',
+  ].join('\n');
+  const syn = (fn) => { const m = fn(SYN); return m === SYN ? null : m; };
+  const ids = (d) => (d === null ? null : apProblems(d));
+  G('AC-A3-1: the reference document built from the plan texts meets every contract check', JSON.stringify(apProblems(SYN)) === '[]', apProblems(SYN));
+  const real = apProblems(TXT.docs);
+  for (const id of ['applicability-missing', 'applicability-duplicated', 'applicability-outside-mapping-section', 'applicability-order', 'applicability-mode-count', ...KEEP.map(([k]) => k), 'dg320-3', 'dg320-7']) G(`AC-A3-1: references/docs-generation.md: ${id} is met`, !real.includes(id), real);
+  G('AC-A3-1: SKILL.md holds the [SK320_2] sentence exactly once', flat(TXT.skill).split(squashT(SK320_2)).length === 2);
+  G('AC-A3-1: the rule says "every mode" and pins no mode count (detect has seven modes; the text does not say how many)', AP320.includes('identically in every mode') && !/\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten)\s+modes\b/i.test(AP320));
+  // The contract mutants (5.2 item 4 for the document side): each fails its own check on the reference document.
+  for (const [label, id, fn] of [
+    ['the rule removed', 'applicability-missing', (d) => d.replace(AP320, '')],
+    ['the rule written twice', 'applicability-duplicated', (d) => d.replace(AP320, `${AP320}\n\n${AP320}`)],
+    ['the rule placed in the Root AGENTS.md section, before the mapping section', 'applicability-outside-mapping-section', (d) => d.replace(`${AP320}\n`, '').replace('Reference text.', `Reference text.\n\n${AP320}`)],
+    ['the rule placed after the Pointer format heading', 'applicability-outside-mapping-section', (d) => d.replace(`${AP320}\n`, '').replace('### Pointer format\n', `### Pointer format\n\n${AP320}\n`)],
+    ['the rule placed before the line 259 paragraph', 'applicability-order', (d) => d.replace(`${AP320}\n`, '').replace(`> ${KEEP[0][1]}`, `${AP320}\n\n> ${KEEP[0][1]}`)],
+    ['"every mode" weakened to "adopt mode"', 'applicability-missing', (d) => d.replace('identically in every mode', 'identically in adopt mode')],
+    ['"MUST draft exactly the confirmed set" weakened to SHOULD', 'applicability-missing', (d) => d.replace('Setup MUST\ndraft exactly', 'Setup SHOULD\ndraft exactly')],
+    ['"MUST stop and ask again" weakened to "may note it"', 'applicability-missing', (d) => d.replace('setup MUST stop and ask again', 'setup may note it')],
+    ['a mode count added to the rule', 'applicability-mode-count', (d) => d.replace('### Pointer format', 'Setup runs in seven modes.\n\n### Pointer format')],
+    ['the line 257 sentence removed', 'line-257-kept', (d) => d.replace(KEEP[0][1], '')],
+    ['the line 259 sentence removed', 'line-259-kept', (d) => d.replace(KEEP[1][1], '')],
+    ['the line 162 sentence removed', 'line-162-kept', (d) => d.replace(KEEP[2][1], '')],
+    ['the line 357 sentence removed', 'line-357-kept', (d) => d.replace(KEEP[3][1], '')],
+    ['the :416 sentence removed (the pin of tests/bs-doc-map.test.mjs clause C2.limitation)', 'line-416-kept', (d) => d.replace(KEEP[4][1], '')],
+    ['the [DG320_3] sentence removed', 'dg320-3', (d) => d.replace(DG320_3, '')],
+    ['the [DG320_3] sentence moved into the mapping section', 'dg320-3', (d) => d.replace(`${DG320_3}\n`, '').replace('### Pointer format', `${DG320_3}\n\n### Pointer format`)],
+    ['the [DG320_7] sentence removed', 'dg320-7', (d) => d.replace(DG320_7, '')],
+    ['the [DG320_7] sentence placed before the :416 sentence', 'dg320-7', (d) => d.replace(`${DG320_7}\n`, '').replace('**Accepted limitation:**', `${DG320_7}\n\n**Accepted limitation:**`)],
+  ]) G(`AC-A3-1 mutant: ${label} fails ${id}`, (() => { const m = syn(fn); return m !== null && apProblems(m).includes(id); })(), (() => { const m = syn(fn); return m === null ? 'the mutation did not apply' : apProblems(m); })());
+  G('AC-A3-1 mutant: the [SK320_2] sentence written twice, or removed, is not "exactly once"', flat(`${TXT.skill}\n${SK320_2}\n${SK320_2}\n`).split(squashT(SK320_2)).length !== 2 && flat('SKILL text without the sentence').split(squashT(SK320_2)).length !== 2);
+
+  // ---- the checkers (AC-A3-2): a positive case, then each named finding by its negative case, including the boundary. ----
+  const ARCH = (cfg, ci = '- `strict`: true') => `# Architecture\n\n## 1. Overview\n\nText.\n\n## 3. Configuration\n\n${cfg}\n\n---\n\n## 4. Module layout\n\nText.\n\n## 12. CI/CD and tooling\n\n${ci}\n`;
+  const HEAD = '| Variable | Required | Classification | Used by | Description | Source |';
+  const SEP = '| --- | --- | --- | --- | --- | --- |';
+  const ROW = (v, req = 'yes', cls = 'non-secret', used = 'typeorm module', desc = 'database host', src = '`src/config/db.ts`') => `| ${v} | ${req} | ${cls} | ${used} | ${desc} | ${src} |`;
+  const TABLE = (...rows) => [HEAD, SEP, ...rows].join('\n');
+  const GOOD = TABLE(ROW('`DB_HOST`'), ROW('`JWT_SECRET`', 'yes', 'secret', 'auth module', 'token signing key', '`src/config/auth.ts`'));
+  const CI = (arch, names, declined = false) => H.checkConfigurationInventory({ architectureText: arch, names, declined });
+  const cc = (f) => f.map((x) => x.code);
+  G('AC-A3-2 configuration: the positive case (a complete table, one row per variable) has no finding', CI(ARCH(GOOD), ['DB_HOST', 'JWT_SECRET']).length === 0, CI(ARCH(GOOD), ['DB_HOST', 'JWT_SECRET']));
+  G('AC-A3-2 configuration: no variables evidenced and a table with no row is clean (nothing to list)', CI(ARCH(TABLE()), []).length === 0);
+  G('AC-A3-2 configuration: one variable missing is config-row-missing:<name> and nothing else', JSON.stringify(cc(CI(ARCH(GOOD), ['DB_HOST', 'JWT_SECRET', 'REDIS_URL']))) === JSON.stringify(['config-row-missing:REDIS_URL']), cc(CI(ARCH(GOOD), ['DB_HOST', 'JWT_SECRET', 'REDIS_URL'])));
+  G('AC-A3-2 configuration: a table with a header and no row is config-row-missing for every variable (the boundary)', JSON.stringify(cc(CI(ARCH(TABLE()), ['DB_HOST', 'JWT_SECRET']))) === JSON.stringify(['config-row-missing:DB_HOST', 'config-row-missing:JWT_SECRET']));
+  G('AC-A3-2 configuration: no table at all (the compact BS bullets only), and no Configuration heading, are config-row-missing', cc(CI(ARCH('- Mechanism: `ConfigService`'), ['DB_HOST'])).includes('config-row-missing:DB_HOST') && cc(CI('# Architecture\n\n## 4. Module layout\n\nText.\n', ['DB_HOST'])).includes('config-row-missing:DB_HOST'));
+  for (const [col, row] of [['variable', ROW('``')], ['required', ROW('`DB_HOST`', '')], ['classification', ROW('`DB_HOST`', 'yes', '  ')], ['used by', ROW('`DB_HOST`', 'yes', 'non-secret', '')], ['description', ROW('`DB_HOST`', 'yes', 'non-secret', 'x', '')], ['source', ROW('`DB_HOST`', 'yes', 'non-secret', 'x', 'y', '')]]) {
+    const f = CI(ARCH(TABLE(row)), ['DB_HOST']);
+    G(`AC-A3-2 configuration: an empty (or whitespace only) ${col} cell is ${col === 'variable' ? 'config-row-missing' : `config-cell-empty:DB_HOST:${col}`}`, col === 'variable' ? cc(f).includes('config-row-missing:DB_HOST') : JSON.stringify(cc(f)) === JSON.stringify([`config-cell-empty:DB_HOST:${col}`]), cc(f));
+  }
+  G('AC-A3-2 configuration: "unknown" in the required column is a value the rule asks for, not an empty cell', CI(ARCH(TABLE(ROW('`DB_HOST`', 'unknown'))), ['DB_HOST']).length === 0);
+  G('AC-A3-2 configuration: a table that lacks a column header is config-cell-empty for that column', cc(CI(ARCH([HEAD.replace(' | Source |', ' |'), '| --- | --- | --- | --- | --- |', '| `DB_HOST` | yes | non-secret | typeorm module | database host |'].join('\n')), ['DB_HOST'])).includes('config-cell-empty:DB_HOST:source'));
+  for (const [label, desc] of [['an assignment NAME=value', 'default is DB_HOST=localhost'], ['a credential in a URL', 'postgres://admin:hunter22@db.internal/app'], ['a long token', `bearer ${'a1B2'.repeat(10)}`], ['a well-known secret prefix', ['sk', 'test', 'a'.repeat(24)].join('_')], ['an Authorization header', 'Bearer abcdefgh12345678']]) {
+    G(`AC-A3-2 configuration: a description holding ${label} is config-value-shaped`, cc(CI(ARCH(TABLE(ROW('`DB_HOST`', 'yes', 'non-secret', 'x', desc))), ['DB_HOST'])).includes('config-value-shaped'));
+  }
+  G('AC-A3-2 configuration: prose that names a variable without a value is not value-shaped (control)', CI(ARCH(TABLE(ROW('`DB_HOST`', 'yes', 'non-secret', 'typeorm module', 'host of the primary database; falls back to NODE_ENV defaults', '`src/config/db.ts`'))), ['DB_HOST']).length === 0);
+  G('AC-A3-2 configuration: a declined proposal with no completion claim has no finding, whatever the table holds', CI(ARCH('- Mechanism: `ConfigService`'), ['DB_HOST'], true).length === 0 && CI(ARCH(TABLE(ROW('`DB_HOST`', 'yes', 'non-secret', 'x', 'DB_HOST=localhost'))), ['DB_HOST', 'OTHER'], true).length === 0);
+  for (const claim of ['The configuration conversion is complete.', 'Configuration inventory completed.', 'Consolidation done for configuration.']) G(`AC-A3-2 configuration: a declined proposal with the completion claim "${claim}" is config-completion-claimed and nothing else`, JSON.stringify(cc(CI(ARCH(`${claim}\n\n${GOOD}`), ['DB_HOST'], true))) === JSON.stringify(['config-completion-claimed']));
+  for (const ok of ['The configuration conversion is not complete.', 'The configuration conversion is incomplete.', 'The configuration inventory was never completed.']) G(`AC-A3-2 configuration: a declined proposal that says "${ok}" is clean (a negated claim is no claim)`, CI(ARCH(ok), ['DB_HOST'], true).length === 0);
+  G('AC-A3-2 configuration: a completion claim is not a finding when the proposal was not declined', !cc(CI(ARCH(`The configuration conversion is complete.\n\n${GOOD}`), ['DB_HOST'])).includes('config-completion-claimed'));
+
+  const TS = (o, extra = '') => `{ // comment\n  ${extra}"compilerOptions": ${JSON.stringify(o)},\n}\n`;
+  const ST = (arch, ts, declined = false) => H.checkStrictness({ architectureText: arch, tsconfigText: ts, declined });
+  const STRICT_TS = TS({ strict: true, noImplicitAny: false, target: 'ES2023' });
+  G('AC-A3-2 strictness: the positive case (strict and a set flag stated as written; a commented tsconfig with a trailing comma parses) has no finding', ST(ARCH(GOOD, '- `strict`: true\n- `noImplicitAny`: false'), STRICT_TS).length === 0, ST(ARCH(GOOD, '- `strict`: true\n- `noImplicitAny`: false'), STRICT_TS));
+  G('AC-A3-2 strictness: "strict not set" is the clean statement of a tsconfig that sets no strict option', ST(ARCH(GOOD, 'Compiler strictness: strict not set.'), TS({ target: 'ES2023' })).length === 0);
+  G('AC-A3-2 strictness: no statement (no strict mention, or no CI/CD and tooling heading) is strictness-missing', cc(ST(ARCH(GOOD, '| Lint | CI | yes |'), STRICT_TS)).join() === 'strictness-missing' && cc(ST('# Architecture\n\n## 4. Module layout\n\nText.\n', STRICT_TS)).join() === 'strictness-missing');
+  for (const [label, ci, ts] of [['strict stated false while the file says true', '- `strict`: false\n- `noImplicitAny`: false', STRICT_TS], ['a set flag left out of the statement', '- `strict`: true', STRICT_TS], ['a flag stated with the wrong value', '- `strict`: true\n- `noImplicitAny`: true', STRICT_TS], ['"strict not set" while the file sets strict options', 'strict not set', STRICT_TS], ['strict stated true while the file sets none', '- `strict`: true', TS({ target: 'ES2023' })], ['a flag stated that the file does not set', '- `strict`: true\n- `noImplicitAny`: false\n- `strictNullChecks`: true', STRICT_TS], ['a statement missing the extended file', '- `strict`: true', TS({ strict: true }, '"extends": "./tsconfig.base.json",\n  ')]]) {
+    G(`AC-A3-2 strictness: ${label} is strictness-mismatch`, cc(ST(ARCH(GOOD, ci), ts)).includes('strictness-mismatch'), ST(ARCH(GOOD, ci), ts));
+  }
+  G('AC-A3-2 strictness: naming the extended file (and stating the root file as written) is clean; the chain is not resolved', ST(ARCH(GOOD, '- `strict`: true (this file extends ./tsconfig.base.json; not resolved)'), TS({ strict: true }, '"extends": "./tsconfig.base.json",\n  ')).length === 0);
+  G('AC-A3-2 strictness: a declined proposal judges nothing (no finding whatever the section or the file says)', ST(ARCH(GOOD, 'nothing'), STRICT_TS, true).length === 0 && ST('', 'not json', true).length === 0);
+
+  const AP = (o) => H.checkApplicability({ approved: ['docs/database.md', '.ai/context/glossary.md'], confirmed: ['docs/database.md', '.ai/context/glossary.md'], pointers: ['docs/database.md', '.ai/context/glossary.md'], navigationRefs: ['docs/database.md'], ...o });
+  G('AC-A3-2 applicability: the positive case (installed pointers are the approved set, Phase 1 confirmed it, navigation references only installed documents) has no finding, in any order', AP({}).length === 0 && AP({ confirmed: ['.ai/context/glossary.md', 'docs/database.md'], pointers: ['.ai/context/glossary.md', 'docs/database.md'] }).length === 0 && AP({ approved: [], confirmed: [], pointers: [], navigationRefs: [] }).length === 0);
+  G('AC-A3-2 applicability: an installed pointer Phase 0 did not approve (marked "not applicable") is pointer-not-approved and only that', JSON.stringify(cc(AP({ pointers: ['docs/database.md', '.ai/context/glossary.md', '.ai/context/error-contract.md'] }))) === JSON.stringify(['pointer-not-approved']));
+  G('AC-A3-2 applicability: an approved document with no installed pointer is approved-pointer-missing and only that', JSON.stringify(cc(AP({ pointers: ['docs/database.md'] }))) === JSON.stringify(['approved-pointer-missing']));
+  G('AC-A3-2 applicability: a navigation reference to a mapped document that is not installed is dangling-navigation and only that', JSON.stringify(cc(AP({ navigationRefs: ['docs/database.md', '.ai/context/error-contract.md'] }))) === JSON.stringify(['dangling-navigation']));
+  G('AC-A3-2 applicability: Phase 1 confirming another set than Phase 0 approved is confirmed-differs-from-approved (one more, one fewer, one swapped)', ['x', 'drop', 'swap'].every((k) => { const c = k === 'x' ? ['docs/database.md', '.ai/context/glossary.md', 'docs/api-conventions.md'] : k === 'drop' ? ['docs/database.md'] : ['docs/database.md', 'docs/api-conventions.md']; return cc(AP({ confirmed: c })).includes('confirmed-differs-from-approved'); }));
+  // The mutation controls of 5.2 item 4 for the checkers, restated as accept/reject pairs (a checker that accepts the wrong input is the mutant).
+  G('AC-A3-3 mutants: the checker rejects a pointer Phase 0 marked not applicable, an inventory missing a variable, a value-shaped cell, a missing strictness statement, and a declined proposal that claims completion', cc(AP({ pointers: ['docs/database.md', '.ai/context/glossary.md', 'docs/x.md'] })).includes('pointer-not-approved') && cc(CI(ARCH(GOOD), ['DB_HOST', 'MISSING'])).includes('config-row-missing:MISSING') && cc(CI(ARCH(TABLE(ROW('`DB_HOST`', 'yes', 'non-secret', 'x', 'PORT=3000'))), ['DB_HOST'])).includes('config-value-shaped') && cc(ST(ARCH(GOOD, 'nothing stated'), STRICT_TS)).includes('strictness-missing') && cc(CI(ARCH('Configuration is complete.'), ['DB_HOST'], true)).includes('config-completion-claimed'));
+}
+
+{
+  const G = grp('3.2.0 B2: the claude block with the delegated-agent bullet');
+  // [CT320_1] (plan B2): a new bullet in the claude block, after the "MUST NOT infer a subdirectory start" bullet. The 3.1.0 block is the 3.2.0 block without it (AC-B2-1 pins every 3.1.0 line).
+  const CT320_1 = ['- For a delegated agent this bullet replaces the directory comparison above. A delegated', '  agent\'s context or brief MAY show the directory its parent was in rather', '  than the session\'s original start directory. As a delegated agent you MUST treat the', '  original start directory as unknown unless the brief states it. You MUST NOT refuse on', '  your own working directory alone, and when the brief does not state the original start', '  directory you MUST state in your output that it was not given. This prevents a false', '  launch refusal after the parent changed directory inside a root-started session. If', '  the brief states an original start directory strictly below the selected rule\'s', '  directory, the refusal above applies unchanged. The parent session stays bound by', '  this rule.'].join('\n');
+  const BLOCK_310_SHA = 'e2d6abed3fdb5c29c17f4d13e26fc1b9de5e121af6a1e71c85942ba079f6bdca'; // the inner text of the 3.1.0 claude block (33 lines, LF), from the 3.1.0 template
+  const innerOf = (t) => parseBlocks(t).blocks.find((b) => b.id === 'claude').inner;
+  const T320 = lfT(PS_CLAUDE_TEMPLATE);
+  const has320 = T320.split(CT320_1).length === 2;
+  const T310 = has320 ? T320.replace(`${CT320_1}\n`, '') : null;
+  G('AC-B2-2: the template holds the [CT320_1] bullet once, inside the claude block', has320 && innerOf(T320).includes(CT320_1), has320 ? undefined : 'the template does not hold the 3.2.0 bullet yet');
+  G('AC-B2-2: the template without that bullet is the 3.1.0 block, byte for byte (digest of its inner text)', T310 !== null && sha(innerOf(T310)) === BLOCK_310_SHA, T310 === null ? 'the bullet is not in the template, so the 3.1.0 block cannot be derived' : sha(innerOf(T310)));
+  const rcWith = (tplText, text, layer) => H.checkClaudeRecovery({ text, templateText: tplText, bsImports: BS_IMPORTS, bsVersionSentence: BS_SENTENCE, userLines: [USER_LINE], ...(layer === undefined ? {} : { agentLayer: layer }) });
+  G('AC-B2-2: with the 3.2.0 template, a CLAUDE.md rendered from it is accepted (every layer, with that layer\'s Subagents line)', A1_LAYERS.every((l) => rcWith(PS_CLAUDE_TEMPLATE, claudeForLayer(l, MERGED_CLAUDE), l).length === 0));
+  G('AC-B2-2: with the 3.2.0 template, the 3.1.0 block is claude-block-content (every layer)', T310 !== null && A1_LAYERS.every((l) => { const old = `${T310}\n${USER_LINE}\n\n${BS_CLAUDE()}`.replace(A1_LINES.full, A1_LINES[l]); return has(rcWith(PS_CLAUDE_TEMPLATE, old, l), 'claude-block-content'); }), T310 === null ? 'the 3.2.0 template is not shipped yet, so there is no 3.1.0 block to reject' : undefined);
+  G('AC-B2-2: the bullet in the wrong place (after the block\'s end marker) or reworded by one character is claude-block-content', T310 !== null && has(rcWith(PS_CLAUDE_TEMPLATE, `${MERGED_CLAUDE.replace(`${CT320_1}\n`, '')}\n${CT320_1}\n`), 'claude-block-content') && has(rcWith(PS_CLAUDE_TEMPLATE, MERGED_CLAUDE.replace('the refusal above applies unchanged', 'the refusal above applies unchanged.')), 'claude-block-content'), T310 === null ? 'the 3.2.0 template is not shipped yet' : undefined);
+}
+
 // ============================================================== GROUP: extensions ====
 {
   const G = grp('Extensions');
@@ -1995,7 +2240,9 @@ function dropBaseRecord(b, rel, { below = false } = {}) {
     const c = verify(root, { baseline: base, evidence: EVID({ conversion: 'complete' }), expectPartial: true });
     G('a complete conversion cannot pass as an expected-partial case (the expectation is checked both ways)', c.outcome === 'findings' && findingNames(c).some((n) => /really is partial/.test(n)), findingNames(c)); }
   { const keep = { disposition: 'keep', retainedBytes: BS_AGENT['docs-sync'], incomplete: true, invokedDefinition: '.claude/agents/docs-sync.md' };
-    const root = mkVerify('v-keep', { files: { '.claude/agents/docs-sync.md': BS_AGENT['docs-sync'] } }); const base = H.takeSnapshot(root);
+    // 3.2.0 (A1): a declined docs-sync replacement is the docs-sync-retained layer, so the fixture's CLAUDE.md carries that layer's Subagents line and its AGENTS.md the matching sentence
+    // (before 3.2.0 this fixture kept the full-layer line, which the helper now reports as claude-block-content under the layer the dispositions derive).
+    const root = mkVerify('v-keep', { files: { '.claude/agents/docs-sync.md': BS_AGENT['docs-sync'], 'CLAUDE.md': claudeForLayer('docs-sync-retained'), 'AGENTS.md': agentsWithSentence(renderAgents(true), A1_SENTENCES['docs-sync-retained']) } }); const base = H.takeSnapshot(root);
     const ev = (o = {}) => EVID({ conversion: 'partial', agents: { reviewer: { disposition: 'take-new' }, 'docs-sync': keep }, ...o });
     const d = verify(root, { baseline: base, evidence: ev() }); const e = verify(root, { baseline: base, evidence: ev(), expectPartial: true });
     G('a declined docs-sync replacement (retained bytes, incomplete, definition named) is a finding in the default run and has none only as an expected partial outcome', d.outcome === 'findings' && clean(e) && e.findings.length === 0, { d: findingNames(d), e: findingNames(e) });
@@ -2044,6 +2291,79 @@ function dropBaseRecord(b, rel, { below = false } = {}) {
   }
   // The three outcomes read differently.
   G('the three outcomes read differently: a clean result, a finding and a missing input never share an OUTCOME line, and each line names its outcome', (() => { const line = (r) => H.formatVerify(r, false).match(/^OUTCOME .*$/gm) ?? []; const a = line(ok); const b = line(verify(mkVerify('v-f'), { evidence: EVID({ conversion: 'held' }) })); const c = line(nope); return [a, b, c].every((l) => l.length === 1) && new Set([a[0], b[0], c[0]]).size === 3 && /^OUTCOME no-automated-findings/.test(a[0]) && /^OUTCOME findings/.test(b[0]) && /^OUTCOME not-evaluable/.test(c[0]); })());
+}
+
+// ============================================================== GROUP: 3.2.0 A1 and A3 through verify ====
+// The layer is derived from the evidence dispositions and the installed wrappers (A1 item 4), the three A3 checkers run when the evidence supplies their input and not otherwise.
+{
+  const G = grp('3.2.0 A1/A3 through verify');
+  const keepD = { disposition: 'keep', retainedBytes: BS_AGENT['docs-sync'], incomplete: true, invokedDefinition: '.claude/agents/docs-sync.md' };
+  const keepR = { disposition: 'keep', retainedBytes: BS_AGENT.reviewer, incomplete: true, invokedDefinition: '.claude/agents/reviewer.md' };
+  const CANON_D = `${WRAPPER['docs-sync']}\n## Project rules\nkeep\n`;
+  const mergeD = { disposition: 'merge', approvedBytes: CANON_D, incomplete: true, invokedDefinition: '.claude/agents/docs-sync.md' };
+  const evA = (r, d, o = {}) => EVID({ conversion: 'partial', agents: { reviewer: r, 'docs-sync': d }, ...o });
+  const files = (layer, extra = {}) => ({ 'CLAUDE.md': claudeForLayer(layer), 'AGENTS.md': layer === 'full' ? renderAgents(true) : agentsWithSentence(renderAgents(true), A1_SENTENCES[layer]), ...extra });
+  const run = (f, evidence, expectPartial = true) => { const root = mkVerify('a1v', { files: f }); return verify(root, { baseline: H.takeSnapshot(root), evidence, expectPartial }); };
+  const claudeCheck = /CLAUDE\.md: import, managed block/; const sentenceCheck = /the agents block states the installed agent layer/;
+  const TAKE = { disposition: 'take-new' };
+  const R_FILE = { '.claude/agents/reviewer.md': BS_AGENT.reviewer }; const D_FILE = { '.claude/agents/docs-sync.md': BS_AGENT['docs-sync'] };
+  // The three partial layers, each as a clean expected-partial outcome.
+  for (const [layer, r, d, extra] of [['docs-sync-retained', TAKE, keepD, D_FILE], ['reviewer-retained', keepR, TAKE, R_FILE], ['both-retained', keepR, keepD, { ...R_FILE, ...D_FILE }]]) {
+    const ok = run(files(layer, extra), evA(r, d));
+    G(`A1 verify: ${layer} (the kept agent's Subagents line and the matching AGENTS.md sentence) is a clean expected-partial outcome`, clean(ok) && ok.findings.length === 0, diag(ok));
+    const noFlag = run(files(layer, extra), evA(r, d), false);
+    G(`A1 verify: ${layer} without --expect-partial stays a finding of the completeness check, and the block and sentence checks themselves have no finding`, noFlag.outcome === 'findings' && !findingNames(noFlag).some((n) => claudeCheck.test(n) || sentenceCheck.test(n)), findingNames(noFlag));
+    const full = run({ ...files('full', extra) }, evA(r, d));
+    G(`A1 verify: ${layer} with the full-layer line in CLAUDE.md is a finding of the CLAUDE.md check (a mismatched layer is not accepted)`, full.outcome === 'findings' && findingNames(full).some((n) => claudeCheck.test(n)), findingNames(full));
+    const noSentence = run({ ...files(layer, extra), 'AGENTS.md': renderAgents(true) }, evA(r, d));
+    G(`A1 verify: ${layer} without the AGENTS.md sentence is a finding of the layer-sentence check`, noSentence.outcome === 'findings' && findingNames(noSentence).some((n) => sentenceCheck.test(n)), findingNames(noSentence));
+  }
+  G('A1 verify: take-new for both is the full layer: a partial Subagents line or a layer sentence is a finding', (() => { const a = run(files('docs-sync-retained'), EVID()); const b = run({ 'AGENTS.md': agentsWithSentence(renderAgents(true), A1_SENTENCES['docs-sync-retained']) }, EVID()); return findingNames(a).some((n) => claudeCheck.test(n)) && findingNames(b).some((n) => sentenceCheck.test(n)); })());
+  // merge: canonical only with the canonical reference, in both directions.
+  { const withRef = run(files('full', { '.claude/agents/docs-sync.md': CANON_D }), evA(TAKE, mergeD));
+    G('A1 verify: a docs-sync merge that still loads .ai/agents/docs-sync.md is canonical: the full-layer line is accepted', clean(withRef) && withRef.findings.length === 0, diag(withRef));
+    const partialOnRef = run(files('docs-sync-retained', { '.claude/agents/docs-sync.md': CANON_D }), evA(TAKE, mergeD));
+    G('A1 verify: ... and a partial line for it is a finding (the layer is not retained)', findingNames(partialOnRef).some((n) => claudeCheck.test(n)), findingNames(partialOnRef));
+    const noRefText = `${BS_AGENT['docs-sync']}\n## Project rules\nkeep\n`;
+    const noRef = run(files('docs-sync-retained', { '.claude/agents/docs-sync.md': noRefText }), evA(TAKE, { ...mergeD, approvedBytes: noRefText }));
+    G('A1 verify: a docs-sync merge without the canonical reference is retained: the partial line and sentence are accepted', clean(noRef) && noRef.findings.length === 0, diag(noRef));
+    const noRefFull = run(files('full', { '.claude/agents/docs-sync.md': noRefText }), evA(TAKE, { ...mergeD, approvedBytes: noRefText }));
+    G('A1 verify: ... and the full-layer line for it is a finding (the same merge counted as canonical is the mutant)', findingNames(noRefFull).some((n) => claudeCheck.test(n)), findingNames(noRefFull)); }
+
+  // ---- A3 through verify: the three optional evidence keys. ----
+  const trimNav = (text, keep) => lfT(text).split('\n').filter((l) => { const m = /^\|[^|]*\| `([^`]+)` \|$/.exec(l); return !(m !== null && H.mappingRefsFor(m[1]) !== null && !keep.includes(m[1])); }).join('\n');
+  const NAV_OK = trimNav(renderAgents(true), VERIFY_POINTERS);
+  const AP_EV = { approved: [...VERIFY_POINTERS], confirmed: [...VERIFY_POINTERS] };
+  G('A3 verify: the precondition holds: trimming the navigation rows to the installed pointers removes at least one mapped row and keeps the two installed ones', NAV_OK !== renderAgents(true) && VERIFY_POINTERS.every((p) => NAV_OK.includes(`\`${p}\``)));
+  { const a = run({ 'AGENTS.md': NAV_OK }, EVID({ applicability: AP_EV }), false);
+    G('A3 verify: applicability evidence equal to the installed pointers, with no dangling navigation row, is clean', clean(a) && a.findings.length === 0, diag(a));
+    const dangling = run({}, EVID({ applicability: AP_EV }), false);
+    G('A3 verify: the default navigation (rows for mapped documents that are not installed) is a finding of the applicability check', findingNames(dangling).some((n) => /^applicability:/.test(n)), findingNames(dangling));
+    const notApproved = run({ 'AGENTS.md': NAV_OK }, EVID({ applicability: { approved: [VERIFY_POINTERS[0]], confirmed: [VERIFY_POINTERS[0]] } }), false);
+    G('A3 verify: an installed pointer that Phase 0 did not approve is a finding', findingNames(notApproved).some((n) => /^applicability:/.test(n)), findingNames(notApproved));
+    const differs = run({ 'AGENTS.md': NAV_OK }, EVID({ applicability: { approved: [...VERIFY_POINTERS], confirmed: [VERIFY_POINTERS[0]] } }), false);
+    G('A3 verify: Phase 1 confirming a different set than Phase 0 approved is a finding', findingNames(differs).some((n) => /^applicability:/.test(n)), findingNames(differs));
+    const none = run({}, EVID(), false);
+    G('A3 verify: without the key the applicability check does not run (a 3.1.0 evidence file is still valid)', !findingNames(none).some((n) => /^applicability:/.test(n)) && !none.checked.some((c) => /^applicability:/.test(c.name))); }
+  { const GOOD_TABLE = ['| Variable | Required | Classification | Used by | Description | Source |', '| --- | --- | --- | --- | --- | --- |', '| `DB_HOST` | yes | non-secret | typeorm module | database host | `src/config/db.ts` |'].join('\n');
+    const with03 = (table) => FILLED03.replace(/(## 3\. Configuration\n)/, `$1\n${table}\n`);
+    const ok = run({ [H.BS_03_REL]: with03(GOOD_TABLE) }, EVID({ configuration: { names: ['DB_HOST'] } }), false);
+    G('A3 verify: configuration evidence with a complete row in the 03 Configuration table is clean', clean(ok) && ok.findings.length === 0, diag(ok));
+    const missing = run({ [H.BS_03_REL]: with03(GOOD_TABLE) }, EVID({ configuration: { names: ['DB_HOST', 'REDIS_URL'] } }), false);
+    G('A3 verify: a variable of the evidence with no row is a finding of the configuration check', findingNames(missing).some((n) => /^configuration:/.test(n)), findingNames(missing));
+    const declined = run({}, EVID({ configuration: { names: ['DB_HOST'], declined: true } }), false);
+    G('A3 verify: a declined proposal with no completion claim is clean', !findingNames(declined).some((n) => /^configuration:/.test(n)), findingNames(declined)); }
+  { const ts = '{\n  "compilerOptions": { "strict": true }\n}\n';
+    const with03 = (line) => FILLED03.replace('## 12. CI/CD and tooling\n', `## 12. CI/CD and tooling\n\n${line}\n`);
+    const ok = run({ 'tsconfig.json': ts, [H.BS_03_REL]: with03('- `strict`: true') }, EVID({ strictness: {} }), false);
+    G('A3 verify: strictness evidence with 03 stating strict as the tsconfig.json says is clean', clean(ok) && ok.findings.length === 0, diag(ok));
+    const wrong = run({ 'tsconfig.json': ts, [H.BS_03_REL]: with03('- `strict`: false') }, EVID({ strictness: {} }), false);
+    G('A3 verify: 03 stating strict false against a tsconfig.json that sets it true is a finding of the strictness check', findingNames(wrong).some((n) => /^strictness:/.test(n)), findingNames(wrong));
+    const none = run({ [H.BS_03_REL]: with03('- `strict`: false') }, EVID({ strictness: {} }), false);
+    G('A3 verify: with no tsconfig.json there is nothing to state: the strictness check does not run', !findingNames(none).some((n) => /^strictness:/.test(n)), findingNames(none)); }
+  for (const [label, e] of [['applicability that is not an object', EVID({ applicability: 'x' })], ['applicability without confirmed', EVID({ applicability: { approved: [] } })], ['applicability with a path that escapes', EVID({ applicability: { approved: ['../x.md'], confirmed: [] } })], ['applicability with an extra key', EVID({ applicability: { approved: [], confirmed: [], extra: 1 } })], ['configuration without names', EVID({ configuration: {} })], ['configuration with declined as text', EVID({ configuration: { names: [], declined: 'yes' } })], ['strictness that is not an object', EVID({ strictness: true })], ['strictness with an extra key', EVID({ strictness: { declined: false, extra: 1 } })]]) {
+    const r = verify(mkVerify('a3-bad'), { evidence: e }); G(`A3 verify: ${label} is not evaluable`, r.outcome === 'not-evaluable', r.outcome);
+  }
 }
 
 // ============================================================== GROUP: ownership of an unchanged 03 (R5) ====
@@ -4071,7 +4391,9 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   };
   // [id, sections, sentence]; the sentence must appear in at least one of the sections (the plan's table, section column as written there).
   const REQS = [
-    ['P01', ['1'], "Include .project-setup.bak-* installer backups when checking for duplicate PS copies; disable a discoverable backup through the host's skill selection without moving the installer backup."],
+    // 3.2.0 (plan C1 item 1, AC-C1-1): the step 1 instruction is the move, not the disable. The code spans are part of the pin: norm() drops a backslash that precedes a backtick,
+    // so the path is a code span whose last character is a backslash in the document and in this text alike (the old sentence is kept below as OLD_P01, a negative control).
+    ['P01', ['1'], 'Move every `.project-setup.bak-*` directory together with its `.meta.json`, and every `.project-setup.rolledback-*` directory, out of both skills directories into `D:\\ps-live\\preserved\\installer-backups\\<target>\\`; record each original path; run `detect.mjs` and require an empty `installerBackups`.'],
     ['P02', ['1'], 'Confirm exactly one active PS copy, its selected path and its version in the same new session that will run PS; interactive skill toggles do not establish print-mode selection.'],
     ['P03', ['1', '5'], 'PS rows stay interactive and follow project-setup/references/CLAUDE.md, Permission mode during setup: use --permission-mode default.'],
     ['P04', ['1', '7'], 'Record the actual permission mode and every global-instruction prompt and answer during a PS row.'],
@@ -4119,7 +4441,12 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
     ['X08', ['6'], 'Manual fixture commits can run project hooks.'],
     ['X09', ['6'], 'In the recorded bs-new setup, the first post-BS commit ran lint-staged with eslint --fix and prettier --write; a later fixture commit used HUSKY=0, so its hooks did not run.'],
     ['X10', ['6'], 'Review the resulting bytes and range before measurement.'],
+    // 3.2.0 (plan C1 items 3 and 4): the two sentences the plan quotes literally. Rows Y are the tests lane's pins of those quotations; they are met by the 3.2.0 document and not by the 3.1.0 one.
+    ['Y01', ['2'], 'Create fixtures only under a directory that already carries the CodexSandboxUsers read-and-execute entry, and check it before the first Codex run.'],
+    ['Y02', ['6'], 'The wording of the Lock order rule used in the 2026-11-14 and 2026-11-22 measurements was not recorded, so a new reviewer measurement with the unit above is not directly comparable with those results; record that in the results row.'],
   ];
+  // The 3.1.0 step 1 instruction (disable, not move): superseded by P01, kept only as a negative control (plan C1, D-14: putting it back fails P01).
+  const OLD_P01 = "Include .project-setup.bak-* installer backups when checking for duplicate PS copies; disable a discoverable backup through the host's skill selection without moving the installer backup.";
   const P_DOCS = 'Run `<actual agent name>` for `<printed range>`. Update affected documentation under the installed project instructions. Report files changed and unresolved gaps.';
   const P_REVIEW = 'Run `<actual agent name>` on `<printed range>`. Follow installed project instructions and report findings with severity and file:line. Do not modify files.';
   const CMD = 'claude -p --setting-sources project,local --permission-mode auto --output-format stream-json --verbose "<exact §5 prompt>"';
@@ -4128,7 +4455,10 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   const ID_STATUS = 'git status --porcelain -uall';
   const O3 = ['On 2026-11-15, the orchestrator probed the bs-new fixture on this host with Claude Code 2.1.325 in isolated print mode using auto permission mode.', 'Read of secrets/canary.txt was refused by the project Read(**/secrets/**) deny rule, and raw git log -1 --oneline was blocked by the project guard-raw-git.mjs PreToolUse hook.', 'The canary content did not appear in the transcript; the canary was removed and the fixture was clean afterward.'];
   const O3_CLAUSES = [['O3-denial', 'Read of secrets/canary.txt was refused by the project Read(**/secrets/**) deny rule'], ['O3-blocked', 'raw git log -1 --oneline was blocked by the project guard-raw-git.mjs PreToolUse hook'], ['O3-no-disclosure', 'The canary content did not appear in the transcript'], ['O3-cleanup', 'the canary was removed and the fixture was clean afterward']];
-  const INTRO = 'Status: pending stage-2 acceptance sign-off. Dated live-run records are retained outside this matrix. This procedure records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15 init-event confirmation and the 2026-11-15 project-control probe below; it does not enter acceptance results or close checklist items. Stage 2 records the dated matrix results and TODO closeout.';
+  // 3.2.0 (plan C2, [BT320_1]): the introduction as the plan gives it (line breaks of the plan's block are whitespace, which norm() collapses).
+  const INTRO = 'Status: stage 2 signed off. The section 7 matrix holds the dated results of 2026-11-14 to 2026-11-22; the per-row record is `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`. This procedure still records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15 init-event confirmation and the 2026-11-15 project-control probe below. Rows that were not measured are listed in `RELEASE-NOTES-3.1.0.md`; the 3.2.0 re-measurements are listed in `RELEASE-NOTES-3.2.0.md`.';
+  // The 3.1.0 introduction, superseded by INTRO: kept only as the negative control "the old pending stage-2 paragraph put back fails intro" (plan C2).
+  const OLD_INTRO = 'Status: pending stage-2 acceptance sign-off. Dated live-run records are retained outside this matrix. This procedure records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15 init-event confirmation and the 2026-11-15 project-control probe below; it does not enter acceptance results or close checklist items. Stage 2 records the dated matrix results and TODO closeout.';
   const LIMITS = ['Token matching may also report a fact copied into a pointer when a generic token occurs only in navigation text such as Scope or a heading.', 'Choose distinctive factual tokens and review the matched context.', 'A visible historical mention of a stale conflict value in 03 can likewise trigger stale-value-retained; the helper cannot distinguish historical explanation from an operative claim.'];
   const TRUST = 'The helper assumes the baseline is a snapshot it took itself: it refuses the contradictions it knows, but cannot prove that a hand-edited baseline is genuine.';
   const MATRIX_ROWS = [
@@ -4163,7 +4493,7 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   const fencedBlocks = (raw) => { const blocks = []; let cur = null; for (const l of lf(raw).split('\n')) { if (cur === null) { if (/^ {0,3}```/.test(l)) cur = []; } else if (/^ {0,3}```\s*$/.test(l)) { blocks.push(cur.join('\n')); cur = null; } else cur.push(l); } return { blocks, open: cur !== null }; };
   const fenceLines = (raw) => { const out = []; let inside = false; for (const l of lf(raw).split('\n')) { if (/^\s*```/.test(l)) { inside = !inside; continue; } if (inside) out.push(l.trim()); } return out; };
   /** The ids of the requirements the document does not meet ([] = all met). */
-  const procProblems = (doc) => {
+  const procProblems = (doc, intro = INTRO) => {
     const s = sectionsOf(doc); const bad = [];
     const at = (k) => (s[k] === undefined ? '' : s[k].text);
     const inAny = (keys, text) => keys.some((k) => at(k).includes(norm(text)));
@@ -4183,7 +4513,7 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
     if (!(fence.count === 1 && fence.open !== true && fence.content === LOCK_ORDER_BLOCK)) bad.push('invariant-fence');
     if (!at('any').includes(norm(O3.join(' ')))) bad.push('O3-paragraph');
     for (const [id, c] of O3_CLAUSES) if (!at('any').includes(norm(c))) bad.push(id);
-    if (!at('intro').includes(norm(INTRO))) bad.push('intro');
+    if (!at('intro').includes(norm(intro))) bad.push('intro');
     if (/Nothing below has been run/.test(at('any'))) bad.push('intro-stale-statement');
     LIMITS.forEach((l, i) => { if (!at('4').includes(norm(l))) bad.push(`limit-${i + 1}`); });
     if (!at('4').includes(norm(TRUST))) bad.push('baseline-trust');
@@ -4193,14 +4523,14 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   };
   // The reference document: every requirement written once, verbatim, into the first section it names; the commands, prompts, fence, probe paragraph, introduction, limitations and matrix beside them.
   const refDoc = () => {
-    const by = { 1: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+    const by = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
     for (const [, keys, text] of REQS) by[keys[0]].push(text);
     const fence = ['```markdown', ...LOCK_ORDER_BLOCK.slice(0, -1).split('\n'), '```'].join('\n');
     return [
       '# project-setup 3.1.0 live acceptance: backend-standards documentation mapping', '', INTRO, '',
       '## 0. Record and keep the pre-acceptance installation', '', 'Reference text.', '',
       '## 1. Prerequisite A: install and switch one active version', '', ...by[1].flatMap((t) => [t, '']),
-      '## 2. Prerequisite B: exact Codex Git ownership grant', '', 'Reference text.', '',
+      '## 2. Prerequisite B: exact Codex Git ownership grant', '', 'Reference text.', '', ...by[2].flatMap((t) => [t, '']),
       '## 3. Workspaces', '', ...by[3].flatMap((t) => [t, '']),
       '## 4. Scenarios', '', ...by[4].flatMap((t) => [t, '']), 'Known limitations (the helper prints them after every outcome):', '', ...[TRUST, ...LIMITS].map((l) => `- ${l}`), '',
       '## 5. Exact prompts', '', `- **Docs-sync:** "${P_DOCS}"`, `- **Reviewer:** "${P_REVIEW}"`, '', '```text', CMD, '```', '', `> ${O3.join(' ')}`, '', ...by[5].flatMap((t) => [t, '']),
@@ -4223,15 +4553,28 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
 
   // The real document, one named assertion per requirement.
   const real = attempt(() => procProblems(ACC));
-  for (const [id, keys, text] of REQS) G(`${id} (${keys.map((k) => `§${k}`).join('/')}${id.startsWith('X') ? ', beyond the plan\'s controls table' : ''}): the acceptance document says "${text.slice(0, 70)}${text.length > 70 ? '...' : ''}"`, Array.isArray(real) && !real.includes(id), real);
-  for (const [id, label] of [['prompt-docs-sync', 'the exact docs-sync agent prompt (section 5)'], ['prompt-reviewer', 'the exact reviewer agent prompt (section 5)'], ['claude-command', 'the complete Claude agent command with all four flags (section 5): claude -p --setting-sources project,local --permission-mode auto --output-format stream-json --verbose "<exact §5 prompt>"'], ['identity-name', 'the repository-local user.name command (section 6)'], ['identity-email', 'the repository-local user.email command (section 6)'], ['identity-status', 'the status command git status --porcelain -uall (section 6)'], ['identity-order', 'the identity commands before the status command, in that order (section 6)'], ['invariant-fence', 'the single markdown fence of section 6 holds the exact seven-line Lock order unit, byte for byte (the shared constant)'], ['O3-paragraph', 'the full dated project-control probe paragraph of 2026-11-15'], ['O3-denial', 'the probe paragraph records the refused read under the project Read deny rule'], ['O3-blocked', 'the probe paragraph records the raw Git command blocked by the project hook'], ['O3-no-disclosure', 'the probe paragraph records that the canary content did not appear in the transcript'], ['O3-cleanup', 'the probe paragraph records the canary removal and the clean fixture'], ['intro', 'the revised introduction (pending stage-2 acceptance sign-off, the three dated probes, no results entered)'], ['intro-stale-statement', 'the stale blanket statement "Nothing below has been run" is gone'], ['limit-1', 'section 4 carries the navigation-token sentence of the pointer limitation'], ['limit-2', 'section 4 carries the distinctive-token guidance'], ['limit-3', 'section 4 carries the stale-historical-mention sentence'], ['baseline-trust', 'section 4 keeps the baseline-trust limitation'], ['matrix', 'section 7 keeps every matrix row and cell unchanged (digest of the 17 table lines)']]) G(`${id}: ${label}`, Array.isArray(real) && !real.includes(id), real);
+  for (const [id, keys, text] of REQS) G(`${id} (${keys.map((k) => `§${k}`).join('/')}${id.startsWith('X') ? ', beyond the plan\'s controls table' : id.startsWith('Y') ? ', the 3.2.0 plan C1' : ''}): the acceptance document says "${text.slice(0, 70)}${text.length > 70 ? '...' : ''}"`, Array.isArray(real) && !real.includes(id), real);
+  for (const [id, label] of [['prompt-docs-sync', 'the exact docs-sync agent prompt (section 5)'], ['prompt-reviewer', 'the exact reviewer agent prompt (section 5)'], ['claude-command', 'the complete Claude agent command with all four flags (section 5): claude -p --setting-sources project,local --permission-mode auto --output-format stream-json --verbose "<exact §5 prompt>"'], ['identity-name', 'the repository-local user.name command (section 6)'], ['identity-email', 'the repository-local user.email command (section 6)'], ['identity-status', 'the status command git status --porcelain -uall (section 6)'], ['identity-order', 'the identity commands before the status command, in that order (section 6)'], ['invariant-fence', 'the single markdown fence of section 6 holds the exact seven-line Lock order unit, byte for byte (the shared constant)'], ['O3-paragraph', 'the full dated project-control probe paragraph of 2026-11-15'], ['O3-denial', 'the probe paragraph records the refused read under the project Read deny rule'], ['O3-blocked', 'the probe paragraph records the raw Git command blocked by the project hook'], ['O3-no-disclosure', 'the probe paragraph records that the canary content did not appear in the transcript'], ['O3-cleanup', 'the probe paragraph records the canary removal and the clean fixture'], ['intro', 'the 3.2.0 introduction (stage 2 signed off, the pointer to the per-row results file, the three dated probes still recorded, the 3.1.0 and 3.2.0 release-notes pointers)'], ['intro-stale-statement', 'the stale blanket statement "Nothing below has been run" is gone'], ['limit-1', 'section 4 carries the navigation-token sentence of the pointer limitation'], ['limit-2', 'section 4 carries the distinctive-token guidance'], ['limit-3', 'section 4 carries the stale-historical-mention sentence'], ['baseline-trust', 'section 4 keeps the baseline-trust limitation'], ['matrix', 'section 7 keeps every matrix row and cell unchanged (digest of the 17 table lines)']]) G(`${id}: ${label}`, Array.isArray(real) && !real.includes(id), real);
 
   // Removal of each requirement fails its own assertion, on the reference document.
   for (const [id, , text] of REQS) G(`mutant: removing ${id} from the reference document fails ${id}, and only that requirement`, (() => { const d = remove(REF, text); const p = d === null ? null : attempt(() => procProblems(d)); return Array.isArray(p) && p.length === 1 && p[0] === id; })(), (() => { const d = remove(REF, text); return d === null ? 'the mutation did not apply' : attempt(() => procProblems(d)); })());
   G('mutant: a requirement placed in a section its row does not name is not met (the section column is part of the pin: P24 moved from section 6 into section 7)', (() => { const d = change(remove(REF, REQS.find(([id]) => id === 'P24')[2]), '## 8. Rollback', `${REQS.find(([id]) => id === 'P24')[2]}\n\n## 8. Rollback`); return failsWith(d, 'P24'); })());
   G('mutant: a requirement of two sections (P03: sections 1 and 5) is met in either one and unmet in neither-only (moving it into section 7 fails it)', (() => { const t = REQS.find(([id]) => id === 'P03')[2]; const moved = change(remove(REF, t), '## 8. Rollback', `${t}\n\n## 8. Rollback`); const in5 = change(remove(REF, t), '## 6. Committed changes', `${t}\n\n## 6. Committed changes`); return failsWith(moved, 'P03') && !failsWith(in5, 'P03') && !failsWith(REF, 'P03'); })());
   G('mutant: a changed word fails the prose pin (P34: "skipped hooks are not passing checks" becomes "skipped hooks are passing checks")', failsWith(change(REF, 'skipped hooks are not passing checks', 'skipped hooks are passing checks'), 'P34'));
-  G('mutant: reflowing the whitespace of a prose pin, adding a blockquote marker, backticks or curly quotes keeps it met (the pins are tolerant of formatting only)', (() => { const t = REQS.find(([id]) => id === 'P01')[2]; const d = change(REF, t, `> Include \`.project-setup.bak-*\` installer\n> backups when checking for duplicate PS copies;   disable a discoverable backup through the host’s skill\n> selection without moving the installer backup.`); return !failsWith(d, 'P01'); })());
+  // The pin is tolerant of formatting only (3.2.0: P01 is now the step 1 move instruction; the reflow is derived from the pin so it cannot drift from it).
+  G('mutant: reflowing the whitespace of a prose pin, adding a blockquote marker or a line break keeps it met (the pins are tolerant of formatting only)', (() => { const t = REQS.find(([id]) => id === 'P01')[2]; const reflowed = `> ${t.split(' ').map((w, i) => w + (i % 6 === 5 ? '\n> ' : i % 4 === 3 ? '   ' : ' ')).join('').trim()}`; const d = change(REF, t, reflowed); return d !== null && reflowed !== t && !failsWith(d, 'P01'); })());
+  // AC-C1-1 (plan C1, D-14): the new step 1 sentence is pinned and the old one is rejected. Each part of the new sentence is its own mutant: the move, the rolledback directories, the destination, the record and the detect requirement.
+  G('P01 negative control: the old step 1 instruction (disable a discoverable backup, "without moving the installer backup") put back in place of the new one fails P01', failsWith(change(REF, REQS.find(([id]) => id === 'P01')[2], OLD_P01), 'P01'));
+  for (const [label, from, to] of [
+    ['"Move" changed to "Copy"', 'Move every `.project-setup.bak-*`', 'Copy every `.project-setup.bak-*`'],
+    ['the .meta.json requirement dropped', ' together with its `.meta.json`', ''],
+    ['the rolledback directories dropped', ', and every `.project-setup.rolledback-*` directory,', ''],
+    ['"both skills directories" narrowed to one', 'out of both skills directories', 'out of the Claude skills directory'],
+    ['the destination changed', 'D:\\ps-live\\preserved\\installer-backups\\<target>\\', 'D:\\ps-live\\backups\\'],
+    ['the record of the original path dropped', '; record each original path', ''],
+    ['the detect requirement weakened from "require an empty" to "look at"', 'require an empty `installerBackups`', 'look at `installerBackups`'],
+    ['the detect.mjs run dropped', '; run `detect.mjs` and require an empty `installerBackups`', ''],
+  ]) G(`mutant: the step 1 sentence with ${label} fails P01`, failsWith(change(REF, from, to), 'P01'));
 
   // The exact prompts, the Claude command with its flags, the commands and the probe paragraph.
   G('mutant: a changed docs-sync prompt fails (the word "for" replaced by "on")', failsWith(change(REF, 'for `<printed range>`. Update', 'on `<printed range>`. Update'), 'prompt-docs-sync'));
@@ -4309,6 +4652,12 @@ const docAbsPath = (root, rel) => path.join(root, ...rel.split('/'));
   for (const [id, c] of O3_CLAUSES) G(`mutant: the probe paragraph without its clause "${c.slice(0, 40)}..." fails ${id} and the full-paragraph pin`, (() => { const d = remove(REF, c); return failsWith(d, id) && failsWith(d, 'O3-paragraph'); })());
   G('mutant: the probe date changed (2026-11-15 to 2026-11-14 in the paragraph) fails the full-paragraph pin', failsWith(change(REF, 'On 2026-11-15, the orchestrator', 'On 2026-11-14, the orchestrator'), 'O3-paragraph'));
   G('mutant: the introduction removed fails; the stale blanket statement put back fails its own pin', failsWith(remove(REF, INTRO), 'intro') && failsWith(change(REF, INTRO, `${INTRO} Nothing below has been run for 3.1.0 yet.`), 'intro-stale-statement'));
+  // AC-C2-2 (plan C2): the document and the pin move together. The old paragraph put back fails intro; so does either one edited without the other.
+  G('mutant: the old "pending stage-2 acceptance sign-off" introduction put back in place of the 3.2.0 one fails intro (and the 3.1.0 text is not the 3.2.0 text)', OLD_INTRO !== INTRO && !OLD_INTRO.includes('stage 2 signed off') && failsWith(change(REF, INTRO, OLD_INTRO), 'intro'));
+  G('AC-C2-2: the document edited and the pin not fails intro (the 3.2.0 document checked against the 3.1.0 pin)', (() => { const p = attempt(() => procProblems(REF, OLD_INTRO)); return Array.isArray(p) && p.includes('intro'); })());
+  G('AC-C2-2: the pin edited and the document not fails intro (the 3.1.0 document checked against the 3.2.0 pin)', (() => { const d = change(REF, INTRO, OLD_INTRO); const p = d === null ? null : attempt(() => procProblems(d, INTRO)); return Array.isArray(p) && p.includes('intro'); })());
+  G('AC-C2-2: the document and the pin both edited (the 3.1.0 document against the 3.1.0 pin) is met, so the failure above is the disagreement and not the text itself', (() => { const d = change(REF, INTRO, OLD_INTRO); const p = d === null ? null : attempt(() => procProblems(d, OLD_INTRO)); return Array.isArray(p) && !p.includes('intro'); })());
+  G('mutant: one clause of the 3.2.0 introduction dropped fails intro (the results-file pointer, the release-notes pointers, the dated probes)', ['`docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`', '`RELEASE-NOTES-3.1.0.md`', '`RELEASE-NOTES-3.2.0.md`', 'the 2026-11-15 project-control probe'].every((part) => failsWith(change(REF, INTRO, INTRO.replace(part, '')), 'intro')));
   G('mutant: a matrix cell changed fails the matrix pin; a deleted row fails it; a row added fails it', failsWith(change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace('| not measured (Codex fixtures are clones) |', '| recorded |')), 'matrix') && failsWith(remove(REF, `${MATRIX_ROWS[5]}\n`), 'matrix') && failsWith(change(REF, MATRIX_ROWS[16], `${MATRIX_ROWS[16]}\n| P9 extra | not measured | not measured |`), 'matrix'));
   G('mutant: a measured cell put back to "pending evidence" fails the matrix pin (P1 Claude Code cell, and the Codex reviewer cell)', failsWith(change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace(/^(\| P1 Nest CLI scaffold versions \| )[^|]+\|/, '$1pending evidence |')), 'matrix') && failsWith(change(REF, MATRIX_ROWS[6], MATRIX_ROWS[6].replace(/\| [^|]+ \|$/, '| pending evidence |')), 'matrix') && change(REF, MATRIX_ROWS[2], MATRIX_ROWS[2].replace(/^(\| P1 Nest CLI scaffold versions \| )[^|]+\|/, '$1pending evidence |')) !== REF);
 

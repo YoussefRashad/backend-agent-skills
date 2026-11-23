@@ -695,8 +695,103 @@ export function classifyBsOutcome(file, before, after) {
   if (refs && hadRef) return { outcome: 'merge', evidence: e };
   return { outcome: 'other', evidence: e };
 }
-/** Findings for a root CLAUDE.md after PS recovery (plan section 5 table, first row): one import, one valid current claude block, BS lines and user text kept. */
-export function checkClaudeRecovery({ text, templateText, bsImports = [], bsVersionSentence = null, userLines = [] }) {
+// ------------------------------------------------- 3.2.0 (A1): partial agent layers ----
+// The closed set of four Subagents lines of references/docs-generation.md ("Subagents line variants") and the closed set of three AGENTS.md agents-block sentences.
+// A layer is full when both Claude agents load their canonical definition from .ai/agents/, and otherwise names the agent that is a RETAINED project agent. The first line
+// is the template line byte for byte. Nothing else is accepted: a fifth wording, a line of another layer or a near miss is a finding.
+export const AGENT_LAYERS = Object.freeze(['full', 'docs-sync-retained', 'reviewer-retained', 'both-retained']);
+export const SUBAGENTS_LINES = Object.freeze({
+  full: '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both load their canonical definition from `.ai/agents/`.',
+  'docs-sync-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `reviewer` loads its canonical definition from `.ai/agents/`. `docs-sync` is a retained project agent (incomplete project-setup agent update).',
+  'reviewer-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `docs-sync` loads its canonical definition from `.ai/agents/`. `reviewer` is a retained project agent (incomplete project-setup agent update).',
+  'both-retained': '- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both are retained project agents and neither loads a canonical definition from `.ai/agents/` (incomplete project-setup agent update).',
+});
+export const AGENTS_LAYER_SENTENCES = Object.freeze({
+  'docs-sync-retained': 'Exception in Claude Code: `docs-sync` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).',
+  'reviewer-retained': 'Exception in Claude Code: `reviewer` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).',
+  'both-retained': 'Exception in Claude Code: `reviewer` and `docs-sync` are retained project agents and do not load their canonical definitions (incomplete project-setup agent update).',
+});
+const SUBAGENTS_PREFIX = '- Subagents:';
+/** The template claude block with its Subagents line replaced by the line of the layer (the full layer keeps the template line as it is). null when the layer is unknown or a partial layer has no line to replace. */
+function expectedClaudeInner(templateInner, agentLayer) {
+  if (!AGENT_LAYERS.includes(agentLayer)) return null;
+  if (agentLayer === 'full') return normalizeEol(templateInner);
+  const ls = normalizeEol(templateInner).split('\n');
+  const at = ls.findIndex((l) => l.startsWith(SUBAGENTS_PREFIX));
+  if (at === -1) return null;
+  ls[at] = SUBAGENTS_LINES[agentLayer];
+  return ls.join('\n');
+}
+/** True when the Levenshtein distance of a and b is at most k (a banded comparison: it gives up as soon as the row minimum exceeds k). */
+function editDistanceWithin(a, b, k) {
+  if (Math.abs(a.length - b.length) > k) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const cur = [i];
+    let min = i;
+    for (let j = 1; j <= b.length; j += 1) { cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); if (cur[j] < min) min = cur[j]; }
+    if (min > k) return false;
+    prev = cur;
+  }
+  return prev[b.length] <= k;
+}
+/**
+ * The agent layer one run installed, from the per-agent dispositions of the evidence (agents: { reviewer: { disposition }, docs-sync: { disposition } }, the values checkAgentRecovery
+ * takes) and the installed Claude wrapper texts (installedTexts: { reviewer: text|null, docs-sync: text|null }, the content of .claude/agents/<name>.md). An agent is canonical when
+ * its disposition is take-new, or merge and the installed text references .ai/agents/<name>.md (the test classifyBsOutcome applies); it is retained for keep, and for merge without
+ * that reference. The layer names the retained agent(s). Throws a coded error on a disposition it does not know: a layer is never guessed.
+ */
+export function agentLayerOf(evidenceAgents, installedTexts) {
+  const canonical = (name) => {
+    const a = ownOf(evidenceAgents ?? {}, name);
+    const d = a !== undefined && a !== null ? ownOf(a, 'disposition') : undefined;
+    if (d === 'take-new') return true;
+    if (d === 'keep') return false;
+    if (d === 'merge') { const t = ownOf(installedTexts ?? {}, name); return typeof t === 'string' && new RegExp(`\\.ai/agents/${esc(name)}\\.md`).test(t); }
+    throw Object.assign(new Error(`the disposition of ${name} is not take-new, keep or merge: ${String(d)}`), { code: 'AGENT_LAYER' });
+  };
+  const reviewer = canonical('reviewer');
+  const docsSync = canonical('docs-sync');
+  if (reviewer && docsSync) return 'full';
+  if (reviewer) return 'docs-sync-retained';
+  if (docsSync) return 'reviewer-retained';
+  return 'both-retained';
+}
+/**
+ * Findings (code agents-layer-sentence) for the AGENTS.md agents block against the layer: a partial layer needs exactly the one matching sentence, a full layer carries none of the
+ * three, no other wording is accepted (a near miss is a finding) and a sentence the reader cannot see (inside an HTML comment) does not count. Position is not judged here.
+ */
+export function checkAgentsLayerSentence({ agentsText, agentLayer }) {
+  const f = [];
+  const add = (detail) => f.push({ code: 'agents-layer-sentence', detail });
+  if (!AGENT_LAYERS.includes(agentLayer)) { add(`unknown agent layer ${String(agentLayer)}`); return f; }
+  const p = parseBlocks(agentsText);
+  const blk = p.errors.length === 0 ? p.blocks.filter((b) => b.id === 'agents') : [];
+  if (blk.length !== 1) { add(`expected exactly one managed agents block, found ${blk.length}${p.errors.length > 0 ? ` (${p.errors[0]})` : ''}`); return f; }
+  const sentences = Object.values(AGENTS_LAYER_SENTENCES);
+  // A candidate is a line that starts like a layer sentence, or is within a few characters of one (a changed character in the prefix is a near miss, not an absent line). The managed-block
+  // rule paragraph of the same block (A2) says "retained project agent" in its own words and is none of these: matching on that phrase would count it.
+  const isCandidate = (l) => /^\s*Exception in Claude Code\b/i.test(l) || sentences.some((s) => editDistanceWithin(l.trim(), s, 6));
+  const raw = normalizeEol(blk[0].inner).split('\n').filter(isCandidate).map((l) => l.trim());
+  const seen = normalizeEol(visibleText(blk[0].inner)).split('\n').filter(isCandidate).map((l) => l.trim());
+  const exactly = (list, s) => list.filter((l) => l === s).length;
+  if (agentLayer === 'full') {
+    if (raw.length > 0) add(`a full layer carries no layer sentence, found ${raw.length}`);
+    return f;
+  }
+  const want = AGENTS_LAYER_SENTENCES[agentLayer];
+  if (exactly(seen, want) === 0) add(`the ${agentLayer} layer needs this sentence in the agents block: ${want}`);
+  if (raw.length > 1) add(`a partial layer carries exactly one sentence, found ${raw.length}`);
+  for (const l of raw) if (l !== want) add(sentences.includes(l) ? `a sentence of another layer: ${l.slice(0, 80)}` : `a near miss, not one of the three sentences: ${l.slice(0, 80)}`);
+  return f;
+}
+
+/**
+ * Findings for a root CLAUDE.md after PS recovery (plan section 5 table, first row): one import, one valid current claude block, BS lines and user text kept.
+ * 3.2.0 (A1): agentLayer (full by default, docs-sync-retained, reviewer-retained or both-retained) selects the expected block: the template block with its Subagents line replaced by the
+ * matching variant. Exactly four blocks are accepted in total; an unknown layer is a finding of its own and compares nothing.
+ */
+export function checkClaudeRecovery({ text, templateText, bsImports = [], bsVersionSentence = null, userLines = [], agentLayer = 'full' }) {
   const f = [];
   const add = (code, detail) => f.push({ code, detail });
   const shapes = unsupportedShapes(text);
@@ -709,7 +804,9 @@ export function checkClaudeRecovery({ text, templateText, bsImports = [], bsVers
   if (blocks.length !== 1) add('claude-block-count', `expected exactly one managed claude block, found ${blocks.length}`);
   else {
     const want = parseBlocks(templateText).blocks.find((b) => b.id === 'claude');
-    if (want === undefined || normalizeEol(blocks[0].inner) !== normalizeEol(want.inner)) add('claude-block-content', 'the managed claude block is not the current source-template content (root-start rule included)');
+    const expected = want === undefined ? null : expectedClaudeInner(want.inner, agentLayer);
+    if (!AGENT_LAYERS.includes(agentLayer)) add('agent-layer', `unknown agent layer ${String(agentLayer)}`);
+    else if (expected === null || normalizeEol(blocks[0].inner) !== expected) add('claude-block-content', `the managed claude block is not the current source-template content with the Subagents line of the ${agentLayer} layer (root-start rule included)`);
   }
   // Preservation is judged on what a reader sees (N11): an import or a sentence moved into an HTML comment (or into a code block, for an import and the
   // provenance sentence) is no longer operative, and the user's own lines count only where they still show.
@@ -860,8 +957,109 @@ export function checkRootInstructions({ agentsText, activated, paragraph, navSen
   return f;
 }
 
+// ------------------------------------------------- 3.2.0 (A3, A7, A8): applicability, configuration, strictness ----
+// Test-only checkers for the applicability rule of references/docs-generation.md ("Applicability (one rule for every mode)"). They judge what a run LEFT, from independently supplied
+// lists and the project's files; whether an agent applies the rule identically in adopt and update stays a live measurement. Each returns [{ code, detail }].
+const samePathSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+/**
+ * approved: the documents the owner approved as applicable in Phase 0 (paths); confirmed: the set Phase 1 confirmed; pointers: the pointer documents installed; navigationRefs: the
+ * mapped-document paths the navigation block references. Findings: pointer-not-approved (an installed pointer Phase 0 did not list as applicable, for example one marked "not
+ * applicable"), approved-pointer-missing (an approved document with no installed pointer), dangling-navigation (a navigation reference to a mapped path that is not installed, so
+ * reference-exists would fail on it) and confirmed-differs-from-approved (Phase 1 confirmed another set than Phase 0 approved, which setup MUST have stopped on and asked again).
+ */
+export function checkApplicability({ approved, confirmed, pointers, navigationRefs }) {
+  const f = [];
+  const list = (v) => (Array.isArray(v) ? v : []);
+  const a = list(approved); const c = list(confirmed); const p = list(pointers); const n = list(navigationRefs);
+  if (!samePathSet(a, c)) f.push({ code: 'confirmed-differs-from-approved', detail: `approved ${JSON.stringify([...a].sort())}, confirmed ${JSON.stringify([...c].sort())}` });
+  for (const x of p) if (!a.includes(x)) f.push({ code: 'pointer-not-approved', detail: x });
+  for (const x of a) if (!p.includes(x)) f.push({ code: 'approved-pointer-missing', detail: x });
+  for (const x of n) if (!p.includes(x)) f.push({ code: 'dangling-navigation', detail: x });
+  return f;
+}
+const CONFIG_COLUMNS = Object.freeze(['variable', 'required', 'classification', 'used by', 'description', 'source']);
+const tableRows = (text) => normalizeEol(text).split('\n').filter((l) => /^\s*\|.*\|\s*$/.test(l)).map((l) => l.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map((c) => c.trim()));
+const isSeparatorRow = (cells) => cells.length > 0 && cells.every((c) => /^:?-{3,}:?$/.test(c));
+// A cell that looks like a VALUE and not a description: an assignment NAME=value, a credential in a URL, a long token or a well-known secret prefix.
+const VALUE_SHAPED = [/(?:^|[\s`(])[A-Z][A-Z0-9_]{2,}\s*=\s*\S+/, /:\/\/[^\s/:@]+:[^\s/@]+@/, /\b[A-Za-z0-9+/_-]{32,}={0,2}(?![A-Za-z0-9+/_-])/, /\b(?:sk|pk|ghp|gho|xox[bap])[-_][A-Za-z0-9_-]{10,}/, /\bBearer\s+[A-Za-z0-9._~+/-]{8,}/i];
+// A claim that the configuration conversion is complete, after the negated forms ("not complete", "incomplete") are removed.
+const COMPLETION_CLAIM = [/\b(?:configuration|conversion|consolidation|inventory)\b[^.\n]{0,60}\b(?:complete|completed|done|finished)\b/i, /\b(?:complete|completed|done|finished)\b[^.\n]{0,40}\b(?:configuration|conversion|consolidation|inventory)\b/i];
+const stripNegatedCompletion = (t) => t.replace(/\b(?:not|never|no longer|n't)\s+(?:\w+\s+){0,2}(?:complete|completed|done|finished)\b/gi, ' ').replace(/\bincomplete\b/gi, ' ');
+/**
+ * architectureText: the target project's 03; names: the variable names the code evidences; declined: the owner declined the proposal. Not declined: the Configuration section
+ * needs a table with the columns variable, required, classification, used by, description and source, one row per name. Findings config-row-missing:<name> (also for a header with no
+ * row), config-cell-empty:<name>:<column> (also for a column the header lacks) and config-value-shaped (a cell holding a value: values never appear). Declined: the only finding is
+ * config-completion-claimed, when the Configuration section claims the conversion is complete.
+ */
+export function checkConfigurationInventory({ architectureText, names, declined = false }) {
+  const f = [];
+  const doc = parseHeadingDoc(architectureText);
+  const r = resolveHeading(doc, parseBulletRef('Configuration'));
+  const section = r.status === 'ok' ? sectionText(doc, r.heading) : '';
+  if (declined === true) {
+    if (COMPLETION_CLAIM.some((re) => re.test(stripNegatedCompletion(section)))) f.push({ code: 'config-completion-claimed', detail: 'the Configuration section claims a completed conversion although the owner declined the proposal' });
+    return f;
+  }
+  const rows = tableRows(section);
+  const headerAt = rows.findIndex((cells) => !isSeparatorRow(cells));
+  const header = headerAt === -1 ? [] : rows[headerAt].map((c) => c.toLowerCase());
+  const body = headerAt === -1 ? [] : rows.slice(headerAt + 1).filter((cells) => !isSeparatorRow(cells));
+  const col = (name) => header.indexOf(name);
+  const byName = new Map();
+  for (const cells of body) { const v = (cells[Math.max(col('variable'), 0)] ?? '').replace(/`/g, '').trim(); if (v !== '' && !byName.has(v)) byName.set(v, cells); }
+  for (const n of Array.isArray(names) ? names : []) {
+    const cells = byName.get(n);
+    if (cells === undefined) { f.push({ code: `config-row-missing:${n}`, detail: 'no row of the Configuration table names this variable' }); continue; }
+    for (const c of CONFIG_COLUMNS) { const i = col(c); if (i === -1 || (cells[i] ?? '').replace(/`/g, '').trim() === '') f.push({ code: `config-cell-empty:${n}:${c}`, detail: 'the cell is empty or the table has no such column' }); }
+  }
+  for (const [n, cells] of byName) cells.forEach((cell, i) => { if (i !== col('variable') && VALUE_SHAPED.some((re) => re.test(cell))) f.push({ code: 'config-value-shaped', detail: `${n}: ${CONFIG_COLUMNS[i] ?? `column ${i}`}` }); });
+  return f;
+}
+/** tsconfig text as JSON: comments and trailing commas removed outside strings. null when it still does not parse. */
+export function parseTsconfig(text) {
+  let out = ''; let i = 0; const t = String(text).replace(/^\uFEFF/, '');
+  while (i < t.length) {
+    const c = t[i];
+    if (c === '"') { let j = i + 1; while (j < t.length && t[j] !== '"') j += t[j] === '\\' ? 2 : 1; out += t.slice(i, j + 1); i = j + 1; }
+    else if (c === '/' && t[i + 1] === '/') { while (i < t.length && t[i] !== '\n') i += 1; }
+    else if (c === '/' && t[i + 1] === '*') { const j = t.indexOf('*/', i + 2); i = j === -1 ? t.length : j + 2; }
+    else { out += c; i += 1; }
+  }
+  try { return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1')); } catch { return null; }
+}
+export const STRICT_FLAGS = Object.freeze(['strictNullChecks', 'strictFunctionTypes', 'strictBindCallApply', 'strictPropertyInitialization', 'noImplicitAny', 'noImplicitThis', 'useUnknownInCatchVariables', 'alwaysStrict']);
+/**
+ * architectureText: the target project's 03; tsconfigText: the root tsconfig.json as written; declined: the owner declined the proposal (nothing is judged: setup reports the
+ * omission and writes nothing). Not declined: the "CI/CD and tooling" section states the compiler strictness as written: strict and each individual strict flag that is set
+ * (shapes "strict: true", "strict = true", "strict is true"), or "strict not set", and names the extended file when tsconfig.json extends one. Findings strictness-missing (no
+ * statement) and strictness-mismatch (a value, a flag or the "not set" claim differs from the file, or the extended file is not named).
+ */
+export function checkStrictness({ architectureText, tsconfigText, declined = false }) {
+  if (declined === true) return [];
+  const f = [];
+  const doc = parseHeadingDoc(architectureText);
+  const r = resolveHeading(doc, parseBulletRef('CI/CD and tooling'));
+  const section = r.status === 'ok' ? sectionText(doc, r.heading) : '';
+  const ts = parseTsconfig(tsconfigText);
+  const co = ts !== null && typeof ts === 'object' && ts.compilerOptions !== null && typeof ts.compilerOptions === 'object' ? ts.compilerOptions : {};
+  const mentions = (name) => new RegExp(`\\b${name}\\b`, 'i');
+  const stated = normalizeEol(section).split('\n').filter((l) => mentions('strict').test(l) || STRICT_FLAGS.some((x) => mentions(x).test(l))).join('\n');
+  if (stated === '') { f.push({ code: 'strictness-missing', detail: 'the CI/CD and tooling section states no compiler strictness' }); return f; }
+  const mismatch = (detail) => f.push({ code: 'strictness-mismatch', detail });
+  const valueOf = (name) => { const m = new RegExp(`\\b${name}\\b[\`*]*\\s*(?::|=|is|set to|=>)?\\s*[\`*]*\\s*(true|false)\\b`, 'i').exec(stated); return m === null ? undefined : m[1].toLowerCase() === 'true'; };
+  const set = ['strict', ...STRICT_FLAGS].filter((n) => typeof co[n] === 'boolean');
+  if (set.length === 0) { if (!/\bstrict\b[`*]*\s+not\s+set\b/i.test(stated)) mismatch('tsconfig.json sets no strict option, so the statement must say "strict not set"'); }
+  else {
+    for (const n of set) { const v = valueOf(n); if (v === undefined) mismatch(`${n} is set in tsconfig.json (${co[n]}) and is not stated`); else if (v !== co[n]) mismatch(`${n} is ${co[n]} in tsconfig.json, the statement says ${v}`); }
+    if (/\bstrict\b[`*]*\s+not\s+set\b/i.test(stated)) mismatch('the statement says "strict not set" although tsconfig.json sets strict options');
+  }
+  for (const n of ['strict', ...STRICT_FLAGS]) if (typeof co[n] !== 'boolean' && valueOf(n) !== undefined) mismatch(`${n} is stated but tsconfig.json does not set it`);
+  if (ts !== null && typeof ts.extends === 'string' && !normalizeEol(section).includes(ts.extends)) mismatch(`tsconfig.json extends ${ts.extends}; the statement must name the extended file`);
+  return f;
+}
+
 // ------------------------------------------------------------------- snapshots ----
-export const SNAPSHOT_FILES = Object.freeze(['AGENTS.md', 'CLAUDE.md', 'TODO.md', STAMP_REL, '.toolchain-config.json', '.ai/manifest.json', '.ai/security-paths.json', '.claude/settings.json']);
+export const SNAPSHOT_FILES =Object.freeze(['AGENTS.md', 'CLAUDE.md', 'TODO.md', STAMP_REL, '.toolchain-config.json', '.ai/manifest.json', '.ai/security-paths.json', '.claude/settings.json']);
 export const SNAPSHOT_DIRS = Object.freeze(['.ai/agents', '.ai/context', '.ai/decisions', '.ai/standards', '.ai/tools', '.claude/agents', '.codex/agents', 'docs']);
 const SNAPSHOT_NESTED_ROOT = 'src';
 // The two extension rules of the walk, named once: captureProject walks with them and inInventory answers "was this path ever collected" with them.
@@ -1387,7 +1585,8 @@ export function runSeed({ project, caseName }) {
 }
 
 // ----------------------------------------------------------------------- verify ----
-export const EVIDENCE_KEYS = Object.freeze(['schema', 'layout', 'conversion', 'pointers', 'fullDocuments', 'inventory', 'dispositions', 'claude', 'agents', 'extensions', 'expectPartial', 'explained', 'nested', 'unrelatedAgentsLines']);
+// 3.2.0 (A3): applicability, configuration and strictness are OPTIONAL evidence: absent, the checker it stands for does not run (evidence files of earlier procedures stay valid).
+export const EVIDENCE_KEYS = Object.freeze(['schema', 'layout', 'conversion', 'pointers', 'fullDocuments', 'inventory', 'dispositions', 'claude', 'agents', 'extensions', 'expectPartial', 'explained', 'nested', 'unrelatedAgentsLines', 'applicability', 'configuration', 'strictness']);
 // The evidence a verification cannot do without. Each key stands for checks that would otherwise silently not run: an omitted key is not
 // "nothing to check", it is an input that was never supplied, so the verification is not evaluable (an explicit empty list or object IS a statement).
 export const REQUIRED_EVIDENCE = Object.freeze(['schema', 'layout', 'conversion', 'pointers', 'fullDocuments', 'inventory', 'dispositions', 'claude', 'agents', 'extensions']);
@@ -1581,6 +1780,18 @@ export function inputProblems({ project, baseline, evidence, expectPartial = fal
   if (hasOwn(evidence, 'explained') && !isPathList(evidence.explained)) p.push('evidence.explained must be a list of relative paths');
   if (hasOwn(evidence, 'nested') && !(Array.isArray(evidence.nested) && evidence.nested.every((n) => isRecord(n) && validRel(n.dir)))) p.push('evidence.nested must be a list of { dir }');
   if (hasOwn(evidence, 'unrelatedAgentsLines') && !(Array.isArray(evidence.unrelatedAgentsLines) && evidence.unrelatedAgentsLines.every((l) => typeof l === 'string'))) p.push('evidence.unrelatedAgentsLines must be a list of lines');
+  if (hasOwn(evidence, 'applicability')) {
+    const a = evidence.applicability;
+    if (!isRecord(a) || !isPathList(a.approved) || !isPathList(a.confirmed) || Object.keys(a).some((k) => !['approved', 'confirmed'].includes(k))) p.push('evidence.applicability must be { approved: [rel], confirmed: [rel] } (the Phase 0 list and the Phase 1 set of applicable mapped documents)');
+  }
+  if (hasOwn(evidence, 'configuration')) {
+    const c = evidence.configuration;
+    if (!isRecord(c) || !isLineList(c.names) || (hasOwn(c, 'declined') && typeof c.declined !== 'boolean') || Object.keys(c).some((k) => !['names', 'declined'].includes(k))) p.push('evidence.configuration must be { names: [variable name], declined?: boolean }');
+  }
+  if (hasOwn(evidence, 'strictness')) {
+    const s = evidence.strictness;
+    if (!isRecord(s) || (hasOwn(s, 'declined') && typeof s.declined !== 'boolean') || Object.keys(s).some((k) => k !== 'declined')) p.push('evidence.strictness must be { declined?: boolean }');
+  }
   if (hasOwn(evidence, 'expectPartial') && evidence.expectPartial !== (expectPartial === true)) p.push('evidence.expectPartial contradicts the expectation the verification was started with');
   return p;
 }
@@ -1786,8 +1997,26 @@ function runVerification({ project, baseline, evidence, expectPartial, skeleton,
   {
     // The observed text and the canonical template are the checker's; the evidence supplies only the three documented expectations, passed by name (never spread).
     const c = evidence.claude;
-    const f = checkClaudeRecovery({ text: read('CLAUDE.md') ?? '', templateText: fs.readFileSync(path.join(SKILL_ROOT, 'assets', 'templates', 'CLAUDE.md'), 'utf8'), bsImports: ownOf(c, 'bsImports'), bsVersionSentence: ownOf(c, 'bsVersionSentence'), userLines: ownOf(c, 'userLines') });
+    // 3.2.0 (A1): the layer the run installed comes from the per-agent dispositions and the installed wrappers, never from the evidence alone (a merge counts only with the canonical reference).
+    const agentLayer = agentLayerOf(evidence.agents, Object.fromEntries(AGENT_NAMES.map((n) => [n, read(`.claude/agents/${n}.md`)])));
+    const f = checkClaudeRecovery({ text: read('CLAUDE.md') ?? '', templateText: fs.readFileSync(path.join(SKILL_ROOT, 'assets', 'templates', 'CLAUDE.md'), 'utf8'), bsImports: ownOf(c, 'bsImports'), bsVersionSentence: ownOf(c, 'bsVersionSentence'), userLines: ownOf(c, 'userLines'), agentLayer });
     check(f.length === 0, 'CLAUDE.md: import, managed block with the root-start rule, BS lines and user content', f);
+    if (agentsText !== null) { const g = checkAgentsLayerSentence({ agentsText, agentLayer }); check(g.length === 0, 'AGENTS.md: the agents block states the installed agent layer (exactly one matching sentence in a partial layer, none in a full layer)', g); }
+  }
+  // 3.2.0 (A3, A7, A8): the three optional checkers of the applicability rule, each run only when the evidence supplies its input.
+  if (hasOwn(evidence, 'applicability')) {
+    const navBlock = agentsText === null ? undefined : parseBlocks(agentsText).blocks.find((b) => b.id === 'navigation');
+    const refs = navBlock === undefined ? [] : [...new Set([...visibleText(navBlock.inner).matchAll(/`([^`\n]+\.md)`/g)].map((m) => m[1]).filter((r) => mappingRefsFor(r) !== null))];
+    const f = checkApplicability({ approved: evidence.applicability.approved, confirmed: evidence.applicability.confirmed, pointers: pointerRels, navigationRefs: refs });
+    check(f.length === 0, 'applicability: the installed pointers are exactly the approved set, Phase 1 confirmed that set and no navigation reference dangles', f);
+  }
+  if (hasOwn(evidence, 'configuration')) {
+    const f = checkConfigurationInventory({ architectureText: read(BS_03_REL) ?? '', names: evidence.configuration.names, declined: evidence.configuration.declined === true });
+    check(f.length === 0, 'configuration: the Configuration table of 03 has a filled row for every evidenced variable and no value (declined: no claim of a finished conversion)', f);
+  }
+  if (hasOwn(evidence, 'strictness')) {
+    const tsText = read('tsconfig.json'); // an absent tsconfig.json has nothing to state; an unreadable one is not evaluable (need records it)
+    if (tsText !== null) { const f = checkStrictness({ architectureText: read(BS_03_REL) ?? '', tsconfigText: tsText, declined: evidence.strictness.declined === true }); check(f.length === 0, 'strictness: 03 states the compiler strictness of tsconfig.json as written', f); }
   }
   let incomplete = evidence.conversion !== 'complete';
   for (const name of AGENT_NAMES) {
