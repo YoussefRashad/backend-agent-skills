@@ -838,7 +838,7 @@ export function read310(absPath, { repoRoot = REAL_ROOT, cfg = REAL_CFG() } = {}
 // Inside means: the same directory, or a relative path that does not leave through a parent SEGMENT (".." alone or ".." and a separator). A child named
 // "..view" is inside (a prefix test on ".." calls it outside and writes the view into the repository); a sibling "repo-view" next to "repo" is outside.
 // Both paths are compared by their real location: the nearest existing ancestor is resolved through links, so a link into the repository is inside too.
-const realOfNearest = (p) => {
+export const realOfNearest = (p) => {
   let cur = path.resolve(p); const tail = [];
   for (;;) {
     try { return path.join(fs.realpathSync.native(cur), ...tail.reverse()); } catch { /* climb */ }
@@ -847,6 +847,27 @@ const realOfNearest = (p) => {
     tail.push(path.basename(cur)); cur = up;
   }
 };
+/**
+ * Why a path SPELLING is refused on Windows, or null (always null on any other platform, where such names are ordinary: pass platform to test the gate anywhere).
+ * Windows reads a component that ends with a dot or a space as the name without it ("<repo>." is "<repo>"), but the Node file-system calls (stat, realpath, mkdir)
+ * take the text literally and a child process started with that cwd is normalized by Windows: the check (a sibling that does not exist) and the use (the real
+ * repository) then name different directories. The same gap exists for a device name (nul, con, com1), a stream (name:stream, a wildcard) and an extended-length
+ * or device prefix (\\?\ and \\.\ are not normalized at all). A caller refuses such a spelling BEFORE any write and then uses one validated canonical path
+ * (realOfNearest of the checked spelling) for every file-system call and every child cwd. "." and ".." components are navigation, not names.
+ */
+export function windowsSpellingProblem(p, platform = process.platform) {
+  if (platform !== 'win32') return null;
+  if (typeof p !== 'string' || p === '') return 'an empty path';
+  if (/^[\\/]{2}[?.][\\/]/.test(p)) return 'an extended-length or device path prefix (Windows does not normalize it)';
+  const rest = p.replace(/^[A-Za-z]:/, '');
+  if (/[*?"<>|:\0]/.test(rest)) return 'a character a Windows path reads specially (a wildcard, a stream name or a colon after the drive)';
+  for (const c of rest.split(/[\\/]+/)) {
+    if (c === '' || c === '.' || c === '..') continue;
+    if (/[. ]$/.test(c)) return `the component ${JSON.stringify(c)} ends with a dot or a space (Windows reads it as ${JSON.stringify(c.replace(/[. ]+$/, ''))}, which the file-system calls do not)`;
+    if (/^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i.test(c)) return `the component ${JSON.stringify(c)} is a Windows device name`;
+  }
+  return null;
+}
 const foldCase = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
 const isInside = (parent, child) => {
   const rel = path.relative(foldCase(realOfNearest(parent)), foldCase(realOfNearest(child)));
@@ -860,9 +881,11 @@ const isInside = (parent, child) => {
  * example a checkout the current user does not own), so a caller reports it as its own failure and never as a pass.
  * Returns { files, skippedMissing }: the repository-relative paths copied, and tracked paths that are deleted in the working tree.
  */
-export function buildView({ repoRoot, outDir, includeUntracked = false }) {
-  if (typeof repoRoot !== 'string' || typeof outDir !== 'string') throw new Error('buildView needs repoRoot and outDir');
-  if (isInside(repoRoot, outDir)) throw new Error('the view directory must be outside the repository');
+export function buildView({ repoRoot, outDir: spelledOut, includeUntracked = false, platform = process.platform }) {
+  if (typeof repoRoot !== 'string' || typeof spelledOut !== 'string') throw new Error('buildView needs repoRoot and outDir');
+  for (const [what, p] of [['the view directory', spelledOut], ['the repository root', repoRoot]]) { const s = windowsSpellingProblem(p, platform); if (s !== null) throw new Error(`${what} is refused before anything is written: ${s}`); }
+  if (isInside(repoRoot, spelledOut)) throw new Error('the view directory must be outside the repository');
+  const outDir = realOfNearest(spelledOut); // ONE canonical spelling for every write below (the checked path, resolved through links and short names)
   if (fs.existsSync(outDir) && fs.readdirSync(outDir).length > 0) throw new Error('the view directory must be empty');
   const args = includeUntracked ? ['ls-files', '-z', '-co', '--exclude-standard', '--', ...VIEW_COPY_SET] : ['ls-files', '-z', '--', ...VIEW_COPY_SET];
   const r = spawnSync('git', args, { cwd: repoRoot, encoding: 'buffer', shell: false, windowsHide: true, maxBuffer: 1 << 26 });

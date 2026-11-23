@@ -169,8 +169,11 @@ The first three run in the working tree. The historical gates (`tests/run-tests.
 scripts and data and are byte-pinned, so they run only through the view runner
 `tests/run-310-view.mjs`, which reconstructs the 3.1.0 tree outside the repository; run directly
 in the 3.2.0 working tree they are expected to fail. `--out` is an empty directory outside the
-repository and outside the temp directory. The runner itself writes only under `--out` and only
-reads the repository it runs in; the gates it starts are not confined to `--out`: they write their
+repository and outside the temp directory. The runner itself writes only under `--out`, apart from one
+private directory under the operating system's temp directory that holds the bootstrap's git
+configuration and is removed when the bootstrap ends, and it only reads the repository it runs in;
+the bootstrap ignores the user's git configuration, so a global `safe.directory` entry is not used;
+the gates it starts are not confined to `--out`: they write their
 own fixtures and evidence (`ps-tests-*`, `ps-accept-rc1-*`, `ps-r31-*`, `ps-c18-*` and `ps-bsmap-*`
 directories) under the operating system's temp directory, which the runner neither redirects nor
 removes. For the `accept-rc1` gate only, the runner first adds
