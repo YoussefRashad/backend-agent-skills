@@ -223,3 +223,12 @@ Nothing in this release has been measured on a host. In particular:
   `--approved-plan` approval at commit still applies): `validate.mjs` reports the edit as `edited-by-user` drift, and
   keeping it depends on setup following the keep, take new or merge rule. The plan's criterion that
   `prepare` exits 3 for such a replacement is not met; see TODO.md.
+- The view runner (`tests/run-310-view.mjs`, test tooling only) has four residuals that the last
+  Codex review rated non-blocking: a direct caller of `bootstrapStrictGate` through a junction to a
+  literal trailing-dot Windows directory is not re-validated after resolution (the command line is
+  protected by the check in `buildView`); `buildView` lists tracked and untracked files with the
+  user's git configuration, so a global exclude can change the copied set for files outside the
+  pinned manifest (for example an untracked file under `backend-standards/templates/` with
+  `--include-untracked`); a failure to remove the bootstrap's temporary configuration directory is
+  not reported; and the bootstrap's source reads still honour the source repository's own local
+  configuration and its includes.

@@ -186,7 +186,7 @@ const NOW_FILES = Object.freeze({
   "@root/TODO.md": '9cf6bc7ddf4df7987d6670fec1d3d916506397b12e8272be723f974ab02a7819',
   "CHANGELOG.md": '4f0b4e2f8d83227b1604e0b3028a89e8c9abc325473c6ce12963b69d5580b8b7',
   "README.md": 'f5ebe51eb46016874eaa3e57066cc9550cc34ec20b354f3ae3b13d003cf0b503',
-  "RELEASE-NOTES-3.2.0.md": '628caeb614fb5038feff93782c76a1c8e58dc15a3008828031dad6ae59bf00da',
+  "RELEASE-NOTES-3.2.0.md": '0fcc3a46da566b785d87f09befe937f4ff2bec1ee24edf5be993ab92ad551e57',
   "SKILL.md": 'f1a74c034ddd4ec56651568a2726763cfc335e50fc8013acd52eeae1f4911483',
   "VERSION": '33bdaf9e2d6bcbde2e4e613e865e403f8fe21fc621078d34c30b0bdc7f68d903',
   "assets/agents/reviewer.md": 'a0a82fb1d05829950fd98a4ebcce78f47dc5a8fde7ba2e37d0caeb68ae18cb2f',
