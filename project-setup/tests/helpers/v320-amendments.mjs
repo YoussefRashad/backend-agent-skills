@@ -835,7 +835,23 @@ export function read310(absPath, { repoRoot = REAL_ROOT, cfg = REAL_CFG() } = {}
   return Buffer.from(r.text, 'utf8');
 }
 
-const isInside = (parent, child) => { const rel = path.relative(path.resolve(parent), path.resolve(child)); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); };
+// Inside means: the same directory, or a relative path that does not leave through a parent SEGMENT (".." alone or ".." and a separator). A child named
+// "..view" is inside (a prefix test on ".." calls it outside and writes the view into the repository); a sibling "repo-view" next to "repo" is outside.
+// Both paths are compared by their real location: the nearest existing ancestor is resolved through links, so a link into the repository is inside too.
+const realOfNearest = (p) => {
+  let cur = path.resolve(p); const tail = [];
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(cur), ...tail.reverse()); } catch { /* climb */ }
+    const up = path.dirname(cur);
+    if (up === cur) return path.resolve(p);
+    tail.push(path.basename(cur)); cur = up;
+  }
+};
+const foldCase = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+const isInside = (parent, child) => {
+  const rel = path.relative(foldCase(realOfNearest(parent)), foldCase(realOfNearest(child)));
+  return rel === '' || !(rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel));
+};
 
 /**
  * Builds the view: the working-tree bytes of the tracked files (git ls-files -z over VIEW_COPY_SET, cwd repoRoot) or, with includeUntracked,

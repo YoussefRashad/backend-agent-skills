@@ -186,7 +186,7 @@ const NOW_FILES = Object.freeze({
   "@root/TODO.md": '9cf6bc7ddf4df7987d6670fec1d3d916506397b12e8272be723f974ab02a7819',
   "CHANGELOG.md": '4f0b4e2f8d83227b1604e0b3028a89e8c9abc325473c6ce12963b69d5580b8b7',
   "README.md": 'f5ebe51eb46016874eaa3e57066cc9550cc34ec20b354f3ae3b13d003cf0b503',
-  "RELEASE-NOTES-3.2.0.md": '62ca079e7bf03deff148f61d07d8ea28f461cbf891a0060f47134b2515a6a0e9',
+  "RELEASE-NOTES-3.2.0.md": '5de16ca88c95be72bb58a19da17d1d707b92ada378d464b6fae86eaa98949bd4',
   "SKILL.md": 'f1a74c034ddd4ec56651568a2726763cfc335e50fc8013acd52eeae1f4911483',
   "VERSION": '33bdaf9e2d6bcbde2e4e613e865e403f8fe21fc621078d34c30b0bdc7f68d903',
   "assets/agents/reviewer.md": 'a0a82fb1d05829950fd98a4ebcce78f47dc5a8fde7ba2e37d0caeb68ae18cb2f',
@@ -300,14 +300,17 @@ const REPLACEMENT_IDS = Object.freeze(['SK320_1', 'VR320_1', 'RM320_1', 'RM320_2
 // { "<file>": [ "<16-hex sha256 prefix of the whitespace-squashed line>" ] } the 3.1.0 lines holding MUST, SHOULD or MAY in the normative files
 const NORMATIVE_LINES = Object.freeze({
   "SKILL.md": Object.freeze(['4b9b1a59bd97a196', 'd4e39498669cbfd4', '52560c772e148372', '88aef36e923d28ad', '9f0809dd2f6e89e9', 'e22f124f807be954', '4073b99c6df374fb', 'd75185b7e7938521', 'feb0e901a8a89340', '7656df23af93553a', 'affe999c27ed2fb7']),
+  "assets/agents/docs-sync.md": Object.freeze(['2fccac12744faecf', '13d6c88a5635f2c8', '793b4404375d14a5', '07c05fb15124d4a6', 'e421f28ca1bc770b', 'b633c869f5f06419', 'a65ea87984db76d9', '07f4b38947ff8e85', 'a0896b361f59f5ae', '658221cb80f3db51', '88aef36e923d28ad', 'd10770598760e93f', '8571002b5eb4353a', '6f69df75ad8fbaa0', '570b8eaecf2123e7', 'cbe5eca2e003588c', 'be63e6df6e616779', '526f703efabc1ae8', '1348768a366d6fd1', '8e87d0122adcd818', '9f0809dd2f6e89e9', 'a12543cc006e83a1', 'e8962085da97b28e', 'd604e9818e4118a7', '54e67263451e6f38', '6a15aa2c1996946e', 'c415e5070ed628da']),
   "assets/agents/reviewer.md": Object.freeze(['596a9ca9d6f4c2f4', '961e3811760a3d1f', 'be63e6df6e616779', '526f703efabc1ae8', '198a11b3563823e0', '749589fcc77d530d', 'a370f67c293d5143', '343c4adb7d18db54', 'e8a0b8ab2a87c527', '93d361b0a37346d7', '57956be0a798d46a', 'e0d4e79e6bb66167', '88b453160dc8bd0f', 'a502f37907d1d5a0', 'b249dc2c15848fd2', 'd2545a2d75690a4e', 'df5df540cec303b4', 'de1abc89191605c7', 'f9d01fdbf4debc97', '9f7e310bcc98e005', '8c2ebf638bb57647', 'e80f8d3208a2f41c', 'ca114ec9e212105f', '01c98d13e6dd3e5a', '5345f02367dae647', '7930cd9baaa0b665', 'a8030712de53049c', 'd760bc1a98191785', '88aef36e923d28ad', '1348768a366d6fd1', '8e87d0122adcd818', '9f0809dd2f6e89e9', 'a12543cc006e83a1', 'e8962085da97b28e', 'd604e9818e4118a7', '54e67263451e6f38', '6a15aa2c1996946e', 'c415e5070ed628da']),
   "assets/templates/AGENTS.md": Object.freeze(['88aef36e923d28ad', 'd010d4059de44a35', 'a4fa6803bb386bce', 'd8efbc971038fa16', 'e96ee13b6d957dd7', 'e13619005c79aded', 'ee7e738ae207895a']),
   "assets/templates/CLAUDE.md": Object.freeze(['45bb182cf4e24f18', '706eb3bf1c7ab5be', '0f8151ffc77d31c3', '7eb82ba1345d6d21', '6610c9fd27ce3703', 'a555dd038e3b7d23', 'cac467d7512b6390', '4da2e3b41ce0e35c', '5bbb378444478c29']),
   "references/claude.md": Object.freeze(['a5a8a889caac77e1', 'e4970192cfd4fd18', 'bc5e8f55c72ed6b2', '912dd361e8bfc780', '9f49cb7a7841a354', 'bc7052175ca022c8', 'd9033339fdce253e']),
+  "references/codex.md": Object.freeze(['ffc28013e6d6a15d', '4073b99c6df374fb', 'd75185b7e7938521', 'feb0e901a8a89340']),
   "references/docs-generation.md": Object.freeze(['87d9f59704477d19', 'e82a9a49c6193433', '7dd9c98ba0a1f81a', 'b7b0ab9f9d784a22', 'dfc8e9f00496cef5', '4b12ed9521239464', '8d06980f82327e81', 'd7f248943853550a', '8c7f5b4fbd2023fb', 'c031e4f4ffcf8cbd', 'c7c7abc812ed369b', '1069f370bdcc876e', '8d1095a02925a89d', 'e7503969724cd0d1', '13e41efb16ba7d80', '05585067283df5e8', '2856e926258740ef', '70b58185401f1d38', '6fdc0a84cf94f817', 'a42d4033830601fa', '73c58ea81fba70d8', '1336bf95a9e4abce', '25b1c4d7d42592e5', '47ec1c7d9bc1de90', '5270367c92032516', 'f112ac7ad2c6293a', '27b1fc535d03b3e0', '5cac44b532b3deb1', 'a4e15377ac84a57d', '9cf46648f5c22f45', 'd6ac172fb87557e6', '44c7604c12a07e74', '06a47da9c72fe7b5', '7d6875fb9f8c4454', 'd4389b098c860f57', '3e32a50ef53983e4', '718109fb344ed262', '7cc5ff53925451aa', '9e273305a5eb0842', 'c05c8f1286d874fb', '788bc332855b31d1', '9e4dcc37e27b4948', '1881e34249131fd4', 'ea655e76c92b4a85', '5738b04dfa5ac3df', '7beb9ee702eb79c3', '38c204588a3fd16d', '49dfc49b773ccdcf', 'c0cd974c9cb9464d', '9975979d5100dc21', '5f543caeb7260370', '09886b8abb1614d2', '5de4a74b6a3e48d9', 'fff946122155c0b1', 'a851bd21cf988edb', '465e5e8209c28311', 'a6589ab046a38250', '65573f38d67f2449']),
   "references/migration-v2.md": Object.freeze(['8bb7506f01dbbb3e', '538e27ed53f614cf', '9975979d5100dc21', '5f543caeb7260370', '09886b8abb1614d2', '5de4a74b6a3e48d9', 'fff946122155c0b1', 'a851bd21cf988edb', '465e5e8209c28311', 'a6589ab046a38250', '65573f38d67f2449']),
   "references/modes.md": Object.freeze(['0cdb3f9446bed7d0', 'db73cf5c60d90f8f', '990962db45c0f792', 'ae66e73f74731d09', 'f6fe18db9c93e6a2', '54396dd4a1bdde08']),
   "references/security.md": Object.freeze(['88aef36e923d28ad', '4ffff33329fc4dbf', 'df8811726f1632e9', 'c0601ce60dfe41f3', 'd426b9ec612be885', '12f3ebd5b67c72a5', '7f2733683f88e3a5', '79d70b852449f386', '19a8d7cfc8470c4a', 'fc5bd6dad6fb06c3']),
+  "references/state-and-apply.md": Object.freeze(['92eb9f1799833ae0', 'b3c68bfca215834c']),
 });
 // Pinned now (they need only 3.1.0 bytes that 3.2.0 does not touch):
 const TODO_RESIDUAL_SHA = '92977bcb031f0c72d0b871bfcb93a708c4a803c1711de78e104033c7e7c82ee4'; // @root/TODO.md lines 25-32 of the 3.1.0 file, joined with LF plus one final LF (AC-C3-1)
@@ -455,6 +458,23 @@ function treeProblems(now, base, newFiles, amended) {
     missing: [...allowed].filter((k) => !now.has(k)).sort(),
     changed: [...base.keys()].filter((k) => !amend.has(k) && now.has(k) && now.get(k) !== base.get(k)).sort(),
   };
+}
+/**
+ * The coverage of the normative-line table (finding 8 of review 3): baseTexts is { "<file under project-setup/>": text } of the 3.1.0 tree, table is the shape of
+ * NORMATIVE_LINES. { uncovered, stale }: every 3.1.0 line holding MUST, SHOULD or MAY (case-sensitive words) of a file inside NORMATIVE_SCOPE whose digest is not in
+ * the table entry of that file (a file with no entry counts all its lines), and every table digest the base does not hold, or whose file is not a normative file of the base.
+ */
+function normativeCoverage(baseTexts, table) {
+  const uncovered = []; const stale = [];
+  for (const [rel, text] of Object.entries(baseTexts)) {
+    if (!NORMATIVE_SCOPE(rel)) continue;
+    const want = new Set(lf(text).split('\n').filter((l) => KEYWORD.test(l)).map(lineDigest));
+    const have = new Set(has(table, rel) ? table[rel] : []);
+    for (const d of want) if (!have.has(d)) uncovered.push(`${rel}:${d}`);
+    for (const d of have) if (!want.has(d)) stale.push(`${rel}:${d}`);
+  }
+  for (const rel of Object.keys(table)) if (!has(baseTexts, rel) || !NORMATIVE_SCOPE(rel)) stale.push(`${rel}: not a normative file of the 3.1.0 tree`);
+  return { uncovered, stale };
 }
 
 // ----------------------------------------------------------------------------------------- notes, claims and acceptance engines ----
@@ -747,6 +767,14 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
     check('view control: an untracked, not ignored file is absent from the tracked view and present with includeUntracked', !failedAttempt(tracked) && !tracked.includes('project-setup/untracked.md') && (() => { const v = viewOf({ includeUntracked: true }, 'out-untracked2'); return !failedAttempt(v) && v.includes('project-setup/untracked.md'); })(), tracked);
     check('view control: a non-repository directory is a GIT_FAILED error (reported as its own failure, never an empty view)', (() => { const plain = scratchDir('plain'); const r = attempt(() => { try { return H.buildView({ repoRoot: plain, outDir: path.join(tmp, 'out-plain') }); } catch (e) { return { threw: `${e.code}:${e.message}` }; } }); return failedAttempt(r) && /^GIT_FAILED:/.test(r.threw); })());
     check('view control: an outDir inside the repository, and a non-empty outDir, are refused', (() => { const a = attempt(() => H.buildView({ repoRoot: repo, outDir: path.join(repo, 'view') })); const full = scratchDir('full'); fs.writeFileSync(path.join(full, 'x'), 'x'); const b = attempt(() => H.buildView({ repoRoot: repo, outDir: full })); return failedAttempt(a) && failedAttempt(b); })());
+    // Finding 1 (review 3), the helper's own predicate (isInside, not exported): the segment rule and the real-location comparison, reached through buildView.
+    { const dots = path.join(repo, '..view'); const a = committed ? attempt(() => H.buildView({ repoRoot: repo, outDir: dots })) : { threw: 'the synthetic repository could not be committed' };
+      const sib = path.join(tmp, 'repo-view'); const b = committed ? attempt(() => H.buildView({ repoRoot: repo, outDir: sib })) : { threw: 'the synthetic repository could not be committed' };
+      check('view control (finding 1): buildView refuses an outDir named "..view" inside the repository, creates nothing there, and accepts a sibling directory whose name starts with the repository name', failedAttempt(a) && /outside the repository/.test(a.threw) && !fs.existsSync(dots) && !failedAttempt(b) && b.files.includes('project-setup/SKILL.md') && fs.existsSync(path.join(sib, 'project-setup', 'SKILL.md')), { a, b });
+      let linkErr = null; const link = path.join(tmp, 'link-into-repo');
+      try { fs.symlinkSync(repo, link, 'junction'); } catch (e) { linkErr = String(e && e.code ? e.code : e); }
+      if (linkErr === null) { const c = attempt(() => H.buildView({ repoRoot: repo, outDir: path.join(link, 'v') })); check('view control (finding 1): buildView refuses an outDir reached through a link into the repository (compared by real location) and writes nothing in the repository', failedAttempt(c) && /outside the repository/.test(c.threw) && !fs.existsSync(path.join(repo, 'v')), c); }
+      else skip('view control (finding 1): buildView refuses an outDir reached through a link into the repository', `a link could not be created on this platform (${linkErr})`); }
     check('view control: overlay replaces only the named project-setup file, refuses a test file, a root key, a parent path and a file that is not in the view', (() => { const d = mkView('view-ov'); const realRoot = scratchDir('ovroot'); put(realRoot, 'project-setup/README.md', 'overlaid\n'); put(realRoot, 'project-setup/tests/x.mjs', 'x\n'); H.overlay(d, realRoot, ['README.md']); const ok = fs.readFileSync(path.join(d, 'project-setup', 'README.md'), 'utf8') === 'overlaid\n'; const refused = ['tests/x.mjs', '@root/TODO.md', '../x', 'nope.md'].every((p) => failedAttempt(attempt(() => H.overlay(d, realRoot, [p])))); return ok && refused; })());
   }
 }
@@ -755,7 +783,10 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
   if (RUN === null) check('runner controls need tests/run-310-view.mjs', false, NOT_YET('tests/run-310-view.mjs', LR.err));
   else {
     const O1 = ['scripts/detect.mjs', 'scripts/migrate-security-paths.mjs']; const O2 = [...O1, 'data/secret-paths.json'];
-    const pinned1 = ['c3: scripts/detect.mjs digest pin', 'c14: scripts/migrate-security-paths.mjs digest pin'];
+    // A valid pin has the structure of the real strings of tests/fixtures/v320-compat-expected.json (finding 7 of review 3): "<Cnn> component assertions pass :: <JSON>" whose failures are digest assertions of overlaid files.
+    const cEntry = (n, id, failures, extra = {}) => `C${n} component assertions pass :: ${JSON.stringify({ errors: [], failed: [{ id, failures }], ...extra })}`;
+    const D64 = 'd9c80c5b4af7bce55e48bdbb92e9dfc14db834860094807d73c2e0b9704ba193';
+    const pinned1 = [cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs is unchanged', 'scripts/migrate-security-paths.mjs is unchanged']), cEntry(16, 'RC1/C16/release', [`scripts/detect.mjs is unchanged :: ${JSON.stringify(D64)}`])];
     const same = RUN.compareCompat({ actual: [...pinned1].reverse(), pinned: pinned1, overlaid: O1 });
     check('compat control (sanity): the same set in another order is ok', same.ok === true && same.unlisted.length === 0 && same.stale.length === 0, same);
     const unl = RUN.compareCompat({ actual: [...pinned1, 'c3: a behaviour assertion about detect output'], pinned: pinned1, overlaid: O1 });
@@ -766,14 +797,80 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
     check('compat control: matching is by exact string (a trailing space is a different label)', near.ok === false && near.unlisted.length === 1, near);
     const naming = RUN.compareCompat({ actual: ['c9: the keys check of validate.mjs'], pinned: ['c9: the keys check of validate.mjs'], overlaid: O1 });
     check('compat control: a listed label that names no overlaid file is rejected in run 1 (badPins)', naming.ok === false && naming.badPins.length === 1, naming);
-    const policy1 = RUN.compareCompat({ actual: ['c3: 20-entry construction of secret-paths.json'], pinned: ['c3: 20-entry construction of secret-paths.json'], overlaid: O1 });
-    const policy2 = RUN.compareCompat({ actual: ['c3: 20-entry construction of secret-paths.json'], pinned: ['c3: 20-entry construction of secret-paths.json'], overlaid: O2 });
-    check('compat control: an assertion about the shipped policy file is a valid pin in run 2 only (the data is overlaid there), never in run 1', policy1.ok === false && policy1.badPins.length === 1 && policy2.ok === true, { run1: policy1, run2: policy2 });
+    const polEntry = cEntry(13, 'RC1/C13/release', ['data/secret-paths.json is unchanged']);
+    const policy1 = RUN.compareCompat({ actual: [polEntry], pinned: [polEntry], overlaid: O1 });
+    const policy2 = RUN.compareCompat({ actual: [polEntry], pinned: [polEntry], overlaid: O2 });
+    check('compat control: a digest assertion of the shipped policy file is a valid pin only when that file is overlaid (the second overlay set), never in run 1', policy1.ok === false && policy1.badPins.length === 1 && policy2.ok === true, { run1: policy1, run2: policy2 });
+    // Finding 7: the five real strings are valid; a behaviour failure that merely names an overlaid file is not, in any of the shapes it can take.
+    { const fx = attempt(() => JSON.parse(fs.readFileSync(path.join(SKILL, 'tests', 'fixtures', 'v320-compat-expected.json'), 'utf8')));
+      const real = failedAttempt(fx) || fx === null || typeof fx !== 'object' || fx.runs === null || typeof fx.runs !== 'object' ? null : fx.runs.scripts;
+      const realProblems = Array.isArray(real) ? real.map((e) => RUN.pinProblem(e, O1)) : null;
+      check('compat control (finding 7): the five real pinned strings of tests/fixtures/v320-compat-expected.json (run "scripts") are all valid pins for the two overlaid scripts, and the validator reports no problem for any of them', Array.isArray(real) && real.length === 5 && RUN.pinnedListProblems(real, O1).length === 0 && realProblems.every((p) => p === null), Array.isArray(real) ? realProblems : fx);
+      const behave = cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs fails to report installer backups']);
+      const same2 = RUN.compareCompat({ actual: [behave], pinned: [behave], overlaid: O1 });
+      check('compat control (finding 7): identical actual and pinned lists holding "scripts/detect.mjs fails to report installer backups" are NOT ok: a behaviour regression that names an overlaid file cannot be pinned', same2.ok === false && same2.badPins.length === 1 && same2.unlisted.length === 0 && same2.stale.length === 0, same2);
+      const okShapes = [cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs is unchanged']), cEntry(17, 'V2/C17/preservation', [`scripts/detect.mjs is byte for byte its pre-C17 bytes :: ${JSON.stringify(D64)}`, 'scripts/migrate-security-paths.mjs is byte for byte its pre-C17 bytes']), cEntry(3, 'RC1/C3/release', ['scripts/migrate-security-paths.mjs is unchanged :: "' + 'a'.repeat(64) + '"'])];
+      const acceptedWrong = okShapes.map((e, i) => [i, RUN.pinProblem(e, O1)]).filter(([, p]) => p !== null);
+      check('compat control (finding 7): each digest-assertion shape is accepted (is unchanged, is byte for byte its pre-C17 bytes, with and without the :: "<64 hex>" suffix, a one-digit component number, several failures in one entry)', acceptedWrong.length === 0, acceptedWrong);
+      const real0 = Array.isArray(real) ? real[0] : cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs is unchanged']);
+      const wrap = (obj) => `C13 component assertions pass :: ${JSON.stringify(obj)}`;
+      const good1 = { errors: [], failed: [{ id: 'RC1/C13/release', failures: ['scripts/detect.mjs is unchanged'] }] };
+      const rejected = [
+        ['the bare behaviour string', 'scripts/detect.mjs fails to report installer backups'],
+        ['a behaviour failure that names an overlaid file, inside the component shape', behave],
+        ['a behaviour failure next to a digest failure in one entry', cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs is unchanged', 'scripts/detect.mjs fails to report installer backups'])],
+        ['a failure that merely starts with a digest phrase and goes on ("... is unchanged and wrong")', cEntry(13, 'RC1/C13/release', ['scripts/detect.mjs is unchanged and wrong'])],
+        ['a digest assertion of a file that is not overlaid', cEntry(13, 'RC1/C13/release', ['scripts/apply.mjs is unchanged'])],
+        ['a digest assertion of a file that is overlaid but not under scripts/ and is not the policy file', cEntry(13, 'RC1/C13/release', ['README.md is unchanged'])],
+        ['a digest whose hash is not 64 hex digits', cEntry(16, 'RC1/C16/release', ['scripts/detect.mjs is unchanged :: "abc123"'])],
+        ['a digest suffix that is not quoted', cEntry(16, 'RC1/C16/release', [`scripts/detect.mjs is unchanged :: ${D64}`])],
+        ['a non-empty errors list', wrap({ ...good1, errors: ['an error'] })],
+        ['an errors list that is missing', wrap({ failed: good1.failed })],
+        ['an empty failed list', wrap({ errors: [], failed: [] })],
+        ['an extra key on the object', wrap({ ...good1, note: 'x' })],
+        ['an extra key on a failed entry', wrap({ errors: [], failed: [{ id: 'RC1/C13/release', failures: ['scripts/detect.mjs is unchanged'], note: 'x' }] })],
+        ['a failed entry with no failures', wrap({ errors: [], failed: [{ id: 'RC1/C13/release', failures: [] }] })],
+        ['a failure that is not a string', wrap({ errors: [], failed: [{ id: 'RC1/C13/release', failures: [7] }] })],
+        ['an id of another component', wrap({ errors: [], failed: [{ id: 'RC1/C14/release', failures: ['scripts/detect.mjs is unchanged'] }] })],
+        ['an id that is not suite/component/name', wrap({ errors: [], failed: [{ id: 'scripts/detect.mjs', failures: ['scripts/detect.mjs is unchanged'] }] })],
+        ['a label that is not a component label', `X13 component assertions pass :: ${JSON.stringify(good1)}`],
+        ['the label alone, with no JSON', 'C13 component assertions pass'],
+        ['a JSON that is not an object', 'C13 component assertions pass :: "scripts/detect.mjs is unchanged"'],
+        ['JSON with a duplicate key (the last one would win)', 'C13 component assertions pass :: {"errors":[],"errors":["x"],"failed":[{"id":"RC1/C13/release","failures":["scripts/detect.mjs is unchanged"]}]}'],
+        ['JSON with spaces (not the compact form the results file writes)', `C13 component assertions pass :: ${JSON.stringify(good1, null, 1)}`],
+        ['text after the JSON', `${real0} trailing`],
+        ['a real string cut after 60 characters (truncated JSON is not parseable: fail closed)', real0.slice(0, 60)],
+        ['a real string cut one character short', real0.slice(0, -1)],
+        ['a real string cut in the middle of its JSON', real0.slice(0, Math.floor(real0.length / 2))],
+      ];
+      const OX = [...O1, 'README.md']; // README.md is overlaid here only to show that a digest assertion of an overlaid file outside scripts/ is still no pin
+      const acceptedBad = rejected.filter(([, e]) => RUN.pinProblem(e, OX) === null || RUN.pinProblem(e, O1) === null).map(([n]) => n);
+      check('compat control (finding 7): every malformed or non-digest string is rejected as a pin (a behaviour failure naming an overlaid file, a file that is not overlaid, a bad digest, a non-empty errors list, extra or missing keys, a wrong or foreign id, a duplicate key, loose JSON, trailing text, and truncated strings)', acceptedBad.length === 0 && rejected.length >= 20, { acceptedBad, count: rejected.length });
+      const viaList = RUN.pinnedListProblems(rejected.map(([, e]) => e).filter((e) => e !== ''), O1);
+      check('compat control (finding 7): pinnedListProblems reports each of those strings (one bad pin per string)', viaList.length === rejected.length, { reported: viaList.length, wanted: rejected.length });
+      check('compat control (finding 7): the validator names a reason for a truncated string and for a behaviour failure (an answer, not a crash)', /does not parse/.test(RUN.pinProblem(real0.slice(0, 60), O1) ?? '') && /not a digest assertion/.test(RUN.pinProblem(behave, O1) ?? '') && /not an overlaid skill file/.test(RUN.pinProblem(cEntry(13, 'RC1/C13/release', ['scripts/apply.mjs is unchanged']), O1) ?? ''), [RUN.pinProblem(real0.slice(0, 60), O1), RUN.pinProblem(behave, O1)]);
+    }
     check('compat control: a duplicate or empty pinned string is a bad pin', RUN.compareCompat({ actual: [pinned1[0]], pinned: [pinned1[0], pinned1[0]], overlaid: O1 }).badPins.length === 1 && RUN.pinnedListProblems(['', pinned1[0]], O1).length === 1);
     check('compat control: failureStringsOf takes the full set of results[].failures strings of a retained results file, unique and sorted, and refuses a malformed file', (() => { const ok = RUN.failureStringsOf(JSON.stringify({ results: [{ id: 'a', failures: ['y', 'x'] }, { id: 'b', failures: ['x'] }, { id: 'c', failures: [] }] })); const bad = [JSON.stringify({}), JSON.stringify({ results: [{ id: 'a' }] }), JSON.stringify({ results: [{ id: 'a', failures: [1] }] }), '{'].every((t) => failedAttempt(attempt(() => RUN.failureStringsOf(t)))); return JSON.stringify(ok) === '["x","y"]' && bad; })());
     check('runner control: totalsOf reads the last totals line, resultsFileOf the RESULTS line; both are null when absent', (() => { const t = RUN.totalsOf('x\n10 PASS / 2 FAIL / 1 SKIP\nnoise\n11 PASS / 0 FAIL / 0 SKIP\n'); const r = RUN.resultsFileOf('a\nRESULTS  D:/x/y.json\nb\n'); return t !== null && t.passed === 11 && t.failed === 0 && t.skipped === 0 && r === 'D:/x/y.json' && RUN.totalsOf('nothing') === null && RUN.resultsFileOf('nothing') === null; })());
     check('runner control: parseCliArgs refuses an unknown flag, a repeated flag, a missing value, a label without an overlay, a label without accept-rc1 and an unknown gate; it accepts the documented forms', (() => { const P = RUN.parseCliArgs; const refused = [['--out'], ['--out', 'a', '--out', 'b'], ['--x'], ['--out', 'a', '--label', 'l'], ['--out', 'a', '--overlay', 'scripts/detect.mjs', '--label', 'l'], ['--out', 'a', '--run', 'nope'], ['--out', 'a', '--run', 'c18,c18'], []].every((a) => P(a).ok === false); const good = P(['--out', 'a', '--overlay', 'scripts/detect.mjs', '--label', 'scripts', '--run', 'accept-rc1']); const dflt = P(['--out', 'a']); return refused && good.ok === true && good.label === 'scripts' && dflt.ok === true && JSON.stringify(dflt.run) === JSON.stringify(['release-3.1', 'c18', 'bs-doc-map']); })());
     check('runner control: outDirProblems refuses a directory inside the repository, inside the temp directory, and a non-empty one', (() => { const inRepo = RUN.outDirProblems(path.join(REPO, 'view-x')); const inTmp = RUN.outDirProblems(path.join(os.tmpdir(), 'view-x')); const full = scratchDir('fullout'); fs.writeFileSync(path.join(full, 'f'), 'x'); const nonEmpty = RUN.outDirProblems(full, { repoRoot: REPO, tmp: path.join(scratch, 'elsewhere') }); const fine = RUN.outDirProblems(path.join(scratch, 'fresh-view'), { repoRoot: REPO, tmp: path.join(scratch, 'elsewhere') }); return inRepo.some((m) => /inside the repository/.test(m)) && inTmp.some((m) => /temp directory/.test(m)) && nonEmpty.some((m) => /not empty/.test(m)) && fine.length === 0; })());
+    // Finding 1 (review 3): containment is decided by a parent SEGMENT, not by a text prefix: "<repo>/..view" is inside the repository and "<temp>/..view" inside the temp directory; a sibling whose name starts with the repository name is outside.
+    { const base = scratchDir('contain'); const repo = path.join(base, 'repo'); const tmpd = path.join(base, 'tmpdir'); fs.mkdirSync(repo); fs.mkdirSync(tmpd); fs.mkdirSync(path.join(base, 'repo-view')); fs.mkdirSync(path.join(base, 'repo2')); fs.mkdirSync(path.join(repo, '..a'));
+      const opts = { repoRoot: repo, tmp: tmpd }; const has2 = (ps, rx) => ps.some((m) => rx.test(m));
+      const inRepoDots = RUN.outDirProblems(path.join(repo, '..view'), opts); const inRepoDotsExisting = RUN.outDirProblems(path.join(repo, '..a'), opts); const inTmpDots = RUN.outDirProblems(path.join(tmpd, '..view'), opts);
+      check('runner control (finding 1): a view directory named "..view" or "..a" inside the repository is refused as inside the repository (existing or not), and "..view" inside the temp directory as inside the temp directory', has2(inRepoDots, /inside the repository/) && has2(inRepoDotsExisting, /inside the repository/) && has2(inTmpDots, /temp directory/) && !has2(inTmpDots, /inside the repository/), { inRepoDots, inRepoDotsExisting, inTmpDots });
+      const realDots = RUN.outDirProblems(path.join(REPO, '..view')); const realTmpDots = RUN.outDirProblems(path.join(os.tmpdir(), '..view'));
+      check('runner control (finding 1): with the real repository and the real temp directory (the defaults), "<repo>/..view" and "<temp>/..view" are refused too', has2(realDots, /inside the repository/) && has2(realTmpDots, /temp directory/), { realDots, realTmpDots });
+      const sibling = RUN.outDirProblems(path.join(base, 'repo-view'), opts); const siblingNew = RUN.outDirProblems(path.join(base, 'repo-view-new'), opts); const sibling2 = RUN.outDirProblems(path.join(base, 'repo2'), opts); const tmpSibling = RUN.outDirProblems(path.join(base, 'tmpdir-view'), opts);
+      check('runner control (finding 1): a sibling directory whose name merely starts with the repository name ("repo-view", "repo-view-new", "repo2") or the temp directory name is accepted (no problem), not read as inside', sibling.length === 0 && siblingNew.length === 0 && sibling2.length === 0 && tmpSibling.length === 0, { sibling, siblingNew, sibling2, tmpSibling });
+      const sameDir = RUN.outDirProblems(repo, opts); const childOfRepo = RUN.outDirProblems(path.join(repo, 'view'), opts);
+      check('runner control (finding 1): the repository directory itself and an ordinary child of it are inside the repository (the segment rule keeps the plain cases)', has2(sameDir, /inside the repository/) && has2(childOfRepo, /inside the repository/), { sameDir, childOfRepo });
+      let linked = null; const link = path.join(base, 'link-to-repo');
+      try { fs.symlinkSync(repo, link, 'junction'); linked = true; } catch (e) { linked = String(e && e.code ? e.code : e); }
+      if (linked === true) { const viaLink = RUN.outDirProblems(path.join(link, 'view'), opts); const viaLinkDots = RUN.outDirProblems(path.join(link, '..view'), opts); check('runner control (finding 1): a directory reached through a link (a junction or symbolic link) into the repository is refused: the comparison is by real location', has2(viaLink, /inside the repository/) && has2(viaLinkDots, /inside the repository/), { viaLink, viaLinkDots }); }
+      else skip('runner control (finding 1): a directory reached through a link into the repository is refused (the comparison is by real location)', `a link could not be created on this platform (${linked})`);
+    }
     check('runner control: the gates the runner can start are exactly release-3.1, c18, bs-doc-map and accept-rc1, run from tests/', JSON.stringify(Object.keys(RUN.GATES).sort()) === '["accept-rc1","bs-doc-map","c18","release-3.1"]' && Object.values(RUN.GATES).every((f) => /^[a-z0-9.-]+\.mjs$/.test(f)));
   }
 }
@@ -794,15 +891,17 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
     const LONG_PAX = `docs/plans/${'segment-'.repeat(13)}end.md`; // a name over 100 bytes: git archive writes a pax "path" record
     const LONG_PREFIX = `docs/plans/${'d'.repeat(45)}/${'e'.repeat(45)}.md`; // over 100 bytes in all, the name part under 100: a ustar prefix
     const BASE_PLANS = { 'docs/plans/a.md': 'base a\n', 'docs/plans/sub/b.md': 'base b\n', [LONG_PAX]: 'pax path\n', [LONG_PREFIX]: 'prefix path\n', 'docs/plans/crlf.txt': Buffer.from('one\r\ntwo\r\n'), 'docs/plans/bin.dat': Buffer.from([0, 1, 2, 255, 254, 13, 10, 0]) };
-    const bootRepo = (label, { tags = 'all' } = {}) => {
+    // tags: all | none | other (only v9) | a tag NAME starting with "project-setup-v" (that one lightweight tag on the base commit) | treetag (project-setup-v2.0.0 names the base TREE, not a commit); plans: extra files of the base commit.
+    const bootRepo = (label, { tags = 'all', plans = {} } = {}) => {
       const tmp = scratchDir(label); const env = gitEnv(tmp); const repo = path.join(tmp, 'repo'); fs.mkdirSync(repo);
       const g = (...a) => gitOut(env, repo, a);
       g('init', '-q'); put(repo, 'README.md', 'root\n'); g('add', '-A'); g('commit', '-qm', 'root');
       const root = g('rev-parse', 'HEAD').stdout.trim();
-      for (const [rel, data] of Object.entries(BASE_PLANS)) put(repo, rel, data);
+      for (const [rel, data] of Object.entries({ ...BASE_PLANS, ...plans })) put(repo, rel, data);
       g('add', '-A'); g('commit', '-qm', 'base');
       const base = g('rev-parse', 'HEAD').stdout.trim();
-      if (tags !== 'none') g('tag', tags === 'other' ? 'v9' : 'project-setup-v2.0.0');
+      if (tags === 'treetag') g('tag', 'project-setup-v2.0.0', g('rev-parse', 'HEAD^{tree}').stdout.trim());
+      else if (tags !== 'none') g('tag', tags === 'other' ? 'v9' : /^project-setup-v/.test(tags) ? tags : 'project-setup-v2.0.0');
       put(repo, 'docs/plans/c-new.md', 'head new\n'); put(repo, 'docs/plans/a.md', 'head a\n'); fs.rmSync(path.join(repo, 'docs', 'plans', 'sub', 'b.md'));
       g('add', '-A'); g('commit', '-qm', 'head');
       if (tags === 'all') { g('tag', '-a', 'project-setup-v3.1.0', '-m', 'annotated'); g('tag', 'v9'); }
@@ -854,13 +953,106 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
       check('bootstrap control: GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE in the caller environment (a runner started from a git hook) do not redirect it: the view gets its own repository and the other repository is untouched', r.ok === true && gx('rev-parse', '--git-dir').stdout.trim() === '.git' && gx('rev-list', '--count', 'HEAD').stdout.trim() === '1' && gx('ls-files').stdout.includes('project-setup/x.md') && fingerprint(decoy.repo) === decoyBefore, { r, decoyTouched: fingerprint(decoy.repo) !== decoyBefore });
     }
     { const f = bootRepo('boot-global'); const v = bootView('boot-global-view'); const gd = scratchDir('boot-global-cfg'); const marker = path.join(gd, 'marker.txt'); const hooks = path.join(gd, 'hooks'); fs.mkdirSync(hooks);
-      for (const h of ['pre-commit', 'commit-msg', 'post-commit', 'post-index-change']) fs.writeFileSync(path.join(hooks, h), `#!/bin/sh\necho ${h} >> "${slashed(marker)}"\nexit 1\n`);
+      for (const h of ['pre-commit', 'commit-msg', 'post-commit', 'post-index-change']) { fs.writeFileSync(path.join(hooks, h), `#!/bin/sh\necho ${h} >> "${slashed(marker)}"\nexit 1\n`); fs.chmodSync(path.join(hooks, h), 0o755); } // executable, or on POSIX a hook never runs and the control proves nothing
       const excl = path.join(gd, 'excludes'); fs.writeFileSync(excl, '*.md\n');
       const cfg = path.join(gd, 'gitconfig'); fs.writeFileSync(cfg, `[core]\n\thooksPath = ${slashed(hooks)}\n\tautocrlf = true\n\texcludesFile = ${slashed(excl)}\n[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = ${slashed(gd)}/no-such-gpg\n[user]\n\tname = Global Person\n\temail = global@example.invalid\n`);
-      const r = withEnv({ GIT_CONFIG_GLOBAL: cfg }, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base }));
+      fs.copyFileSync(cfg, path.join(gd, '.gitconfig')); // the runner removes GIT_CONFIG_GLOBAL, so the hostile configuration reaches git the ordinary way: the home directory
+      const hostileHome = { GIT_CONFIG_GLOBAL: cfg, HOME: gd, USERPROFILE: gd, XDG_CONFIG_HOME: path.join(gd, 'xdg') };
+      { const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k, val]) => !/^GIT_/i.test(k) && typeof val === 'string')); const pr = scratchDir('boot-global-probe');
+        const pe = { ...cleanEnv, HOME: gd, USERPROFILE: gd, XDG_CONFIG_HOME: path.join(gd, 'xdg'), GIT_TERMINAL_PROMPT: '0' };
+        const pg = (...a) => spawnSync('git', a, { cwd: pr, env: pe, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 });
+        pg('init', '-q'); fs.writeFileSync(path.join(pr, 'f.txt'), 'x\n'); pg('add', '-A'); const pc = pg('commit', '-qm', 'probe'); try { fs.rmSync(marker); } catch { /* none */ }
+        check('bootstrap control (precondition): the hostile global configuration is live where git reads it (an unpinned commit made with it in the home directory fails: signing with a program that does not exist, a failing pre-commit hook), so the control below is not vacuous', pc.status !== 0, { status: pc.status, err: String(pc.stderr).slice(0, 160) }); }
+      const r = withEnv(hostileHome, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base }));
       const gx = (...a) => gitOut(f.env, v, a); const ls = gx('ls-files').stdout.split('\n');
       check('bootstrap control: a hostile global git configuration (hooks, signing, autocrlf, a global ignore file, another identity) changes nothing: it commits, runs no hook, keeps the CRLF bytes, tracks every view file and uses the fixed identity', r.ok === true && !fs.existsSync(marker) && Buffer.compare(gitOut(f.env, v, ['cat-file', 'blob', 'HEAD:project-setup/crlf.md'], true).stdout, Buffer.from('a\r\nb\r\n')) === 0 && ls.includes('project-setup/x.md') && ls.includes('README.md') && gx('status', '--porcelain').stdout === '' && gx('log', '-1', '--format=%an').stdout.trim() === 'run-310-view', { r, hooksRan: fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8') : null, ls });
     }
+    // ---- Review 3 fix round (tests session 5): containment, environment, configuration, archive exactness, prerequisites. ----
+    const cleanProcessEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k, val]) => !/^GIT_/i.test(k) && typeof val === 'string'));
+    const hostileGitVars = (dir) => ({ GIT_DIR: path.join(dir, 'no-git-dir'), GIT_WORK_TREE: dir, GIT_INDEX_FILE: path.join(dir, 'no-index'), GIT_OBJECT_DIRECTORY: path.join(dir, 'no-objects'), GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(dir, 'no-alt'), GIT_COMMON_DIR: path.join(dir, 'no-common'), GIT_NAMESPACE: 'hostile-ns', GIT_CEILING_DIRECTORIES: dir, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: path.join(dir, 'no-hooks'), GIT_CONFIG_PARAMETERS: "'core.fsmonitor'='hostile'", GIT_CONFIG_GLOBAL: path.join(dir, 'no-global'), GIT_CONFIG_SYSTEM: path.join(dir, 'no-system'), GIT_CONFIG_NOSYSTEM: '0', GIT_AUTHOR_NAME: 'Hostile' });
+    // Finding 1: the bootstrap's own containment check (the same predicate as the runner's).
+    { const inside = bootRepo('boot-dots'); const dv = path.join(inside.repo, '..view'); fs.mkdirSync(dv); put(dv, 'project-setup/x.md', 'x\n');
+      bad('a view directory named "..view" inside the repository is refused as inside the repository (a name that only starts with two dots is a child of the repository) and no repository is created there', /inside the repository/, { repo: inside.repo, base: inside.base, view: dv });
+      const sib = bootRepo('boot-sibling'); const sv = path.join(sib.tmp, 'repo-view'); fs.mkdirSync(sv); put(sv, 'project-setup/x.md', 'x\n');
+      const sr = RUN.bootstrapStrictGate(sv, sib.repo, { baseCommit: sib.base });
+      check('bootstrap control (finding 1): a view directory next to the repository whose name starts with the repository name ("repo-view" beside "repo") is accepted and bootstrapped (a text-prefix test would call it inside)', sr.ok === true && fs.existsSync(path.join(sv, '.git')) && fs.existsSync(path.join(sv, 'docs', 'plans', 'a.md')), sr); }
+    // Finding 2 and 3: every git call of the bootstrap, as recorded: the pinned configuration and a scrubbed environment, with hostile GIT_* variables in the caller's environment.
+    { const f = bootRepo('boot-argv'); const v = bootView('boot-argv-view'); const calls = []; const keepVar = 'V320_KEEP_ME';
+      const rec = (cmd, args, o) => { calls.push({ cmd, args: [...args], env: o.env }); return spawnSync(cmd, args, o); };
+      const r = withEnv({ ...hostileGitVars(f.tmp), [keepVar]: 'kept' }, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base, git: rec }));
+      const cfgOf = (args) => { const out = []; for (let i = 0; i < args.length - 1; i++) if (args[i] === '-c') out.push(args[i + 1]); return out; };
+      const unpinned = calls.filter((c) => { const p = cfgOf(c.args); return !p.includes('core.fsmonitor=false') || !p.includes('core.untrackedCache=false'); });
+      check('bootstrap control (finding 3): every git call of the bootstrap (cat-file, archive, ls-tree, init, fetch, tag, rev-parse, add, commit) carries -c core.fsmonitor=false and -c core.untrackedCache=false, so no configured file-system monitor can run (recorded argv)', r.ok === true && calls.length >= 10 && unpinned.length === 0 && calls.every((c) => c.cmd === 'git'), { r, calls: calls.length, unpinned: unpinned.map((c) => c.args.slice(-8)) });
+      const leaked = calls.filter((c) => Object.keys(c.env).some((k) => /^GIT_/i.test(k) && k.toUpperCase() !== 'GIT_TERMINAL_PROMPT'));
+      check('bootstrap control (finding 2): with GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_COMMON_DIR, GIT_NAMESPACE, GIT_CEILING_DIRECTORIES, GIT_CONFIG_* and GIT_AUTHOR_NAME in the caller\'s environment, no git call of the bootstrap receives any GIT_* variable but GIT_TERMINAL_PROMPT=0, and the other variables (PATH, a custom one) are kept', r.ok === true && calls.length >= 10 && leaked.length === 0 && calls.every((c) => c.env.GIT_TERMINAL_PROMPT === '0' && c.env[keepVar] === 'kept' && Object.keys(c.env).some((k) => k.toUpperCase() === 'PATH')), { r, leaked: leaked.map((c) => Object.keys(c.env).filter((k) => /^GIT_/i.test(k))) });
+      check('environment control (finding 2): envWithoutGit removes every GIT_* variable whatever its letter case, keeps GITHUB_ACTIONS and every other variable, and drops a value that is not a string', (() => { const out = RUN.envWithoutGit({ PATH: 'p', HOME: 'h', GITHUB_ACTIONS: 'true', GIT_DIR: 'd', GIT_INDEX_FILE: 'i', git_work_tree: 'w', Git_Object_Directory: 'o', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'k', GIT_NAMESPACE: 'n', GIT_COMMON_DIR: 'c', GIT_ALTERNATE_OBJECT_DIRECTORIES: 'a', GIT_CONFIG_GLOBAL: 'g', X: undefined, Y: 5 }); return JSON.stringify(Object.keys(out).sort()) === '["GITHUB_ACTIONS","HOME","PATH"]'; })()); }
+    // Finding 3: an executable core.fsmonitor in a hostile global configuration. Git runs it on every index operation (git add -A included) and core.hooksPath does not stop it.
+    { const f = bootRepo('boot-fsm'); const v = bootView('boot-fsm-view'); const gd = scratchDir('boot-fsm-cfg'); const marker = path.join(gd, 'fsmonitor-ran.txt'); const hook = path.join(gd, 'fsmonitor-hook.mjs');
+      fs.writeFileSync(hook, `import fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(slashed(marker))}, 'fsmonitor ' + process.argv.slice(2).join(' ') + '\\n');\nprocess.stdout.write('\\0');\n`);
+      const quoted = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+      fs.writeFileSync(path.join(gd, '.gitconfig'), `[core]\n\tfsmonitor = ${quoted(`"${slashed(process.execPath)}" "${slashed(hook)}"`)}\n[user]\n\tname = Hostile\n\temail = hostile@example.invalid\n`);
+      const hostileHome = { HOME: gd, USERPROFILE: gd, XDG_CONFIG_HOME: path.join(gd, 'xdg') };
+      const pr = scratchDir('boot-fsm-probe'); const pe = { ...cleanProcessEnv(), ...hostileHome, GIT_TERMINAL_PROMPT: '0' };
+      const pg = (...a) => spawnSync('git', a, { cwd: pr, env: pe, encoding: 'utf8', shell: false, windowsHide: true, timeout: 120000 });
+      pg('init', '-q'); fs.writeFileSync(path.join(pr, 'f.txt'), 'x\n'); const pa = pg('add', '-A'); const executes = pa.status === 0 && fs.existsSync(marker); try { fs.rmSync(marker); } catch { /* none */ }
+      if (!executes) skip('bootstrap control (finding 3): an executable core.fsmonitor in the global configuration is never run (marker file)', `the fsmonitor command could not be made to run on this platform (add status ${pa.status}); the recorded-argv control above asserts the pinned flags on every git call instead`);
+      else {
+        check('bootstrap control (precondition, finding 3): the marker-producing core.fsmonitor really runs under an unpinned git add -A with this configuration in the home directory (so the control below is not vacuous)', executes, { status: pa.status });
+        const r = withEnv(hostileHome, () => RUN.bootstrapStrictGate(v, f.repo, { baseCommit: f.base }));
+        check('bootstrap control (finding 3): with an executable core.fsmonitor (a command that writes a marker file) in the global configuration, the bootstrap succeeds and the command never runs: no marker file', r.ok === true && !fs.existsSync(marker), { r, marker: fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').slice(0, 120) : null });
+      } }
+    // Finding 4: git archive honours .git/info/attributes. An export-ignore drops a plan file and an export-subst rewrites one, silently; the bootstrap compares the archive with git ls-tree of the commit.
+    { const attrib = (repo, text) => { fs.mkdirSync(path.join(repo, '.git', 'info'), { recursive: true }); fs.writeFileSync(path.join(repo, '.git', 'info', 'attributes'), text); };
+      const archived = (f) => { const a = gitOut(f.env, f.repo, ['archive', '--format=tar', f.base, 'docs/plans'], true); return a.status === 0 ? RUN.parseTar(a.stdout) : null; };
+      const fi = bootRepo('boot-xignore'); attrib(fi.repo, 'docs/plans/a.md export-ignore\n'); const ei = archived(fi);
+      check('archive control (precondition, finding 4): a plain git archive of the base commit drops docs/plans/a.md when .git/info/attributes marks it export-ignore and still reports success (the defect is live)', ei !== null && !ei.some((e) => e.path === 'docs/plans/a.md') && ei.some((e) => e.path === 'docs/plans/sub/b.md'), ei === null ? 'git archive failed' : ei.map((e) => e.path));
+      bad('an archive that drops a plan file (export-ignore in .git/info/attributes) fails the bootstrap, naming the missing file, and nothing is written to the view', /docs\/plans from the archive is not the base commit's \(1 difference\(s\)\): docs\/plans\/a\.md is missing/, { repo: fi.repo, base: fi.base });
+      const subst = 'commit $Format:%H$ end\n'; const fx = bootRepo('boot-xsubst', { plans: { 'docs/plans/subst.md': subst } }); attrib(fx.repo, 'docs/plans/subst.md export-subst\n'); const ex = archived(fx); const sf = ex === null ? undefined : ex.find((e) => e.path === 'docs/plans/subst.md');
+      check('archive control (precondition, finding 4): a plain git archive rewrites the $Format:%H$ placeholder of a file marked export-subst, so the plan bytes differ from the commit and git archive still reports success', sf !== undefined && !sf.data.equals(Buffer.from(subst)) && /^commit [0-9a-f]{40} end\n$/.test(sf.data.toString('utf8')), sf === undefined ? 'no subst.md in the archive' : sf.data.toString('utf8'));
+      bad('an archive that rewrites a plan file (export-subst of a $Format:...$ placeholder in .git/info/attributes) fails the bootstrap, naming the file, and nothing is written to the view', /docs\/plans from the archive is not the base commit's \(1 difference\(s\)\): docs\/plans\/subst\.md has other bytes/, { repo: fx.repo, base: fx.base });
+      const fb = bootRepo('boot-xboth', { plans: { 'docs/plans/subst.md': subst } }); attrib(fb.repo, 'docs/plans/a.md export-ignore\ndocs/plans/subst.md export-subst\n');
+      bad('both defects at once are both reported (two differences), and nothing is written', /\(2 difference\(s\)\)/, { repo: fb.repo, base: fb.base });
+      const fn = bootRepo('boot-xnone'); attrib(fn.repo, 'docs/plans/a.md -diff\ndocs/plans/sub/* linguist-generated\n'); const vn = bootView('boot-xnone-view'); const rn = RUN.bootstrapStrictGate(vn, fn.repo, { baseCommit: fn.base });
+      check('archive control: attributes that do not change the archive (-diff, linguist-generated) are not refused (the comparison is by content, not by the presence of an attributes file)', rn.ok === true && rn.plans === 6, rn);
+      // The comparison itself, on synthetic records.
+      const blobFile = path.join(scratchDir('blob-id'), 'f.bin'); const odd = Buffer.concat([Buffer.from('one\r\ntwo\r\n'), Buffer.from([0, 255, 13, 10, 36])]); fs.writeFileSync(blobFile, odd);
+      const viaGit = gitOut(F.env, F.repo, ['hash-object', '--no-filters', blobFile]).stdout.trim();
+      check('archive control: gitBlobId equals git hash-object --no-filters on CRLF and binary bytes, and the id of the empty blob', RUN.gitBlobId(odd) === viaGit && RUN.gitBlobId(Buffer.alloc(0)) === 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391' && /^[0-9a-f]{40}$/.test(viaGit), { mine: RUN.gitBlobId(odd), git: viaGit });
+      const A = Buffer.from('A\n'); const B = Buffer.from('B\n'); const rec = (p, buf, extra = {}) => ({ mode: '100644', type: 'blob', oid: RUN.gitBlobId(buf), path: p, ...extra });
+      const recs = [rec('docs/plans/a.md', A), rec('docs/plans/b.md', B)]; const mapOf = (o) => new Map(Object.entries(o));
+      const D = (r, files) => RUN.plansDifferences(r, mapOf(files));
+      const results = [
+        ['the same set and bytes', D(recs, { 'docs/plans/a.md': A, 'docs/plans/b.md': B }), (d) => d.length === 0],
+        ['a missing file', D(recs, { 'docs/plans/a.md': A }), (d) => d.length === 1 && /b\.md is missing/.test(d[0])],
+        ['an extra file', D(recs, { 'docs/plans/a.md': A, 'docs/plans/b.md': B, 'docs/plans/c.md': A }), (d) => d.length === 1 && /c\.md is extra/.test(d[0])],
+        ['a file with other bytes of the same length', D(recs, { 'docs/plans/a.md': Buffer.from('X\n'), 'docs/plans/b.md': B }), (d) => d.length === 1 && /a\.md has other bytes/.test(d[0])],
+        ['a file with converted line endings', D(recs, { 'docs/plans/a.md': Buffer.from('A\r\n'), 'docs/plans/b.md': B }), (d) => d.length === 1 && /a\.md has other bytes/.test(d[0])],
+        ['a file renamed (one missing, one extra)', D(recs, { 'docs/plans/a.md': A, 'docs/plans/B.md': B }), (d) => d.length === 2],
+        ['a symbolic link record', D([rec('docs/plans/a.md', A, { mode: '120000' })], { 'docs/plans/a.md': A }), (d) => d.length === 1 && /not a regular file/.test(d[0])],
+        ['a submodule record', D([{ mode: '160000', type: 'commit', oid: '1'.repeat(40), path: 'docs/plans/sm' }], {}), (d) => d.some((x) => /not a regular file/.test(x))],
+        ['an executable file record is a regular file', D([rec('docs/plans/a.md', A, { mode: '100755' })], { 'docs/plans/a.md': A }), (d) => d.length === 0],
+        ['no record at all', D([], {}), (d) => d.length === 1 && /lists no file/.test(d[0])],
+      ];
+      check('archive control: plansDifferences reports a missing file, an extra file, other bytes (same length, converted line endings), a rename, a symbolic link, a submodule and an empty commit, and nothing for the same set with an executable bit', results.every(([, d, ok]) => ok(d)), results.filter(([, d, ok]) => !ok(d)).map(([n, d]) => [n, d]));
+      const real = gitOut(F.env, F.repo, ['ls-tree', '-r', '-z', '--full-tree', F.base, 'docs/plans'], true); const parsed = attempt(() => RUN.parseLsTree(real.stdout));
+      check('archive control: parseLsTree reads the real git ls-tree -r -z output (6 files, each oid the one git rev-parse gives), a path with a space and a newline, and refuses output that is not NUL-terminated or malformed', !failedAttempt(parsed) && parsed.length === 6 && parsed.every((r) => r.type === 'blob' && gitOut(F.env, F.repo, ['rev-parse', `${F.base}:${r.path}`]).stdout.trim() === r.oid) && RUN.parseLsTree(`100644 blob ${'a'.repeat(40)}\tdocs/plans/a b\nc.md\0`)[0].path === 'docs/plans/a b\nc.md' && RUN.parseLsTree('').length === 0 && ['100644 blob xyz\tdocs/plans/p\0', `100644 blob ${'a'.repeat(40)}\tdocs/plans/p`, `bad ${'a'.repeat(40)}\tdocs/plans/p\0`].every((t) => failedAttempt(attempt(() => RUN.parseLsTree(t)))), parsed); }
+    // Finding 6: the base must be a commit, and the tags the strict gate verifies must exist exactly.
+    { const treeId = F.g('rev-parse', `${F.base}^{tree}`).stdout.trim(); const tagObj = F.g('rev-parse', 'refs/tags/project-setup-v3.1.0').stdout.trim(); const blobId = F.g('rev-parse', `${F.base}:docs/plans/a.md`).stdout.trim();
+      const kinds = [treeId, tagObj, blobId].map((id) => F.g('cat-file', '-t', id).stdout.trim()); const arch = (id) => gitOut(F.env, F.repo, ['archive', '--format=tar', id, 'docs/plans'], true).status;
+      check('prerequisite control (precondition, finding 6): the base TREE id and the annotated tag id are 40-hex ids that git archive accepts for docs/plans exactly like the commit (so only a type check can refuse them)', JSON.stringify(kinds) === '["tree","tag","blob"]' && arch(treeId) === 0 && arch(tagObj) === 0 && arch(F.base) === 0, { kinds, tree: arch(treeId), tag: arch(tagObj) });
+      bad('a base that is the id of a TREE object holding docs/plans is refused as not a commit, and nothing is written', /is a tree object, not a commit/, { base: treeId });
+      bad('a base that is the id of an annotated TAG object is refused as not a commit (the commit id itself is required)', /is a tag object, not a commit/, { base: tagObj });
+      bad('a base that is the id of a BLOB object is refused as not a commit', /is a blob object, not a commit/, { base: blobId });
+      for (const name of ['project-setup-vgarbage', 'project-setup-v2.0.0-rc.1', 'project-setup-v2.0.1']) {
+        const g = bootRepo(`boot-tag-${seq}`, { tags: name }); bad(`a repository whose only project-setup-v* tag is ${name} is refused: the exact tag project-setup-v2.0.0 is missing`, /lacks the tag project-setup-v2\.0\.0 as a commit/, { repo: g.repo, base: g.base, keepsGit: true, writes: true });
+      }
+      { const g = bootRepo('boot-treetag', { tags: 'treetag' }); bad('a project-setup-v2.0.0 tag that names a TREE, not a commit, is refused', /lacks the tag project-setup-v2\.0\.0 as a commit/, { repo: g.repo, base: g.base, keepsGit: true, writes: true }); }
+      check('prerequisite control: the required tag list is exactly project-setup-v2.0.0 and is the tag tests/helpers/v2-baseline.mjs verifies', JSON.stringify(RUN.REQUIRED_TAGS) === '["project-setup-v2.0.0"]' && /tag: 'project-setup-v2\.0\.0'/.test(fs.readFileSync(path.join(SKILL, 'tests', 'helpers', 'v2-baseline.mjs'), 'utf8')), RUN.REQUIRED_TAGS);
+      { const v1 = bootView('boot-req-ok'); const ok = RUN.bootstrapStrictGate(v1, F.repo, { baseCommit: F.base, requiredTags: ['project-setup-v2.0.0', 'project-setup-v3.1.0'] });
+        check('prerequisite control: a required tag list is honoured: every listed tag must resolve to a commit (an annotated tag does, through ^{commit}) and the bootstrap succeeds', ok.ok === true, ok); }
+    }
+    { const v2 = bootView('boot-req-missing2'); const miss = RUN.bootstrapStrictGate(v2, F.repo, { baseCommit: F.base, requiredTags: ['project-setup-v9.9.9'] }); const v3 = bootView('boot-req-opt'); const opt = RUN.bootstrapStrictGate(v3, F.repo, { baseCommit: F.base, requiredTags: ['--output=x'] });
+      check('prerequisite control: a required tag that does not exist is refused naming it (the option), and a name that is not a plain tag name (an option) is refused before any git call, with no .git and no docs/ in the view', miss.ok === false && /lacks the tag project-setup-v9\.9\.9 as a commit/.test(miss.error) && opt.ok === false && /plain tag name/.test(opt.error) && !fs.existsSync(path.join(v3, '.git')) && !fs.existsSync(path.join(v3, 'docs')), { miss, opt }); }
     // The tar reader and the writer, on crafted streams.
     const tarHeader = ({ name, size = 0, type = '0', prefix = '', edit = null }) => {
       const h = Buffer.alloc(512);
@@ -902,7 +1094,7 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
       const stdout = '3 PASS / 0 FAIL / 0 SKIP\n';
       const drive = (label, run, bootstrap, extra = {}) => {
         const c = { spawn: [], boot: [], logged: [] }; const out = outOf(label);
-        const opts = { repoRoot: REPO, tmp: notTmp, log: (s) => c.logged.push(s), spawn: (cmd, args, o) => { c.spawn.push({ cmd, args, cwd: o.cwd, bootsSoFar: c.boot.length, seen: extra.atGate ? extra.atGate(o.cwd) : null }); return { status: 0, stdout }; } };
+        const opts = { repoRoot: REPO, tmp: notTmp, log: (s) => c.logged.push(s), spawn: (cmd, args, o) => { c.spawn.push({ cmd, args, cwd: o.cwd, env: o.env, bootsSoFar: c.boot.length, seen: extra.atGate ? extra.atGate(o.cwd) : null }); return { status: 0, stdout }; } };
         if (bootstrap !== null) opts.bootstrap = (...a) => { c.boot.push({ a, seen: c.logged.slice(), git: fs.existsSync(path.join(a[0], '.git')), docs: fs.existsSync(path.join(a[0], 'docs')) }); return bootstrap(...a); };
         const r = attempt(() => RUN.runView(['--out', out, ...incl, '--run', run], opts));
         return { c, out, r, lines: failedAttempt(r) ? [] : r.lines, shown: failedAttempt(r) ? r : { code: r.code, lines: r.lines.slice(0, 8) } };
@@ -926,10 +1118,25 @@ const put = (root, rel, data) => { const p = path.join(root, ...rel.split('/'));
         const prechange = attempt(() => JSON.parse(fs.readFileSync(path.join(REPO, 'project-setup', 'tests', 'fixtures', 'v320-prechange.json'), 'utf8')));
         const manifest = failedAttempt(prechange) ? prechange : attempt(() => H.verifyView(d.out, prechange));
         check('runner control: end to end with the real bootstrap, the strict gate would start in a view that holds the base commit\'s docs/plans (byte for byte, and not the 3.2.0 plan), a repository with the project-setup-v2.0.0 tag and one clean commit, and the manifest check found no extra file', !failedAttempt(d.r) && d.r.code === 0 && d.lines.some((l) => /^MANIFEST {2}OK /.test(l)) && d.lines.some((l) => /^BOOTSTRAP {2}OK /.test(l)) && seen !== null && /^[0-9a-f]{40}$/.test(seen.head) && seen.v2 === 0 && seen.status === '' && seen.count === '1' && same && !failedAttempt(manifest) && JSON.stringify(manifest) === JSON.stringify({ extra: [], missing: [], changed: [] }), { run: d.shown, seen, plansEqualBase: same, baseCount: baseNow.length, here: here.length, manifest }); }
+      // Finding 2 (review 3): the caller's GIT_INDEX_FILE names a sentinel file; every other redirecting GIT_* variable is hostile too. The real view construction and the real bootstrap run, the gate spawn is injected.
+      { const sdir = scratchDir('rv-sentinel-src'); const sentinel = path.join(sdir, 'sentinel-index'); fs.writeFileSync(sentinel, 'SENTINEL: this is not a git index\n'); const bytes = fs.readFileSync(sentinel); const mtime = fs.statSync(sentinel).mtimeMs;
+        const genv = gitEnv(scratchDir('rv-sentinel-genv'));
+        const atGate = (cwd) => ({ head: gitOut(genv, cwd, ['rev-parse', '--verify', 'HEAD^{commit}']).stdout.trim(), count: gitOut(genv, cwd, ['rev-list', '--count', 'HEAD']).stdout.trim() });
+        const hostile = { ...hostileGitVars(sdir), GIT_INDEX_FILE: sentinel, V320_KEEP_ME: 'kept' };
+        const d = withEnv(hostile, () => drive('rv-sentinel', 'accept-rc1', null, { atGate }));
+        const gateEnv = d.c.spawn.length === 1 ? d.c.spawn[0].env : null; const seen = d.c.spawn.length === 1 ? d.c.spawn[0].seen : null;
+        const leaked = gateEnv === null ? ['(no gate started)'] : Object.keys(gateEnv).filter((k) => /^GIT_/i.test(k));
+        check('runner control (finding 2): with GIT_INDEX_FILE naming a sentinel file (and GIT_DIR, GIT_WORK_TREE, GIT_OBJECT_DIRECTORY, GIT_COMMON_DIR, GIT_CONFIG_* and the rest hostile) in the environment, the view is built and bootstrapped, the sentinel file is neither read nor written (same bytes, same mtime, no lock file beside it), the view holds its own repository with one commit, and the gate child receives no GIT_* variable', !failedAttempt(d.r) && d.r.code === 0 && d.lines.some((l) => /^VIEW /.test(l)) && d.lines.some((l) => /^BOOTSTRAP {2}OK /.test(l)) && fs.readFileSync(sentinel).equals(bytes) && fs.statSync(sentinel).mtimeMs === mtime && JSON.stringify(fs.readdirSync(sdir)) === '["sentinel-index"]' && seen !== null && /^[0-9a-f]{40}$/.test(seen.head) && seen.count === '1' && gateEnv !== null && leaked.length === 0, { run: d.shown, leaked, seen, sentinelIntact: fs.readFileSync(sentinel).equals(bytes), listing: fs.readdirSync(sdir) });
+        check('runner control (finding 2): the gate child keeps the ordinary environment (PATH and a custom variable) while every GIT_* variable is removed, whatever its letter case', gateEnv !== null && gateEnv.V320_KEEP_ME === 'kept' && Object.keys(gateEnv).some((k) => k.toUpperCase() === 'PATH') && Object.keys(gateEnv).every((k) => !/^GIT_/i.test(k)), gateEnv === null ? 'no gate started' : Object.keys(gateEnv).filter((k) => /^GIT_/i.test(k) || k === 'V320_KEEP_ME'));
+        const p = withEnv(hostile, () => drive('rv-sentinel-plain', 'release-3.1,c18,bs-doc-map', fakeOk));
+        check('runner control (finding 2): in a run without accept-rc1 each of the three gate children receives no GIT_* variable either, and the sentinel file is untouched', !failedAttempt(p.r) && p.r.code === 0 && p.c.spawn.length === 3 && p.c.spawn.every((s) => Object.keys(s.env).every((k) => !/^GIT_/i.test(k)) && s.env.V320_KEEP_ME === 'kept') && fs.readFileSync(sentinel).equals(bytes), { run: p.shown, spawn: p.c.spawn.map((s) => Object.keys(s.env).filter((k) => /^GIT_/i.test(k))) });
+      }
+      // Finding 5 (review 3): the gates write outside --out (os.tmpdir()), so the header must not claim otherwise.
+      check('runner doc control (finding 5): the runner header says that the historical gates it starts are NOT confined to --out (they write under the OS temp directory, os.tmpdir()) and no longer claims that the run writes nothing outside --out', (() => { const src = fs.readFileSync(path.join(SKILL, 'tests', 'run-310-view.mjs'), 'utf8'); const head = src.split('\n').slice(0, 45).join('\n'); return /HISTORICAL GATES IT STARTS ARE NOT CONFINED TO --out/.test(head) && /os\.tmpdir\(\)/.test(head) && /temp directory/.test(head) && !/writes nothing outside --out/i.test(src); })());
     }
   }
 }
-// END bootstrap controls (tests session 3)
+// END bootstrap controls (tests session 3; the review 3 fix round of session 5 adds the controls marked finding 1 to 8)
 // Notes, claims and acceptance engines: a valid synthetic document passes and each defect is rejected.
 const NOTES_GOOD = Buffer.from([
   '# project-setup 3.2.0', '', '## Compatibility', '', 'Projects installed by 3.1.0 update in place.', '', '## What changed', '', '- Item A.', '', '## Upgrading', '',
@@ -1021,10 +1228,57 @@ const GOOD_CLAIMS = () => ({
 
 // ===================================================================================================== C. actual obligations ====
 const claims = { VERSION: actualText('VERSION'), SKILL: actualText('SKILL.md'), PSREADME: actualText('README.md'), CHANGELOG: actualText('CHANGELOG.md'), ROOTREADME: actualText('@root/README.md'), TREE: actualText('@root/.ai/context/project-tree.md'), MODES: actualText('references/modes.md') };
+// The 21 amendable files are read as ACTUAL holds them; the other normative files (assets/agents/docs-sync.md, references/codex.md, references/state-and-apply.md, and any other) from disk.
+const normActual = (k) => { if (typeof ACTUAL[k] === 'string') return ACTUAL[k]; const r = attempt(() => fs.readFileSync(absOf(k), 'utf8')); return failedAttempt(r) ? '' : r; };
 needPins('every 3.1.0 normative line (a line holding MUST, SHOULD or MAY) of SKILL.md, references/*, assets/agents/*, assets/templates/* and data/* is still present (16-hex line digests pinned in this spec, D-4)', { NORMATIVE_LINES }, () => {
-  const lost = Object.entries(NORMATIVE_LINES).map(([k, digests]) => { const have = new Set(lf(actualText(k)).split('\n').map(lineDigest)); return [k, digests.filter((d) => !have.has(d)).length]; }).filter(([, n]) => n > 0);
+  const lost = Object.entries(NORMATIVE_LINES).map(([k, digests]) => { const have = new Set(lf(normActual(k)).split('\n').map(lineDigest)); return [k, digests.filter((d) => !have.has(d)).length]; }).filter(([, n]) => n > 0);
   return [Object.keys(NORMATIVE_LINES).every(NORMATIVE_SCOPE) && lost.length === 0, lost];
 });
+// Finding 8 (review 3): the table above is only as strong as its coverage. The base blobs of EVERY normative file are read through git and the table must hold exactly their keyword lines.
+const baseNormativeTexts = () => {
+  const env = gitEnv(scratchDir('norm-base'));
+  const run = (args) => spawnSync('git', ['-c', 'core.fsmonitor=false', ...args], { cwd: REPO, env, encoding: 'buffer', shell: false, windowsHide: true, timeout: 180000, maxBuffer: 1 << 27 });
+  const ls = run(['ls-tree', '-r', '-z', '--full-tree', BASE_COMMIT, 'project-setup']);
+  if (ls.error || ls.status !== 0) return { threw: `git ls-tree of the base commit failed (${ls.error ? ls.error.code : `exit ${ls.status}`})` };
+  const out = {};
+  for (const rec of ls.stdout.toString('utf8').split('\0').filter(Boolean)) {
+    const m = /^\d+ blob ([0-9a-f]{40})\tproject-setup\/(.+)$/.exec(rec);
+    if (m === null || !NORMATIVE_SCOPE(m[2])) continue;
+    const b = run(['cat-file', 'blob', m[1]]);
+    if (b.error || b.status !== 0) return { threw: `git cat-file of ${m[2]} failed` };
+    if (has(BASE_FILES, m[2]) && sha(b.stdout) !== BASE_FILES[m[2]]) return { threw: `${m[2]}: the base blob is not the pinned 3.1.0 bytes` };
+    out[m[2]] = b.stdout.toString('utf8');
+  }
+  return out;
+};
+needPins('the normative-line table covers every 3.1.0 line holding MUST, SHOULD or MAY of EVERY normative file (SKILL.md, references/*, assets/agents/*, assets/templates/*, data/*), read from the base commit blobs through git, and holds no line the base does not have (finding 8)', { NORMATIVE_LINES, BASE_FILES }, () => {
+  const texts = baseNormativeTexts();
+  if (failedAttempt(texts)) return [false, texts.threw];
+  const cov = normativeCoverage(texts, NORMATIVE_LINES);
+  const must = ['assets/agents/docs-sync.md', 'references/codex.md', 'references/state-and-apply.md', 'SKILL.md'];
+  return [Object.keys(texts).length >= 20 && must.every((k) => has(texts, k) && has(NORMATIVE_LINES, k)) && cov.uncovered.length === 0 && cov.stale.length === 0, { files: Object.keys(texts).length, uncovered: cov.uncovered.slice(0, 5), stale: cov.stale.slice(0, 5) }];
+});
+{ // the coverage engine on synthetic trees: each defect is reported, and nothing is reported for a faithful table
+  const KW = 'The agent MUST stop here.'; const KW2 = 'It SHOULD ask first.'; const MAY = 'A reader MAY skip this.';
+  const texts = { 'SKILL.md': `# t\n${KW}\nplain line\n${KW2}\n`, 'references/a.md': `${MAY}\n`, 'references/none.md': 'no keyword here\n', 'scripts/x.mjs': `// ${KW}\n`, 'tests/y.mjs': `${KW}\n` };
+  const good = { 'SKILL.md': [lineDigest(KW), lineDigest(KW2)], 'references/a.md': [lineDigest(MAY)] };
+  const run = (t, tab) => normativeCoverage(t, tab);
+  const faithful = run(texts, good);
+  check('normative coverage control (sanity): a table holding exactly the keyword lines of the normative files reports nothing (a file out of scope and a file without a keyword line need no entry)', faithful.uncovered.length === 0 && faithful.stale.length === 0, faithful);
+  const noFile = run(texts, { 'SKILL.md': good['SKILL.md'] });
+  check('normative coverage control: a normative file with keyword lines and no table entry is reported (the defect of finding 8: three files were simply absent)', noFile.uncovered.length === 1 && noFile.uncovered[0].startsWith('references/a.md:'), noFile);
+  const oneShort = run(texts, { ...good, 'SKILL.md': [lineDigest(KW)] });
+  check('normative coverage control: a table entry that lacks one keyword line is reported', oneShort.uncovered.length === 1 && oneShort.uncovered[0] === `SKILL.md:${lineDigest(KW2)}`, oneShort);
+  const extra = run(texts, { ...good, 'SKILL.md': [...good['SKILL.md'], lineDigest('A line the base never held MUST be reported.')] });
+  check('normative coverage control: a table digest that the base file does not hold is reported as stale', extra.stale.length === 1 && extra.uncovered.length === 0, extra);
+  const ghost = run(texts, { ...good, 'references/gone.md': [lineDigest(KW)] });
+  check('normative coverage control: a table entry for a file that is not a normative file of the base is reported as stale', ghost.stale.some((s) => s.startsWith('references/gone.md')) && ghost.uncovered.length === 0, ghost);
+  const lower = run({ 'references/l.md': 'you must not count this, a MUSTARD line, a mayor line, SHOULDER\n' }, {});
+  check('normative coverage control: the keywords are the upper-case words only (must, MUSTARD, mayor and SHOULDER are not keyword lines)', lower.uncovered.length === 0 && lower.stale.length === 0, lower);
+  const outOfScope = run({ 'scripts/x.mjs': `${KW}\n` }, { 'scripts/x.mjs': [lineDigest(KW)] });
+  check('normative coverage control: a table entry for a file outside the normative scope is reported as stale', outOfScope.stale.length === 1 && /scripts\/x\.mjs/.test(outOfScope.stale[0]), outOfScope);
+  check('normative coverage control: the pinned table lists the three files finding 8 found missing, with the 33 lines', ['assets/agents/docs-sync.md', 'references/codex.md', 'references/state-and-apply.md'].reduce((n, k) => n + (has(NORMATIVE_LINES, k) ? NORMATIVE_LINES[k].length : 0), 0) === 33 || NORMATIVE_LINES === PENDING, ['assets/agents/docs-sync.md', 'references/codex.md', 'references/state-and-apply.md'].map((k) => [k, has(NORMATIVE_LINES, k) ? NORMATIVE_LINES[k].length : null]));
+}
 // The root TODO (AC-C3-1, AC-A6-1): the 3.1.0 bytes plus exactly six records (the plan's five and TD320_6 of the fix round, dispositions of review 1, SR-01); lines 25 to 32 byte-identical; the texts present once.
 {
   const todo = lf(actualText('@root/TODO.md'));
