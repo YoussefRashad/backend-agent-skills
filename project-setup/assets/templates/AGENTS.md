@@ -77,4 +77,16 @@ Before changing files under these paths, read the listed file first (tools do no
 Both tools run the same definitions through thin wrappers (`.claude/agents/`, `.codex/agents/`).
 When a review or doc sync is requested, use these named agents (`reviewer`; `docs-sync` in Claude, `docs_sync` in
 Codex). Do not create an ad-hoc agent for the same job.
+
+When you delegate to `reviewer` or `docs-sync`, state in every brief the session's
+original start directory, the repository root and the current directory. Do not invent
+a start directory you were not given; say that it is unknown instead.
+
+Text between `<!-- project-setup:begin ... -->` and `<!-- project-setup:end ... -->`
+markers in AGENTS.md, CLAUDE.md and .gitignore is managed by project-setup. Every
+agent, including a retained project agent that does not load a canonical definition,
+MUST NOT add, remove or move these markers, and MUST change text inside a block only
+when a code change makes that text wrong. It MUST then name the file and the block
+id in its output, because the next project-setup update shows that edit for a keep,
+take-new or merge decision and can otherwise replace it.
 <!-- project-setup:end id=agents -->

@@ -24,6 +24,16 @@
   or refuse a root-started session on that basis; uncertainty does not establish the
   condition above. You MUST NOT claim that uncertainty proves the controls are active.
   This prevents false launch refusals without treating unknown host state as verified.
+- For a delegated agent this bullet replaces the directory comparison above. A delegated
+  agent's context or brief MAY show the directory its parent was in rather
+  than the session's original start directory. As a delegated agent you MUST treat the
+  original start directory as unknown unless the brief states it. You MUST NOT refuse on
+  your own working directory alone, and when the brief does not state the original start
+  directory you MUST state in your output that it was not given. This prevents a false
+  launch refusal after the parent changed directory inside a root-started session. If
+  the brief states an original start directory strictly below the selected rule's
+  directory, the refusal above applies unchanged. The parent session stays bound by
+  this rule.
 - A sibling worktree uses its own rule and root. A root-started session may later change
   directory within that same repository. A nested .claude/settings.json alone is not a
   root marker for this comparison and MUST NOT be used to bypass an established refusal.

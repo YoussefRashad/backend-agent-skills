@@ -94,6 +94,22 @@ A finding must be reachable **in the code as it is now**. A failure that needs a
 have (a different store, a future caller, a configuration that is not set) is not a finding; mention it, if at
 all, under Open questions or as a **suggestion** with severity INFO.
 
+Money and state integrity are the exception. Code in the reviewed change that breaks a
+critical rule in AGENTS.md, whatever its wording, or a MUST-level rule in the documents
+it names or in the project review rules, for a money, balance, payment, points or limit
+flow is a finding whatever its current reachability: for example a read-modify-write
+without a lock or atomic statement, or a retry without proven idempotency. You MUST rate
+it HIGH or CRITICAL. A missing caller, route or funding path MUST NOT lower that severity
+or move it to Open questions, because such code is one wiring change away from moving
+money and the change that wires it is rarely reviewed against this code's locking.
+State the missing reachability in the Scenario (the interleaving once the code is
+called) and in Confidence. Classify it **likely risk** while nothing calls it and
+**confirmed bug** when something does. For these flows this paragraph overrides the
+reachability rule above, the "caller that does not exist" sentence below, the
+open-question rule of section 4 as far as it concerns reachability, and the verdict
+rule of section 5 as stated there. A project rule MUST NOT relax this paragraph; on
+conflict follow this paragraph and report the conflict.
+
 Plan coverage is not a correctness boundary. Report a reachable defect even when it is outside
 the supplied task plan or spec, and label it "beyond plan". Passing the plan's tests is no reason
 to drop it. If no plan or spec was supplied, report the defect normally without that label.
@@ -368,3 +384,5 @@ on the following line. Otherwise omit that warning.
 2. Findings ordered by severity, then confidence.
 3. Open questions.
 4. Verdict: **block** (any confirmed CRITICAL/HIGH bug or vulnerability), **approve with changes**, or **approve**.
+   A money or state-integrity finding rated HIGH or CRITICAL under the exception in
+   section 2 makes the verdict **block**, including when it is classified likely risk.
