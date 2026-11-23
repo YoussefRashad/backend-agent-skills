@@ -30,6 +30,10 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
   reachability. A Claude reviewer refused to start after the parent changed into a
   subdirectory (the L16 launch-rule false refusal, now seen in the TUI). Both belong to a
   3.0.x change; re-measure Codex change-1 and TUI P3 h afterwards.
+  Status 2026-11-22: project-setup 3.2.0 ships both fixes as text only (the money-severity rule
+  of the canonical reviewer and the delegated-agent launch bullet); neither is measured. This
+  item stays until measurements D1 and D2 of docs/plans/2026-11-22-project-setup-v3.2.0-plan.md
+  are recorded.
 - **Dependency pins are 1–2 majors behind.** `eslint` 9→10, `@eslint/js` 9→10,
   `typescript` 5→7, `lint-staged` 15→17, `eslint-plugin-sonarjs` 3→4,
   `simple-import-sort` 12→14, `eslint-plugin-security` 3→4. Deliberately held, with the
@@ -68,7 +72,9 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
     PS `prepare` held `CLAUDE.md` and both `.claude/agents/` files for approval rather than
     overwriting them. Lint-staged reformatting PS-managed files into drift, the missing
     `.gitignore` and raw Git in the BS docs-sync were fixed in toolchain-config 2.1.0 and
-    backend-standards 3.1.0. Not exercised: the agents themselves, Codex, or PS then BS.
+    backend-standards 3.1.0. The 3.1.0 live acceptance (2026-11-14 to 2026-11-22) exercised the
+    agents on both hosts and PS then BS (merge branch only). Not exercised: the BS overwrite
+    branch and Codex PS rows.
 - **`project-setup` acceptance timeout headroom needs a C16 measurement.**
   `tests/accept-rc1.mjs` allows 1,800,000 ms. The post-C12 runs took 1435 s and 1540 s;
   the rc.2 runs on the same host took 1189 s (C14) and 1222-1242 s (C15, 2026-10-24),
@@ -78,6 +84,26 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
   Maintainer decision (2026-10-24): keep the timeout and the coverage unchanged; revisit only
   if a full run exceeds 1500 s.
   Evidence: docs/plans/2026-10-25-project-setup-v3-rc3-c16-acceptance.md.
+- backend-standards stamp behaviour differs between two existing-project runs. BS 3.1.0 wrote
+  .backend-standards.json on the PS-first fixture and not on the BS existing-project fixture
+  (2026-11-14). The existing-project procedure is documented as writing no stamp. Decide which is
+  intended and make the skill do it every time; project-setup accepts both signals.
+- project-setup installer backups live inside the skills directory. 3.2.0 makes detect report
+  them and documents the manual move. Moving the backup location out of host discovery is a
+  candidate for the next minor and needs the recorded skill-discovery probe (D8 of the 3.2.0
+  plan) first.
+- project-setup 3.1.0 rows not measured (`project-setup/RELEASE-NOTES-3.1.0.md`, "Not
+  measured"): the Codex P4 context check; the read-only and the documentation-writing
+  missing-destination cases, on either host; Codex PS rows; interactive default-mode PS rows for
+  the blank section, renamed heading, deleted pointer, local-instruction conflict and unchanged
+  rerun cases; a second Codex reviewer sample; the P8 Codex ownership grant (not obtainable as
+  specified while a wildcard `safe.directory` entry exists); the overwrite branch of the PS-first
+  recovery.
+- project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block without
+  `--approve-user-content` (the normal `--approved-plan` approval at commit still applies):
+  `onlyAddsBlocks` in `apply.mjs` compares only the text outside blocks,
+  so the 3.2.0 block-edit protection is instruction-level only. A machine check needs a planned
+  `apply.mjs` change and a deliberate update of the c16 case that pins today's behaviour.
 
 ## Missing information
 

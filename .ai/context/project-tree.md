@@ -16,7 +16,7 @@ backend-agent-skills/
 ├── toolchain-config/           skill 2 — the canonical ESLint/Prettier/tsconfig baseline
 │   ├── SKILL.md                diff-and-ask workflow
 │   └── templates/              eslint · prettier · tsconfig · husky · security-scan
-├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.1.0)
+├── project-setup/              skill 3 — shared Claude Code + Codex agent scaffolding (3.2.0)
 ├── pr-review/SKILL.md          skill 4 — per-PR multi-lane review (general-purpose)
 ├── audit/SKILL.md              skill 5 — full-codebase safety net (general-purpose)
 ├── scripts/check-versions.mjs  version-stamp guard (run by `npm run check` and CI)
@@ -31,7 +31,7 @@ it does not apply to any of them, and none carries a `templates/version.json`. T
 skills" in `backend-standards/SKILL.md`.
 
 `pr-review` and `audit` are single `SKILL.md` files. `project-setup` is a versioned release
-(`project-setup/VERSION` is `3.1.0`) with its own layout: `SKILL.md`,
+(`project-setup/VERSION` is `3.2.0`) with its own layout: `SKILL.md`,
 `references/`, `assets/`, `data/`, `scripts/`, `install/` (installer and local release builder),
 `tests/`, `evals/`, `README.md`, `CHANGELOG.md` and release notes. Its test suite and its
 `scripts/check-agent-baselines.mjs` pin SHA-256 digests of several of its files, so it is excluded
@@ -46,6 +46,12 @@ documents (`project-setup/references/docs-generation.md`). Its standalone gates 
 acceptance (`tests/live/BS-DOC-MAP-ACCEPTANCE.md`, helper `tests/live/bs-doc-map.mjs`) was measured
 on both hosts from 2026-11-14 to 2026-11-22 with a narrower claim than full cross-host
 compatibility, see project-setup/RELEASE-NOTES-3.1.0.md.
+
+From 3.2.0 the standalone gates are `tests/release-3.2.0.test.mjs`, `tests/v320.test.mjs` and
+`tests/bs-doc-map.test.mjs`. The historical gates (`tests/release-3.1.test.mjs`,
+`tests/c18.test.mjs` and the strict gate `tests/accept-rc1.mjs`) run only in the reconstructed
+3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes are not yet
+measured on a host, see project-setup/RELEASE-NOTES-3.2.0.md.
 
 ## `backend-standards/`
 

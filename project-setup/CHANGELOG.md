@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.2.0
+
+Fixes for findings 1 to 10 of the 3.1.0 live acceptance and the two 3.0.x reviewer residuals.
+The items promised for 3.1.x in RELEASE-NOTES-3.1.0.md ship here, as a minor release, because
+two shipped deny patterns, new MUST rules and a new detect output field are additive changes.
+
+- Shipped secret-path policy: root-anchored `env/**` and `cert/**`. Setup's own reads refuse them
+  as soon as 3.2.0 is installed; a project that tracks files there stops in Phase 0. A project
+  fresh-installed by 3.0.0 or 3.1.0 is recognised as baseline `v3.0.0` and is offered exactly the
+  two new coverage rows instead of a full re-review.
+- Canonical reviewer: a broken critical or MUST-level rule in a money or state-integrity flow is
+  rated HIGH or CRITICAL whatever its current reachability, and makes the verdict block.
+- Root CLAUDE.md template: a delegated agent no longer refuses on its own working directory alone;
+  root AGENTS.md template: the parent states the start directory in every delegation, and every
+  agent keeps managed-block markers intact.
+- Documentation mapping: one applicability rule for every mode, with configuration and compiler
+  strictness proposals; four Subagents line variants and three agents-block sentences for a
+  partial agent layer.
+- `detect.mjs` reports installer backups inside the skills directories (`installerBackups`) with
+  one warning per tool; the installer itself is unchanged.
+
+Verification: tests/release-3.2.0.test.mjs, tests/v320.test.mjs and tests/bs-doc-map.test.mjs
+run in the working tree; the historical gates run only in the reconstructed 3.1.0 view through
+tests/run-310-view.mjs. CI runs none of them. None of the 3.2.0 changes is measured on a host yet.
+
+See RELEASE-NOTES-3.2.0.md.
+
 ## 3.1.0
 
 On a backend-standards project, `.ai/standards/03-project-architecture.md` (03) becomes the
