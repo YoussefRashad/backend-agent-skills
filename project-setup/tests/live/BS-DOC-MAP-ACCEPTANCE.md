@@ -4,11 +4,13 @@ Plan: `docs/plans/2026-11-11-project-setup-v3.1-bs-doc-map.md` (section 8; secti
 conflict), with the helper and procedure changes of
 `docs/plans/2026-11-15-project-setup-v3.1-helper-batch.md`.
 
-Status: pending stage-2 acceptance sign-off. Dated live-run records are retained outside this
-matrix. This procedure records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15
-init-event confirmation and the 2026-11-15 project-control probe below; it does not enter
-acceptance results or close checklist items. Stage 2 records the dated matrix results and TODO
-closeout.
+Status: stage 2 signed off. The section 7 matrix holds the dated results of 2026-11-14
+to 2026-11-22; the per-row record is
+`docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`. This procedure
+still records the scoped 2026-11-14 Claude Code isolation probe, the 2026-11-15
+init-event confirmation and the 2026-11-15 project-control probe below. Rows that were
+not measured are listed in `RELEASE-NOTES-3.1.0.md`; the 3.2.0 re-measurements are
+listed in `RELEASE-NOTES-3.2.0.md`.
 
 This document is the maintainer's procedure. The test-only helper
 `tests/live/bs-doc-map.mjs` creates workspaces, records snapshots, seeds committed changes and
@@ -20,6 +22,8 @@ templates does not count as running BS or project-setup (PS).
 
 Static gates (`tests/bs-doc-map.test.mjs`, `tests/release-3.1.test.mjs`, `tests/c18.test.mjs`)
 check instructions and a checker. They do not substitute for any row of the matrix below.
+From 3.2.0 on, `tests/release-3.1.test.mjs` and `tests/c18.test.mjs` run only in the
+reconstructed 3.1.0 view (`tests/run-310-view.mjs`), not directly in the working tree.
 
 ## 0. Record and keep the pre-acceptance installation (maintainer, plan P4)
 
@@ -81,9 +85,10 @@ configuration to get past it.
 
 Before **every** PS run (a PS row of the scenarios in section 4):
 
-1. Resolve duplicate plain, synced or plugin-provided copies. Include `.project-setup.bak-*`
-   installer backups when checking for duplicate PS copies; disable a discoverable backup through
-   the host's skill selection without moving the installer backup.
+1. Move every `.project-setup.bak-*` directory together with its `.meta.json`, and every
+   `.project-setup.rolledback-*` directory, out of both skills directories into
+   `D:\ps-live\preserved\installer-backups\<target>\`; record each original path; run
+   `detect.mjs` and require an empty `installerBackups`.
 2. Start a new host session at the fixture root (never `--continue`).
 3. Confirm exactly one active PS copy, its selected path and its version in the same new session
    that will run PS; interactive skill toggles do not establish print-mode selection.
@@ -92,9 +97,9 @@ Before **every** PS run (a PS row of the scenarios in section 4):
 5. Record that evidence and the installer verification. Record the actual permission mode and
    every global-instruction prompt and answer during a PS row.
 
-Moving an installer backup out of the skill directory breaks installer rollback, which restores
-from it; disable it in the host instead. The recorded interactive workaround disabled the backup
-without moving it. After the recorded Claude Code measurements, the two `.project-setup.bak-3.0.0-*`
+Before any `install.mjs rollback`, move the newest backup directory and its `.meta.json` back
+to the recorded path, unmodified (rollback verifies the recorded digest), run rollback, then
+`verify`. After the recorded Claude Code measurements, the two `.project-setup.bak-3.0.0-*`
 installer backups were instead moved out of the skill directories to a folder the hosts do not
 discover (a recorded deviation, finding 10 of
 `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`); a backup moved that way
@@ -139,6 +144,8 @@ directory does not. Without it the sandbox user gets "Access is denied" and the 
 file changed: record that as a setup failure, not a measurement. The recorded grant was read and
 execute, inherited by files and subdirectories, on the fixtures directory (finding 9 of
 `docs/plans/2026-11-22-project-setup-v3.1-live-acceptance-results.md`).
+Create fixtures only under a directory that already carries the CodexSandboxUsers
+read-and-execute entry, and check it before the first Codex run.
 
 ## 3. Workspaces
 
@@ -150,6 +157,8 @@ node project-setup/tests/live/bs-doc-map.mjs init --scenario bs-existing --out D
 node project-setup/tests/live/bs-doc-map.mjs init --scenario bs-new --out D:\ps-live\bs-docmap-3.1.0-bs-new
 node project-setup/tests/live/bs-doc-map.mjs init --scenario bs-existing --out D:\ps-live\bs-docmap-3.1.0-declined
 ```
+
+For a Codex row, the parent directory also needs the ACL entry of section 2.
 
 `init` refuses existing destinations and linked aliases. For `ps-first` and `bs-existing`, scaffold
 inside the workspace with:
@@ -174,7 +183,7 @@ and seed recognizes exactly that record for a project directory named `service`;
 | Primary: PS 3.0.0, then BS existing-project, then PS 3.1 update | Scaffold; install and confirm 3.0.0; run PS to create substantive full docs; write an independent fact inventory and take the pre-BS snapshot; run unchanged BS through its existing-project procedure; record its per-file outcome and the unstamped state; switch to and confirm the candidate; run PS update with reviewed recovery and consolidation. Include one contradictory fact. |
 | BS existing-project, then PS adopt | Scaffold; run unchanged BS existing-project; record the unstamped provenance (BS CLAUDE.md version sentence and 03 import); install and confirm the candidate; adopt. Activation is automatic through the sentence-and-import signal. |
 | BS new-service, then PS adopt | Empty parent; unchanged BS runs its complete new-service procedure, including scaffold and stamp; the candidate adopts. |
-| Declined BS agent replacement | Separate BS-existing fixture; decline the docs-sync replacement; preserve its bytes, identify the invoked definition and report the incomplete PS agent layer. Verify with `--expect-partial`. |
+| Declined BS agent replacement | Separate BS-existing fixture; decline the docs-sync replacement; preserve its bytes, identify the invoked definition and report the incomplete PS agent layer. Verify with `--expect-partial`; expect the docs-sync-retained Subagents line in CLAUDE.md and the matching `docs-sync` exception sentence in the AGENTS.md `agents` block (`references/docs-generation.md`, "Subagents line variants"). |
 
 For PS-first, snapshot before BS and before the candidate run:
 
@@ -212,6 +221,12 @@ extensions) to a JSON file beside the snapshots and verify:
 ```powershell
 node project-setup/tests/live/bs-doc-map.mjs verify --project D:\ps-live\bs-docmap-3.1.0-ps-first\service --baseline D:\ps-live\bs-docmap-3.1.0-ps-first\before-ps31.json --evidence D:\ps-live\bs-docmap-3.1.0-ps-first\evidence.json
 ```
+
+From 3.2.0 the evidence may also carry the inputs of the three applicability checkers, each run
+only when present: `applicability` as `{ "approved": [rel], "confirmed": [rel] }` (the Phase 0
+list and the Phase 1 set of applicable mapped documents), `configuration` as
+`{ "names": [variable name], "declined": boolean }` (`declined` optional), and `strictness` as
+`{ "declined": boolean }` (`declined` optional; checked only when `tsconfig.json` exists).
 
 `verify` is advisory evidence collection, not an acceptance verdict. The acceptance decision is the
 maintainer's, recorded in this document's results table (section 7); the helper assists with the
@@ -359,6 +374,14 @@ stage-2 sign-off the orchestrator audits the original clean and contaminated JSO
 rules, and the static tests that pin them, cannot show that a live host loaded the right context or
 routed correctly.
 
+Known gaps recorded by the 2026-11-14 to 2026-11-22 runs:
+
+- PS rows that were driven headless in auto permission mode are recorded as deviations from the
+  interactive `--permission-mode default` rule of section 1; they do not exercise PS's human
+  approval gates.
+- The user-level `code-review` skill was visible to an `--isolated` Codex run. For a Codex
+  reviewer measurement, remove it before the run or record its presence in the results row.
+
 ## 6. Committed changes for the agent measurements
 
 Verify the launch directory and baseline before each run; never measure a second host against
@@ -420,6 +443,10 @@ loses a concurrent update; locking in caller order deadlocks two opposite transf
 The helper checks only the readable 03 Lock order marker; the maintainer verifies the exact text
 and returned baseline commit. The helper never writes documentation. Without the marker the
 reviewer seed refuses with `REFUSED baseline` and names this section.
+
+The wording of the Lock order rule used in the 2026-11-14 and 2026-11-22 measurements was
+not recorded, so a new reviewer measurement with the unit above is not directly comparable
+with those results; record that in the results row.
 
 ### Seed
 
