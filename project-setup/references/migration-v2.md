@@ -189,6 +189,10 @@ The report prints `{ ok: true, report, reportSha256 }`, where `report` has exact
 }
 ```
 
+`baseline` is one of `recorded`, `v2.0.0`, `shipped`, `v3.0.0`, `fresh` or `unknown`. `v3.0.0` means a `full`
+ownership record whose hash is the default policy shipped by project-setup 3.0.0 and 3.1.0; its managed list is the
+current default without the entries added in 3.2.0 (`env/**` and `cert/**`, both root-anchored).
+
 Write the user's decisions to `.ai/.run/<id>/security-decisions.json`, with exactly:
 
 ```javascript
@@ -221,6 +225,12 @@ Choices, in the order the report offers them:
 Unchanged rows need no entry decision. Replacement coverage requires its own choice even if an older identity was
 omitted. Retained legacy denies and identical user-owned denies are preserved. Ownership comes from the installed
 record, never from current bytes, and a missing policy baseline is never replaced by a guess.
+
+A project fresh-installed by project-setup 3.0.0 or 3.1.0 whose policy record carries the hash of that default
+(baseline `v3.0.0`) is offered exactly the two new coverage rows, root `env/**` and root `cert/**`. `include` is the
+recommended choice for each, and `omit` is recorded as an explicit omission that a later report honours. An omission
+does not remove setup's own refusal to read those paths, because setup scripts refuse a path matched by the shipped
+defaults or by the installed policy (`references/security.md` section 1).
 
 Metadata-only runs and unchanged policy content do not trigger the policy migration workflow
 gate. A later content edit to a schema-2 policy does trigger it and must use report, decisions

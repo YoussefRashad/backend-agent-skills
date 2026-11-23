@@ -7,6 +7,11 @@
 // What this gets right that v2 did not:
 //   - Ownership comes from the installed RECORD, never from current bytes. A policy that happens to equal the shipped v2
 //     file but has no recognized record is "unknown": every entry needs a decision, nothing is silently adopted.
+//   - 3.2.0 adds one recognized baseline, v3.0.0 (plan docs/plans/2026-11-22-project-setup-v3.2.0-plan.md A4): a full
+//     record whose hash is the default policy shipped by 3.0.0 and 3.1.0 (PRIOR_SHIPPED.sha256). Its list is the
+//     current default minus exactly the identities 3.2.0 added (PRIOR_SHIPPED.added: root env/** and cert/**), so
+//     such a fresh install is offered only the new coverage instead of an unknown baseline. No input field and no
+//     caller changes; the derivation is skipped unless the desired policy holds every added identity.
 //   - A broader replacement (**/.env* for **/.env and **/.env.*) is a NEW decision. An old omission neither omits nor
 //     approves it, and omitting the replacement keeps the old entries instead of silently dropping coverage.
 //   - Moving a pattern to projectPatterns, omitting it, or restoring a deleted one is an explicit, hash-bound decision
@@ -38,6 +43,12 @@ const DECISION_FIELDS = ['schema', 'reportSha256', 'entries', 'coverage', 'denyO
 // Plan 3.4: the replacement coverage and the two old identities it replaces.
 const ENV_NEW = policyEntryKey({ anchor: 'any', glob: '**/.env*' });
 const ENV_OLD = [policyEntryKey({ anchor: 'any', glob: '**/.env' }), policyEntryKey({ anchor: 'any', glob: '**/.env.*' })];
+// 3.2.0: the default policy shipped by 3.0.0 and 3.1.0 is the current default minus exactly these identities.
+const PRIOR_SHIPPED = Object.freeze({
+  name: 'v3.0.0',
+  sha256: '37711ab7b8e1781ce533c705971f93351f1331a44b16e11e846080eb8fed1a79',
+  added: Object.freeze([policyEntryKey({ anchor: 'root', glob: 'env/**' }), policyEntryKey({ anchor: 'root', glob: 'cert/**' })]),
+});
 
 const J = (v) => JSON.stringify(v, null, 2) + '\n';
 const H = (text) => sha256(Buffer.from(text, 'utf8'));
@@ -73,14 +84,21 @@ function migError(code, arg, extra = {}) {
 /**
  * Validates a MigrationInput (plan 3.4) and selects the baseline. The manifest passes C2's reader before any record is
  * used; both policies and the shipped documents pass C1. Ownership comes only from the record: keys -> recorded (its
- * complete managed list), a full record hashing to v2 -> v2.0.0 (v2 wins a tie), to the current defaults -> shipped,
- * nothing at all -> fresh, anything else -> unknown.
+ * complete managed list), a full record hashing to v2 -> v2.0.0 (v2 wins a tie), to the current defaults -> shipped
+ * (the current defaults win a tie with the prior default), to PRIOR_SHIPPED.sha256 -> v3.0.0, nothing at all -> fresh,
+ * anything else -> unknown.
+ * v3.0.0 means exactly: a full record whose hash is the default policy shipped by 3.0.0 and 3.1.0. Its list is derived
+ * from the desired policy, not read from a file: the desired entries without the PRIOR_SHIPPED.added identities, in
+ * desired order. The derivation runs only when the desired policy holds every added identity; otherwise there is no
+ * prior list and such a record stays unknown (a desired policy without the additions is not the 3.2.0 default).
  */
 function readInput(input) {
   if (!isObj(input) || Object.keys(input).length !== INPUT_FIELDS.length || !INPUT_FIELDS.every((f) => own(input, f))) throw migError('MIGRATION_INPUT');
   if (![input.baselineSha256, input.desiredSha256].every((h) => typeof h === 'string' && HEX64.test(h))) throw migError('MIGRATION_INPUT');
   const baseList = readSecurityPolicy(input.baselinePolicy).policy.patterns;
   const desired = readSecurityPolicy(input.desiredPolicy).policy.patterns;
+  const desiredKeys = new Set(desired.map(K));
+  const priorList = PRIOR_SHIPPED.added.every((k) => desiredKeys.has(k)) ? desired.filter((e) => !PRIOR_SHIPPED.added.includes(K(e))) : null;
   const manifest = input.manifest === null ? null : readManifest(input.manifest).manifest;
   const cur = input.policy === null ? null : readSecurityPolicy(input.policy);
   const rec = manifest && own(manifest.files, POLICY_REL) ? manifest.files[POLICY_REL] : null;
@@ -92,6 +110,8 @@ function readInput(input) {
     baseline = 'v2.0.0'; list = baseList; baselineSha256 = input.baselineSha256;
   } else if (rec && rec.ownership === 'full' && rec.sha256 === input.desiredSha256) {
     baseline = 'shipped'; list = desired; baselineSha256 = input.desiredSha256;
+  } else if (rec && rec.ownership === 'full' && rec.sha256 === PRIOR_SHIPPED.sha256 && priorList !== null) {
+    baseline = PRIOR_SHIPPED.name; list = priorList; baselineSha256 = PRIOR_SHIPPED.sha256;
   } else if (!cur && !rec) baseline = 'fresh';
   const omissions = rec && rec.ownership === 'keys' && rec.omissions && Array.isArray(rec.omissions.patterns) ? rec.omissions.patterns : [];
   const settings = manifest && own(manifest.files, SETTINGS_REL) ? manifest.files[SETTINGS_REL] : null;
