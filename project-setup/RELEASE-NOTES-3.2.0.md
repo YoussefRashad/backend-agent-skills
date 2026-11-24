@@ -10,8 +10,12 @@ them are additive changes that every installed project sees: two new shipped den
 a coverage decision on update, and the canonical reviewer and the mapping reference gain new MUST
 rules. Nothing here requires a project to change code.
 
-None of the 3.2.0 changes has been measured on a host yet. Everything below that describes agent
-or host behaviour is the intended behaviour; see "Not measured".
+The live measurements D1 to D10 of the release plan were run on 2026-11-24, headless, on one Windows
+host (Claude Code 2.1.330, codex-cli 0.163.0). Each row, with its date, versions, range, observed or
+inferred invoked definition and unverified scope, is in
+`docs/plans/2026-11-22-project-setup-v3.2.0-live-results.md` of the distribution repository. See
+"Measured" and "Not measured" below; behaviour that is not listed under "Measured" is intended
+behaviour, not observed behaviour.
 
 ## Compatibility
 
@@ -184,30 +188,70 @@ that gate; the runner stops before any gate with a bootstrap failure that names 
 not run any of these gates: it runs only the format check and the version-stamp guard, so the gates are enforced by whoever prepares the
 release.
 
+## Measured
+
+All rows come from one Windows host and one version pair (one to six runs per row; the counts and cases
+are in the results record), driven headless with the maintainer's human gates answered by the
+orchestrator (a recorded deviation); each is a widening of the claim, not a guarantee.
+
+- Reviewer money severity: two Codex samples on the seeded unreachable lost update both rated it HIGH
+  with a scenario and a block verdict under the 3.2.0 reviewer text, installed by copy and invoked by
+  name (the invocation is inferred) (D1). The earlier 3.0.x runs are
+  not directly comparable because their seed wording was not recorded.
+- Delegated launch rule (headless only; the project's agents block was not the 3.2.0 text in that
+  fixture): after the parent changed into a subdirectory the Claude reviewer completed
+  and stated whether the original start directory was given; a session really started in a
+  subdirectory was refused by the parent; the unchanged 3.1.0 text reproduced the false refusal in the
+  same setup; a subagent sees the changed directory as its primary directory (D2).
+- Partial-layer lines after a declined docs-sync replacement were written as specified, and a retained
+  docs-sync named the managed block it edited (the invoked definition is inferred from the parent's
+  agent call and file hashes); a later update offered keep, take new or merge and the full line
+  replaced the exception (D3, D4). The helper still reported one to two findings in those
+  runs (an inventory fact whose document PS had skipped, and an unobserved invocation), so a clean
+  helper run is not claimed.
+- Update from a recorded PS 3.0.0 then backend-standards 3.1.0 project: the same eight-pointer set in
+  Phase 0 and Phase 1, validate 16 pass, 0 fail (D5, update leg only). The helper reported one finding
+  there: PS reworded a sentence in 03 beyond the approved text and the sentence still quotes the stale
+  PORT value.
+- env/** and cert/**: the policy migration report on a 3.1.0-style policy offered exactly two coverage
+  rows (run through the script, not inside a PS update session); after include a Claude Read of a root env/ path and of a root cert/ path was denied, the root env/
+  also after a cd into a subdirectory,
+  while src/env/x and sub/env/x stayed readable; a tracked root env/x file is the detect stop (D6).
+- Installer backups: detect warned per tool with a real backup present and stayed silent after the
+  move (the synced claude.ai copy stayed visible as a second source); install.mjs rollback worked on
+  both targets; Claude Code lists a dot-prefixed backup that has a SKILL.md, Codex does not (its own
+  listing, a self-report), and a nested SKILL.md is listed by Codex only (D7, D8).
+- Missing destination: a read-only reviewer left every file unchanged on both hosts, Claude reporting the
+  three dangling pointers and Codex noting one missing heading as a documentation gap, and a Claude
+  docs-sync recorded an unresolved destination in TODO.md instead of writing the fact elsewhere; the
+  invoked definitions are inferred (D9 b, c).
+- The strict gate took 1271 s in the reconstructed view, 99 pass, 0 fail, 1 skip (D10).
+
 ## Not measured
 
-Nothing in this release has been measured on a host. In particular:
-
-- The Codex reviewer rating the seeded unreachable money defect HIGH or CRITICAL with a block
-  verdict under the new reviewer paragraph (the severity residual stays open in TODO.md).
-- No false launch refusal by a Claude reviewer after the parent changed into a subdirectory, and
-  what directory a subagent sees (the L16 residual stays open in TODO.md).
-- Setup writing the partial-layer Subagents line and sentence after a declined docs-sync
-  replacement, and a retained docs-sync obeying the managed-block rule of root AGENTS.md.
-- Adopt and update producing the same applicable set, Configuration table and strictness statement.
-- The `env/**` and `cert/**` denies on a host: the root-anchor claim is limited to static rendering
-  (`Read(/env/**)` and `Read(/cert/**)` for Claude, the root-anchored Git pathspec excludes and the
-  Codex snippet strings) until a host measurement covers root-anchor behaviour on both hosts.
-- The host skill list with an installer backup present, and which backup directory shapes each
-  host discovers.
-- The 3.1.0 rows that were never measured (listed in RELEASE-NOTES-3.1.0.md, "Not measured").
-- The duration of the strict gate (`accept-rc1` in the view) on an idle host, the data point for
-  the acceptance timeout item in TODO.md (plan D10).
+- The interactive TUI: the L16 launch rule in the TUI (P3 h, the surface where the defect was first
+  seen, so the fix is measured headless only) and every interactive default-mode row.
+- Codex: the L16 rule, runtime enforcement of the env/** and cert/** denies, every Codex PS row, the
+  Codex documentation-writing missing-destination case and the project-context question of the P4
+  check (inconclusive: the self-report quoted the user-level instructions). The root-anchor claim for
+  Codex is limited to static rendering (the root-anchored Git pathspec excludes and the Codex snippet
+  strings); for Claude it is measured only for root-started sessions, with and without a later cd.
+- Adopt and update producing the same applicable set from one source: only the update leg ran, so
+  the claim that the applicability, inventory and strictness rules hold identically in every mode has
+  no live evidence beyond that leg and a separate adopt on another source.
+- The policy migration for a project already migrated to keys ownership, and a full PS session on a
+  project with a tracked root env/ file.
+- The overwrite branch of the PS-first recovery.
+- A loaded host for the strict gate, and other Claude Code or codex-cli versions for every row.
+- The 3.1.0 rows that were never measured and are still open (RELEASE-NOTES-3.1.0.md, "Not
+  measured"): the Codex PS rows and the interactive default-mode rows listed above, and the P8 Codex
+  ownership grant.
 
 ## Known limitations
 
 - Moving the installer backup is manual; the backup still lands inside the skills directory, and
-  whether Codex discovers it as a skill is unverified.
+  Codex 0.163.0 did not list a dot-prefixed backup with a top-level SKILL.md in its own listing (a
+  self-report); other versions and platforms, and a Codex listing after the move, are unverified.
 - The `v3.0.0` baseline is derived from a hash constant and the two added entries; a later change
   to an old shipped entry needs a new decision about prior baselines.
 - The delegated-agent bullet narrows when a subagent refuses: a parent that wrongly continues after
