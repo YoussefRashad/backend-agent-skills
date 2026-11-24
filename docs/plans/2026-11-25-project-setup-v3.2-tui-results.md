@@ -310,6 +310,15 @@ Not recorded for Row A: the count and wording of the Claude Code permission prom
 final PS report; the hash text applied by the commit; line endings; whether the hook and deny rules load in a new session (not
 exercised).
 
+## Addendum: permission-prompt count (2026-11-25, about 00:50 local)
+
+Asked for the number of Claude Code Allow/Deny prompts in Row A and Row B and whether the status line ever said "Allowed by auto mode
+classifier", the maintainer answered "not counted" ("لم تُعد"). So for both rows the count, the wording of any prompt and the status
+line check are NOT RECORDED, and no claim about how many prompts appeared, or that none was auto-approved, is made. What the record
+does show for default mode is limited to the dialogs PS itself raised (decisions, `--approve-user-content` paths, plan hash) and one
+reported permission denial in Row A run 2 (who denied it is not recorded). This leaves the runbook's second expectation for section 1
+("every script write or apply step shows a permission prompt; the status line never says Allowed by auto mode classifier") unmeasured.
+
 ## What stays not measured
 
 Everything the runbook sections 1, 2, 3, 3b, 4 and 5 list, except what the addenda above record (Codex P4 PASS; Row A Phase 0 only;
