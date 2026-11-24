@@ -47,7 +47,7 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 | Section 1, row A: default-mode adopt | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Phase 0 observed from a paste; prompts, plan hash, commit and validate not recorded. |
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
 | Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, validate and git state independently confirmed by the maintainer, permission prompts not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
-| Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED for this session; positive leg run by the maintainer on `row-b` (addendum), PASS on what was shown with one sub-criterion unread; control NOT yet run | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged. |
+| Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED for this session; positive leg run by the maintainer on `row-b` (addendum), PASS on what was shown with one sub-criterion unread; negative control observed as expected (refusal), see addendum | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged. |
 | Section 3: Codex P4 project-context check | BLOCKED for this session; later MEASURED by the maintainer (see "Addendum: P4 run by the maintainer") | Reason 1, plus the trust dialog. Setup part measured here: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate. |
 | Section 3b: Codex deny-read profile canaries | NOT ATTEMPTED | Needs a paste into `~/.codex/config.toml`, which this session does not edit, and a TUI. Not in the task. |
 | Section 4: Codex PS rows r1 to r5 and doc-writing case | NOT ATTEMPTED | Needs a Codex session that may write and approve; reasons 1 and 2. Not in the task's list beyond the row names above. |
@@ -220,7 +220,15 @@ parent session did is read from its own messages in the paste; this session saw 
   with a verdict (met, the paste is the parent's relay, so the exact verdict block layout was not seen); whether the reviewer itself
   states that the original start directory was given: NOT shown (the parent says the brief carried it). So: PASS on the part that was
   shown; one sub-criterion not read. One sample, Claude Code 2.1.331, Windows. The earlier headless run was on 2.1.330.
-- The negative control (new session started in `row-bsrc`, turn 2 only, parent must refuse before reading files): NOT yet run.
+- The negative control (new session started in `row-bsrc`, turn 2 only; the parent must refuse before reading files): run by the
+  maintainer at about 00:24 local, Claude Code 2.1.331, `--permission-mode default` (per the runbook command). Observed in the paste:
+  the parent did NOT start the review and refused in 11 s, saying the session was launched one folder below the repository root, that
+  such a session may lack the root raw-Git hook, the `permissions.deny` secret-path rules and the shared `AGENTS.md` rules, that
+  changing directory now would not fix it, and asking for a restart from the root. The paste shows no tool-activity line (no
+  "Searched", "Ran" or agent spawn) between the prompt and the refusal, so no file read or command is visible; the paste is a
+  rendering of the screen, so "read nothing" is inferred, not proven. Result: refusal as expected, one sample. Together with the
+  positive leg this is the TUI pair the runbook asks for (positive leg: no refusal when the session started at the root and the
+  directory was changed afterwards).
 
 Findings of that review (reviewer's own, relayed by the parent, which says it re-checked findings 1, 2 and 5 against the files; this
 session verified none of them). They concern the content PS 3.2.0 generated or left in the Row B fixture, not the launch rule:
