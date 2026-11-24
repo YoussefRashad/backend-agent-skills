@@ -47,6 +47,44 @@ as an incomplete update. The nested CLAUDE.md template and its ownership remain 
 A relative import of the root AGENTS.md is not part of this change and MUST NOT be presented
 as a replacement for starting Claude Code at the root.
 
+### Subagents line variants
+
+The `claude` block of root CLAUDE.md carries exactly one of these four Subagents lines. The first
+is the template line; the other three describe a partial agent layer:
+
+```text
+- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both load their canonical definition from `.ai/agents/`.
+- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `reviewer` loads its canonical definition from `.ai/agents/`. `docs-sync` is a retained project agent (incomplete project-setup agent update).
+- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; only `docs-sync` loads its canonical definition from `.ai/agents/`. `reviewer` is a retained project agent (incomplete project-setup agent update).
+- Subagents: `reviewer`, `docs-sync` in `.claude/agents/`; both are retained project agents and neither loads a canonical definition from `.ai/agents/` (incomplete project-setup agent update).
+```
+
+The `agents` block of root AGENTS.md carries none of these three sentences in a full layer and
+exactly one in a partial layer, as its own line directly after the template sentence "Do not
+create an ad-hoc agent for the same job." and before the two template paragraphs that follow it:
+
+```text
+Exception in Claude Code: `docs-sync` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).
+Exception in Claude Code: `reviewer` is a retained project agent and does not load its canonical definition (incomplete project-setup agent update).
+Exception in Claude Code: `reviewer` and `docs-sync` are retained project agents and do not load their canonical definitions (incomplete project-setup agent update).
+```
+
+The layer concerns Claude wrappers only: backend-standards ships two Claude agents and no Codex
+wrapper (`references/modes.md`).
+
+Setup MUST choose the Subagents line and the agents-block sentence from the per-agent
+dispositions of the same run, so a managed block never states an agent layer that was
+not installed. An agent counts as canonical only when its Claude wrapper at
+.claude/agents/<name>.md is the shipped wrapper, or an approved merge that still loads
+.ai/agents/<name>.md first, and .ai/agents/<name>.md is the rendered canonical
+definition. Otherwise it is retained.
+Setup MUST use one of the four lines byte for byte and, in a partial layer, exactly the
+one matching sentence; it MUST NOT write any other wording. The rest of both blocks is
+the template text unchanged.
+On a later run, setup MUST recompute both. When a retained agent has been replaced, the
+blocks are redrafted through the normal managed-block update; when nothing changed, the
+run produces zero diff.
+
 ## Project-local security tooling (fully managed, always installed)
 
 | File | Source |
@@ -258,6 +296,84 @@ The existing PS document inventory above remains intact. Heading text, not secti
 >
 > Setup MUST preserve the information requirements of the original PS document. A shorter BS table MUST NOT justify losing configuration inventories, transaction details, error transformations, integration safeguards or critical-module invariants.
 
+#### Applicability (one rule for every mode)
+
+A mapped PS document is applicable when at least one of these holds:
+
+1. Code evidence: the source named for that document in the tables above yields at
+   least one fact from permitted reads.
+2. Source-section evidence: at least one of its mapped 03 sections resolves and its
+   body states at least one fact for the topic. A blank body, template placeholders
+   in angle brackets, or a table with no filled row is not a fact.
+3. An existing document at the PS path, whoever wrote it. Existing-content
+   consolidation below applies before it becomes a pointer.
+
+Phase 0 applicability is provisional. Setup MUST derive it only from what Phase 0 may
+read: the manifest, the lockfile name, tsconfig.json, docker-compose structure, the
+src/ tree listing, the framework entrypoint, detect output, existing documents and the
+resolved 03 sections. Setup MUST show the provisional list in Phase 0 with the evidence
+kind for each entry (tree listing, source section, existing document) or "not
+applicable: no evidence", and MUST label it provisional. This rule adds no Phase 0 read.
+
+Phase 1 confirms applicability with the evidence reads it already performs. Setup MUST
+draft exactly the confirmed set. If the confirmed set differs from the list approved in
+Phase 0, setup MUST stop and ask again, because a report that says "skipped" beside an
+installed pointer cannot be reviewed.
+
+Setup MUST apply this rule identically in every mode. The mode decides ownership and
+the approval workflow; it never decides which documents exist.
+
+For a document that is not applicable, setup MUST NOT write a pointer, MUST NOT add
+content to 03 for that topic, and MUST remove the navigation row and any reference to
+that path from the text it drafts, so validate does not fail on a missing target.
+For an applicable document whose mapped section is blank while code evidence exists,
+setup completes the section through the reviewed consolidation and identifies
+unknowns explicitly. An installed pointer whose evidence later disappears is
+preserved and reported; it is never deleted or expanded automatically, and no age
+limit applies.
+
+`docs/integrations/<vendor>.md` is decided per vendor. `docs/business-rules/<flow>.md`,
+code patterns, development rules, ADRs and TODO.md keep their own rules above.
+
+When the configuration document is applicable, setup MUST propose, through the reviewed
+consolidation of the target project's 03, a Configuration table with one row per
+variable name evidenced by config or validation code or by
+`env-keys.mjs keys --template auto`, with: variable, required (yes, no, conditional
+with the condition, or unknown), classification (secret or non-secret), used by,
+description and source. Setup MUST make this proposal in adopt and in update alike. A
+requiredness that the code does not establish is written `unknown` and listed in
+TODO.md; it is never guessed. Values never appear. If the owner declines the proposal,
+the configuration conversion is incomplete: setup keeps any original, writes no claim of
+completion and reports it.
+
+When `tsconfig.json` exists and the mapping is active, setup MUST propose, through the
+same reviewed consolidation, a statement of the compiler strictness as written (`strict`
+and each individual strict flag that is set, or "strict not set") under **CI/CD and
+tooling**, taken from `tsconfig.json` only, in every mode. It is a stated value, never
+an inference from code style. If the owner declines, setup reports the omission and
+does not write it.
+
+When `tsconfig.json` extends another file, setup MUST state what the root `tsconfig.json`
+says and name the extended file, and MUST NOT resolve the chain, because the statement is
+taken from `tsconfig.json` only.
+
+While the repository has no tracked source files (detect `project.sourceFileCount` is 0), setup MUST NOT write a pointer or add content to 03 on source-section evidence alone, and MUST leave an existing document at the PS path unchanged, because a pointer drafted before any code exists cannot be confirmed by the Phase 1 evidence reads; this keeps the empty-repository rule above and the empty-repo mode in `references/modes.md`.
+
+Evidence per pointer document. The code evidence repeats the source columns of the inventory
+tables above; the source sections repeat the destinations of the mapping table.
+
+| PS document | Code evidence | Source sections (03) |
+|---|---|---|
+| `.ai/context/project-tree.md` | `src/` walk; each module's controller and service | Module layout; Landmines |
+| `.ai/context/critical-modules.md` | Entities, services, guards; the user's sensitive-area answers | Module layout; Authentication and authorization; Database, including Money; Cache, locks and queues; Outbound integrations; Observability, including Retention; Landmines |
+| `.ai/context/error-contract.md` | Filters, pipes, handlers | API surface |
+| `.ai/context/configuration.md` | Config and validation code through local file tools, and `env-keys.mjs keys --template auto`; never values | Configuration |
+| `.ai/context/glossary.md` | Entity, enum and service names | Domain glossary |
+| `docs/api-conventions.md` | Versioning, response envelope, pagination, filter and sort, auth headers, rate limits, error format | API surface; Authentication and authorization |
+| `docs/database.md` | ORM, entities and key relationships, the DB change policy as practiced, transaction patterns and isolation levels | Database, including Schema changes and Money; Module layout |
+| `docs/observability.md` | Logger, correlation IDs, metrics, health checks, redaction | Observability; Health, shutdown, deployment |
+| `docs/integrations/<vendor>.md` | The vendor's client code: auth approach, endpoints used, timeouts, retry policy, idempotency, circuit breaking and fallback, logging and redaction, quirks from code comments | Outbound integrations, scoped to the vendor; Observability |
+
 03 may require reviewed expansion. Its Configuration and Outbound integrations sections start with comparatively compact structures. Changes are to the target project's 03, never the BS template.
 
 **Instruction-summary exception:** root and local instruction files retain concise critical-rule summaries, stack identification, DB-change policy and executable commands required for their instruction role. These summaries MUST agree with 03 and reference it for architectural detail.
@@ -353,12 +469,15 @@ Add this sentence to the generated navigation:
 > Some entries below are documentation pointers; follow their source links and named headings.
 
 Keep `assets/templates/AGENTS.md` unchanged. Non-activated output receives neither addition.
+"Unchanged" means the mapping adds no template text. The template itself changed in 3.2.0 (the agents block).
 
 Preserve the existing money/auth critical rule and its `.ai/context/critical-modules.md` reference, including locking, atomicity and idempotency requirements. That document becomes a self-sufficient pointer.
+This applies when critical-modules is applicable under "Applicability" above. When it is not, remove the reference from the critical rule's last sentence and the navigation row, keep the rule itself, and record the absence in TODO.md.
 
 ### Canonical agents and extensions
 
 The canonical agents stay unchanged. Docs-sync maps changes to PS document paths and reads the entire target document before editing; the pointer supplies the onward destination. The reviewer also reads documents that become pointers. This specifies the intended workflow without proving host compliance.
+"Unchanged" means the mapping adds no agent text. The canonical reviewer changed in 3.2.0 for the money-severity rule.
 
 > Setup MUST NOT synthesize or append a docs-sync extension solely to enable pointer routing. Existing project customizations MUST retain explicit dispositions and exact-text preservation, because mapping cannot bypass project-rule approval.
 >
@@ -369,6 +488,10 @@ The canonical agents stay unchanged. Docs-sync maps changes to PS document paths
 > Setup MUST report a retained standalone BS agent or unresolved custom wrapper as an incomplete PS agent update and identify the definition actually invoked.
 
 These apply the existing adoption and update rules in `references/modes.md`; they add no new wrapper-generation behavior. A declined replacement of the standalone BS docs-sync still permits the mapping (maintainer decision Q8): keep the retained agent, report the incomplete PS agent installation and make no canonical-compatibility claim.
+
+A retained agent is bound only by root AGENTS.md text. Setup therefore installs the
+managed-block rule of the agents block before it reports the retained agent, and the
+report MUST name the managed blocks that agent is able to edit.
 
 ### Existing-content consolidation
 
@@ -414,6 +537,7 @@ The existing prepare and commit recheck inputs, targets, drafts and request meta
 Do not declare `.backend-standards.json`: it is outside the existing scope accepted for transaction inputs. Reconfirm its disposition immediately before prepare.
 
 **Accepted limitation:** the stamp can change between that check and commit. This release adds neither atomic stamp binding nor a production-script change.
+That sentence describes 3.1.0. 3.2.0 changes two production scripts for other reasons (policy baseline recognition and installer-backup reporting) and still adds no atomic stamp binding.
 
 ### Validation boundary
 

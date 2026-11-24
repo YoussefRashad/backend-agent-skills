@@ -45,7 +45,7 @@ cp -r ~/backend-agent-skills/audit             ~/.claude/skills/
 
 On Windows, `~/.claude/skills` is `C:\Users\<you>\.claude\skills\`.
 
-`project-setup` (3.1.0, shared by Claude Code and Codex) is **not**
+`project-setup` (3.2.0, shared by Claude Code and Codex) is **not**
 copied with `cp`: it has its own installer, which verifies the copy, keeps backups and refuses
 to overwrite an older unversioned copy without consent. Retire v1 first (see
 `project-setup/references/claude.md` "Retiring v1"), then:
@@ -56,8 +56,10 @@ node ~/backend-agent-skills/project-setup/install/install.mjs            # add -
 node ~/backend-agent-skills/project-setup/install/install.mjs verify
 ```
 
-See `project-setup/README.md` and `project-setup/RELEASE-NOTES-3.1.0.md` (compatibility,
-the backend-standards documentation mapping and limitations). A project installed
+See `project-setup/README.md` and `project-setup/RELEASE-NOTES-3.2.0.md` (compatibility,
+the fixes to the 3.1.0 live acceptance findings, upgrade steps and limitations).
+`project-setup/RELEASE-NOTES-3.1.0.md` is the 3.1.0 history (the backend-standards
+documentation mapping and its live acceptance). A project installed
 by project-setup v2 is updated with `project-setup/references/migration-v2.md`;
 `project-setup/RELEASE-NOTES-2.0.0.md` is the 2.0.0 history.
 `project-setup/RELEASE-NOTES-3.0.0.md` is the 3.0.0 history, with the rc.4 host measurement results.
@@ -86,9 +88,11 @@ cp -r backend-standards toolchain-config pr-review audit ~/.claude/skills/
 node project-setup/install/install.mjs && node project-setup/install/install.mjs verify
 ```
 
-This installs `project-setup` 3.1.0 for both tools; update each project installed
+This installs `project-setup` 3.2.0 for both tools; update each project installed
 by v2 with `project-setup/references/migration-v2.md`.
 The 3.1.0 live acceptance was measured on both hosts and supports a narrower claim than full cross-host compatibility; its scope, results and limitations are in the 3.1.0 release notes.
+The 3.2.0 changes are not yet measured on a host; before installing, read the "Upgrading" steps of
+`project-setup/RELEASE-NOTES-3.2.0.md` (installer backups, tracked root `env/` or `cert/` files).
 V2 validation rejects the schema-3 manifest of a migrated project, so roll the
 project back with the tooling used for the update before reverting the installed skill (see
 `project-setup/RELEASE-NOTES-3.1.0.md` § "Rollback").
@@ -216,7 +220,7 @@ backend-agent-skills/
 ├── toolchain-config/
 │   ├── SKILL.md
 │   └── templates/               eslint · prettier · tsconfig · husky · security-scan
-├── project-setup/               general-purpose — shared Claude Code + Codex setup (3.1.0, own installer and tests)
+├── project-setup/               general-purpose — shared Claude Code + Codex setup (3.2.0, own installer and tests)
 ├── pr-review/SKILL.md           general-purpose — per-PR multi-lane review
 ├── audit/SKILL.md               general-purpose — full-codebase safety net
 └── LICENSE                      MIT

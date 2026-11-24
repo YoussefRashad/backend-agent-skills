@@ -1,7 +1,7 @@
-# project-setup 3.1.0 - skill source
+# project-setup 3.2.0 - skill source
 
-**Release 3.1.0.** See RELEASE-NOTES-3.1.0.md for compatibility, the backend-standards
-documentation mapping, acceptance requirements, the measured live results and the remaining limitations.
+**Release 3.2.0.** See RELEASE-NOTES-3.2.0.md for compatibility, the fixes to the 3.1.0 live
+acceptance findings, the upgrade steps, what is not measured and the remaining limitations.
 
 Secret-path controls are tool-level, not an OS security boundary: on Windows native a subprocess started by an agent
 can still read secret files. Keep real secrets out of development working trees.
@@ -204,6 +204,10 @@ distribution repository. Reviewer and docs-sync routing was measured on both hos
 reviewer still rates the seeded money defect INFO, so 3.1.0 makes a narrower claim than full
 cross-host compatibility; see RELEASE-NOTES-3.1.0.md.
 
+The paragraphs above describe 3.1.0. In 3.2.0 the canonical reviewer and the root AGENTS.md and
+CLAUDE.md templates changed, the mapping gained one applicability rule for every mode and
+partial-agent-layer variants, and none of these changes is measured yet; see RELEASE-NOTES-3.2.0.md.
+
 ## Test first (no installation, no real config touched)
 
 ```
@@ -214,15 +218,22 @@ node tests/run-tests.mjs --keep     # keep fixtures + results.json for inspectio
 The suite runs in a temp directory with HOME/USERPROFILE and git config redirected there.
 
 Release acceptance requires the complete strict gate below and, separately, the three standalone
-gates node tests/bs-doc-map.test.mjs, node tests/release-3.1.test.mjs and node tests/c18.test.mjs
-(the 3.1.0 mapping contract, the 3.1.0 release assertions and the historical 3.0.0 assertions;
+gates node tests/release-3.2.0.test.mjs, node tests/v320.test.mjs and node tests/bs-doc-map.test.mjs
+(the 3.2.0 release gate, the 3.2.0 behaviour and contract spec, and the living mapping contract;
 neither run-tests.mjs nor accept-rc1.mjs runs them). Run them serially.
 A focused run or a zero exit
 from diagnostic selection does not replace it. Only R13d may skip for the recorded Windows
 file-symlink privilege reason.
 
+From 3.2.0 the historical gates (tests/run-tests.mjs, tests/accept-rc1.mjs,
+tests/release-3.1.test.mjs and tests/c18.test.mjs) read the 3.1.0 scripts and data. They run only
+in the reconstructed 3.1.0 view built by node tests/run-310-view.mjs; run directly in the 3.2.0
+working tree they are expected to fail. `--out` is an empty directory outside the repository and
+outside the temp directory. CI runs none of these gates.
+
 ```text
-node tests/accept-rc1.mjs
+node tests/run-310-view.mjs --out <empty-dir-1> --run release-3.1,c18,bs-doc-map
+node tests/run-310-view.mjs --out <empty-dir-2> --run accept-rc1
 ```
 
 ## Install (only when you decide to)
@@ -256,7 +267,7 @@ a new directory outside project-setup. It does not create tags, publish releases
 the skill. Run complete candidate acceptance before a later authorized release action.
 
 S07 uses a temporary repository, isolated Git configuration and synthetic tags. It never
-requires or creates project-setup-v3.1.0 in the distribution repository.
+requires or creates project-setup-v3.2.0 in the distribution repository.
 
 The installer payload hash, archive SHA256 and backup snapshot digest identify different
 bytes. Do not substitute one for another. Preserve the recorded historical v2 provenance;
@@ -265,5 +276,5 @@ do not rebuild or replace its archive.
 Later local build, after the reviewed tag already exists:
 
 ```text
-node install/release.mjs --tag project-setup-v3.1.0 --out <unused-directory>
+node install/release.mjs --tag project-setup-v3.2.0 --out <unused-directory>
 ```

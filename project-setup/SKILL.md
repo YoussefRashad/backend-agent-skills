@@ -3,7 +3,7 @@ name: project-setup
 description: Set up, migrate, or update shared AI-agent scaffolding for a backend repository so Claude Code and Codex work from the same rules - AGENTS.md as the shared source of truth, CLAUDE.md importing it, shared reviewer and docs-sync agents with thin per-tool wrappers, secret-path protection for both tools, and project docs generated from the actual code. Use this whenever the user wants to set up, install, initialize, re-run, upgrade, or migrate project setup, AGENTS.md, CLAUDE.md, agent docs, or reviewer/docs-sync agents in a repo, including repos already configured by the older Claude-only project-setup (v1), repos with hand-written CLAUDE.md or AGENTS.md, and new or empty repos. Treats the codebase as sensitive (fintech-grade), never reads secrets, enforces plan-and-confirm gates, and changes documentation and agent configuration only.
 ---
 
-# project-setup 3.1.0
+# project-setup 3.2.0
 
 One skill, one source, two tools. Produces a repository layout that Claude Code and Codex both follow:
 
@@ -198,6 +198,7 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
 1. `node scripts/detect.mjs`. Act on every warning before going further; tracked secret files or a held lock stop the run.
    Its install list is a filesystem scan; confirm which `project-setup` copies are active from the running tool's own
    skill list, and stop if more than one is active.
+   Act on an installerBackups warning before continuing: a backup inside the skills directory can be an active second copy.
 2. Only when detect reports mode `update` with a schema-2 manifest, run
    `node <SKILL_DIR>/scripts/check-agent-baselines.mjs` before reading installed agents or
    wrappers for comparison, from the same `<SKILL_DIR>` whose `data/v2.0.0/` files you will
@@ -233,6 +234,7 @@ runtime, agents, ownership, omissions, snippet record and manifest share one tra
    detected mode and every unresolved disposition, then stop for approval. The signals and dispositions are defined
    in `references/docs-generation.md` ("Documentation source of truth on backend-standards projects"); the mapping
    never changes the detected mode.
+   The assessment lists every mapped document as provisionally applicable (with its evidence kind) or not applicable, as defined in references/docs-generation.md ("Applicability"); Phase 1 confirms the list.
 7. Permission decisions. Read `claude.allows.rules`, `managed`, `omitted` and `results`. The managed inventory comes
    from installed ownership records; omitted entries remain explicit decisions. Diagnostics
    identify risk and remedy, not permission to remove a rule. Inventory is not approval.

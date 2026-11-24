@@ -21,6 +21,14 @@ draft that is invalid, lowers the schema, or drops an installed entry outside th
 (`APPLY_POLICY_REGRESSION`, exit 3); a content approval does not bypass it. To change the shipped defaults, edit the
 skill's file; installed projects receive the change through that workflow.
 
+Since 3.2.0 the shipped defaults also cover the root `env/` and `cert/` directories (`env/**` and `cert/**`). Both
+are root-anchored on purpose: `**/env/**` would also match configuration code such as `src/config/env/*.ts`, which
+setup reads for variable names. Setup scripts refuse paths under root `env/` and `cert/` from the moment 3.2.0 is
+installed, whatever the project decides for the two coverage rows, because setup's refusal set is the union of the
+shipped defaults and the installed policy (first paragraph above). An `omit` decision declines the managed coverage
+only: an identity the project already holds in `projectPatterns` keeps protecting, and the controls derived from it
+remain.
+
 Removing an installed `projectPatterns` entry is a manual edit outside setup. The apply gate refuses that removal
 even in a reviewed migration with decisions, by design: setup never shrinks a project's own protections, so the
 refusal is expected and is not a bug. To drop such an entry, edit `.ai/security-paths.json` directly and review that

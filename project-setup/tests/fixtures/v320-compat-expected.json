@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "runs": {
+    "scripts": [
+      "C13 component assertions pass :: {\"errors\":[],\"failed\":[{\"id\":\"RC1/C13/release\",\"failures\":[\"scripts/detect.mjs is unchanged\",\"scripts/migrate-security-paths.mjs is unchanged\"]}]}",
+      "C14 component assertions pass :: {\"errors\":[],\"failed\":[{\"id\":\"RC1/C14/release\",\"failures\":[\"scripts/detect.mjs is unchanged\",\"scripts/migrate-security-paths.mjs is unchanged\"]}]}",
+      "C15 component assertions pass :: {\"errors\":[],\"failed\":[{\"id\":\"RC1/C15/release\",\"failures\":[\"scripts/detect.mjs is unchanged\"]}]}",
+      "C16 component assertions pass :: {\"errors\":[],\"failed\":[{\"id\":\"RC1/C16/release\",\"failures\":[\"scripts/detect.mjs is unchanged :: \\\"d9c80c5b4af7bce55e48bdbb92e9dfc14db834860094807d73c2e0b9704ba193\\\"\"]}]}",
+      "C17 component assertions pass :: {\"errors\":[],\"failed\":[{\"id\":\"V2/C17/preservation\",\"failures\":[\"scripts/detect.mjs is byte for byte its pre-C17 bytes :: \\\"d9c80c5b4af7bce55e48bdbb92e9dfc14db834860094807d73c2e0b9704ba193\\\"\",\"scripts/migrate-security-paths.mjs is byte for byte its pre-C17 bytes :: \\\"d5766aea5ae2cc40b20a737b7129e8bdffe164a7f0bb53c37a0930e88c07edc8\\\"\"]}]}"
+    ]
+  }
+}
