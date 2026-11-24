@@ -47,7 +47,7 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 | Section 1, row A: default-mode adopt | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Phase 0 observed from a paste; prompts, plan hash, commit and validate not recorded. |
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
 | Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, validate and git state independently confirmed by the maintainer, permission prompts not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
-| Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged and is not extended. |
+| Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED for this session; positive leg run by the maintainer on `row-b` (addendum), PASS on what was shown with one sub-criterion unread; control NOT yet run | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged. |
 | Section 3: Codex P4 project-context check | BLOCKED for this session; later MEASURED by the maintainer (see "Addendum: P4 run by the maintainer") | Reason 1, plus the trust dialog. Setup part measured here: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate. |
 | Section 3b: Codex deny-read profile canaries | NOT ATTEMPTED | Needs a paste into `~/.codex/config.toml`, which this session does not edit, and a TUI. Not in the task. |
 | Section 4: Codex PS rows r1 to r5 and doc-writing case | NOT ATTEMPTED | Needs a Codex session that may write and approve; reasons 1 and 2. Not in the task's list beyond the row names above. |
@@ -196,6 +196,47 @@ the output only):
 
 Still not recorded for Row B: the count and wording of Claude Code permission prompts and whether the status line ever said
 "Allowed by auto mode classifier"; the keep and take-new answers; and the L16 rule on this clone.
+
+## Addendum: L16 launch rule in the TUI, positive leg, run by the maintainer (2026-11-25, about 00:18 to 00:23 local)
+
+Source: the maintainer's pastes of the Claude Code 2.1.331 TUI (`--permission-mode default`), started at the repository root of
+`D:ps-live	uiow-b`, which after Row B carries the 3.2.0 `claude` block. The maintainer committed the Row B state first (commit
+`92e70ae`, "fixture: row B after PS 3.2.0 update", 24 files changed; the paste states it) so the range is `408c3bb..HEAD`. What the
+parent session did is read from its own messages in the paste; this session saw neither the TUI nor the brief text.
+
+- Turn 1 "Change directory to src.": the parent ran a shell command and reported the session now in `D:ps-live	uiow-bsrc`,
+  started at the repository root. A directory change took effect. (Whether the TUI showed a directory-change event, as the runbook
+  asks, is not in the paste; the parent's report is the evidence.)
+- Turn 2 "Spawn the reviewer agent to review the range 408c3bb..HEAD.": the parent did NOT refuse on the launch rule. It searched two
+  patterns, ran shell commands, wrote the full diff to the git-ignored `.ai/.run/review/408c3bb..HEAD.diff`, and spawned the reviewer
+  as a background agent. By the parent's own account the brief names the start directory (the repository root), the repository root and
+  the current directory. The brief text itself was not pasted, so that statement is the parent's description, not read. The command
+  that wrote the diff moved the session back to the root; the parent restored it to `src` (self-report).
+- The reviewer completed (2 min 56 s, about 116k tokens, 33 tool calls, an in-session subagent so no `result.json` and no cost or
+  per-turn figures) and did not refuse. The parent's summary of its result: verdict "approve with changes", nothing critical, high or
+  medium, no narrowing of secret-path or permission coverage, six managed agent files hash-checked against `.ai/manifest.json`, all
+  six match. It did not run git, git-safe or the project gates (the brief allowed that; the range changes no code).
+- Criterion check against the runbook: no "started in a subdirectory" refusal by the parent or the reviewer (met); the review completed
+  with a verdict (met, the paste is the parent's relay, so the exact verdict block layout was not seen); whether the reviewer itself
+  states that the original start directory was given: NOT shown (the parent says the brief carried it). So: PASS on the part that was
+  shown; one sub-criterion not read. One sample, Claude Code 2.1.331, Windows. The earlier headless run was on 2.1.330.
+- The negative control (new session started in `row-bsrc`, turn 2 only, parent must refuse before reading files): NOT yet run.
+
+Findings of that review (reviewer's own, relayed by the parent, which says it re-checked findings 1, 2 and 5 against the files; this
+session verified none of them). They concern the content PS 3.2.0 generated or left in the Row B fixture, not the launch rule:
+
+1. `.ai/standards/03-project-architecture.md:280` still says docs-sync falls back to `main...HEAD`; the shipped docs-sync now asks
+   for an explicit range (`.ai/agents/docs-sync.md:14`). `TODO.md` already says so.
+2. `AGENTS.md:96-97` says `TODO.md` lists what the integration docs need; `TODO.md` never mentions integration.
+3. `TODO.md:86-87` gives a wrong reason for dropping a reviewer rule ("collides with the canonical reviewer"); the canonical reviewer
+   accepts stricter project rules, so a medium finding on a PII or auth path now yields "approve with changes" instead of blocking.
+   No such paths exist in this code yet.
+4. `.ai/agents/docs-sync.project.md` numbering starts at 2 and line 24 points to an "admin-route table" that 03 section 6 lacks.
+5. From an earlier commit (backend-standards): `03:25` says `src/` has four files; it has five.
+Open questions it left: whether `Read(/env/**)` and `Read(/cert/**)` apply from the repository root (the canary was not run); `AGENTS.md`
+and `reviewer.project.md` do not point Codex reviewers to `known-deviations.md` (empty today). Together with the heading-placement
+mistake PS reported itself (03 section 12), these are findings on the interactive 3.2.0 update, recorded here, none fixed, and no
+shipped byte changed.
 
 ## What stays not measured
 
