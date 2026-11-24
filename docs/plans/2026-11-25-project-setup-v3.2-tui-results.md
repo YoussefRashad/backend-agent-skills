@@ -46,7 +46,7 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 |---|---|---|
 | Section 1, row A: default-mode adopt | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Phase 0 observed from a paste; prompts, plan hash, commit and validate not recorded. |
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
-| Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, prompts and independent checks not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
+| Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, validate and git state independently confirmed by the maintainer, permission prompts not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
 | Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged and is not extended. |
 | Section 3: Codex P4 project-context check | BLOCKED for this session; later MEASURED by the maintainer (see "Addendum: P4 run by the maintainer") | Reason 1, plus the trust dialog. Setup part measured here: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate. |
 | Section 3b: Codex deny-read profile canaries | NOT ATTEMPTED | Needs a paste into `~/.codex/config.toml`, which this session does not edit, and a TUI. Not in the task. |
@@ -175,9 +175,27 @@ Environment contamination (not project-setup behaviour): the paste shows `PostTo
 repeatedly with "Python was not found; run without arguments to install from the Microsoft Store" and the `typescript-lsp` language
 server failing to start. They come from the maintainer's Claude Code user and plugin configuration. PS completed regardless.
 
+Independent checks run by the maintainer in `D:\ps-live\tui\row-b` right after (pasted, 2026-11-25 about 00:17 local; this session read
+the output only):
+
+- `validate.mjs --json`, run by the maintainer with the PowerShell form: `ok: true`, 16 pass, 0 warn, 0 fail, plus the informational
+  `allow-local` note (`.claude/settings.local.json` is personal). Includes `policy-managed` (patterns match the installed baseline),
+  `agents-size` (`AGENTS.md` 130 lines, 8350 bytes), 33 generated files scanned for secret-shaped content, and the hook self-test
+  passed with `claudeHookLoading: not-verified`. This confirms PS's self-reported validate result.
+- `git status --short -uall`: 16 modified paths (`.ai/agents/{docs-sync,reviewer}.md`, `.ai/context/{code-patterns,configuration,
+  development-rules,project-tree}.md`, `.ai/manifest.json`, `.ai/security-paths.json`, `03`, `known-deviations.md`, both
+  `.claude/agents/*.md`, `.claude/settings.json`, `AGENTS.md`, `CLAUDE.md`, `TODO.md`) and 8 untracked (`reviewer.project.md`,
+  `docs-sync.project.md`, `critical-modules.md`, `error-contract.md`, `glossary.md`, `docs/api-conventions.md`, `docs/database.md`,
+  `docs/observability.md`). That is the plan's 8 created and 15 modified plus `.ai/manifest.json`, which the plan carries as a metadata
+  operation (the headless update likewise reported changes "plus 3 metadata ops"); the earlier "6 untracked" was `git status`
+  collapsing directories. Inferred, consistent with the plan, not proven line by line. Only the planned paths changed.
+- `git diff --stat`: 16 files, 428 insertions, 337 deletions. No tracked non-wrapper file shows a whole-file rewrite (largest:
+  `.ai/manifest.json` 176, `03` 34 changed lines, `TODO.md` 34). The two wrappers show 117 and 135 changed lines because they were
+  replaced by the 15-line shipped wrappers, which the plan states. This is evidence against a line-ending rewrite of the other files;
+  `git ls-files --eol` was not run, so line endings are not verified directly.
+
 Still not recorded for Row B: the count and wording of Claude Code permission prompts and whether the status line ever said
-"Allowed by auto mode classifier"; the keep and take-new answers; Row B's own `validate.mjs`, `git diff --stat` and line-ending
-check; and the L16 rule on this clone.
+"Allowed by auto mode classifier"; the keep and take-new answers; and the L16 rule on this clone.
 
 ## What stays not measured
 
