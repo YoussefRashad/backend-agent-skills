@@ -46,7 +46,7 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 |---|---|---|
 | Section 1, row A: default-mode adopt | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Phase 0 observed from a paste; prompts, plan hash, commit and validate not recorded. |
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
-| Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
+| Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, prompts and independent checks not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
 | Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged and is not extended. |
 | Section 3: Codex P4 project-context check | BLOCKED for this session; later MEASURED by the maintainer (see "Addendum: P4 run by the maintainer") | Reason 1, plus the trust dialog. Setup part measured here: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate. |
 | Section 3b: Codex deny-read profile canaries | NOT ATTEMPTED | Needs a paste into `~/.codex/config.toml`, which this session does not edit, and a TUI. Not in the task. |
@@ -128,10 +128,61 @@ PowerShell, failed with MODULE_NOT_FOUND because PowerShell does not expand `~` 
 `node "$HOME\.claude\skills\project-setup\scripts\validate.mjs" --json`. The runbook (a plan document, not edited) and this session's
 reply that repeated the command both used the `~` form. No validate result was obtained from it.
 
+## Addendum: Row B continued to commit, run by the maintainer (2026-11-25, about 00:06 to 00:14 local)
+
+Source: further pastes of the same Claude Code TUI (Claude Code 2.1.331, `--permission-mode default` per the runbook command). Every
+statement below is PS's own report or dialog text as pasted; this session did not read the repository, the clone's `git status` or
+any file of the clone, and has not run `validate.mjs` there. Self-reports are labelled as such.
+
+Observed in the dialogs (as pasted):
+
+- Decisions answered by the maintainer on the first dialog: working mode Normal; reviewer wrapper Merge; docs-sync wrapper Merge;
+  "a section that only says None counts as a fact": Yes, literal rule (so glossary and database become pointers). The Applicable tab
+  itself held that last question only.
+- Prepare stopped with exit 3 and asked for explicit `--approve-user-content` for exactly six paths: `.ai/security-paths.json`,
+  `.ai/standards/03-project-architecture.md`, `.ai/standards/known-deviations.md`, `.claude/agents/reviewer.md`,
+  `.claude/agents/docs-sync.md`, `CLAUDE.md`. The maintainer chose "Approve all 6". The headless update asked for five (no
+  `known-deviations.md`); the sixth is the PORT drift row deletion.
+- Plan hash dialog: `155204b7ac894741a13eeb646de3a5cb4bcb6d0a28cee02f732d40c5949842c4` (64 hex characters), "23 files, as reviewed",
+  options Commit this plan / Stop. PS's own report: prepare passed, the bound diff matches it, 23 file changes (8 created, 15
+  modified) plus metadata, the 7 `.ai/tools/*` files bound as inputs but unchanged. The maintainer's answer to this dialog and the
+  run id are in the paste only through PS's later report: it committed (`apply.mjs commit`), run id `ps-20261125-cf70`.
+- Nothing was written before the plan-hash dialog (PS's report; not independently checked). The two approval dialogs and the first
+  decision dialog are PS conversation dialogs; the count and wording of Claude Code permission prompts was not recorded.
+
+PS's own final report (self-report, not verified here):
+
+- All 23 files written, `validate.mjs`: 16 pass, 0 warnings, 0 fail; the two wrapper drift warnings gone.
+- Both wrappers replaced by the shipped 3.2.0 wrappers; approved backend-standards rules moved verbatim into
+  `.ai/agents/reviewer.project.md` and `.ai/agents/docs-sync.project.md`. Held back and listed as open decisions in `TODO.md`: the
+  reviewer's confidence labels, its known-deviations bullet, its severity table and output format, docs-sync's section 1 ("Establish
+  what changed") and `model: opus` on both. The headless update of 2026-11-24 dropped these in the maintainer-proxy answers; here they
+  are held pending, so the two runs differ in disposition, not in procedure.
+- 03: 284 lines / 19,829 bytes to 316 lines / 21,540 bytes; PORT default recorded once as 3000; the drift row and the 8080 Landmines
+  row deleted; `.env.example` missing recorded; eight pointer documents; `AGENTS.md` blocks, `development-rules.md` and
+  `code-patterns.md` refer to 03.
+- PS reported one mistake of its own: in 03 section 12 it placed the new `### Compiler and lint settings` heading above the existing
+  Lockfile / Branch naming / Merge strategy table, so the table reads as part of the new subsection. No content lost; fixing it needs
+  another reviewed run. Recorded here as a finding on the interactive update, not fixed.
+- Not verified, by PS's own statement: the project's lint, typecheck and tests (no `node_modules`; `npx tsc` fetched TypeScript 7.0.2
+  instead of the lockfile's 5.9.3), the secret-read canary, Codex.
+- State left: nothing committed to Git, "16 files modified and 6 new paths untracked" on a detached HEAD; recovery data kept in
+  `.ai/.run/ps-20261125-cf70`; setup lock released. The count is not the same as the plan's 8 created and 15 modified (16 against
+  15 and 6 against 8); untracked directories can be collapsed by `git status`, so this is NOT a confirmed mismatch. The maintainer's
+  `git status --short -uall`, `git diff --stat` and an own `validate.mjs --json` were requested and are not in the record.
+
+Environment contamination (not project-setup behaviour): the paste shows `PostToolUse:Edit` and `PostToolUse:Write` hooks failing
+repeatedly with "Python was not found; run without arguments to install from the Microsoft Store" and the `typescript-lsp` language
+server failing to start. They come from the maintainer's Claude Code user and plugin configuration. PS completed regardless.
+
+Still not recorded for Row B: the count and wording of Claude Code permission prompts and whether the status line ever said
+"Allowed by auto mode classifier"; the keep and take-new answers; Row B's own `validate.mjs`, `git diff --stat` and line-ending
+check; and the L16 rule on this clone.
+
 ## What stays not measured
 
-Everything the runbook sections 1, 2, 3, 3b, 4 and 5 list, except what the two addenda above record (Codex P4 PASS; Row A and
-Row B Phase 0 only). The 2026-11-24 unmeasured-items results file remains the record of what
+Everything the runbook sections 1, 2, 3, 3b, 4 and 5 list, except what the addenda above record (Codex P4 PASS; Row A Phase 0 only;
+Row B to commit by self-report). The 2026-11-24 unmeasured-items results file remains the record of what
 was measured headless; nothing in it changes.
 
 ## For whoever runs the rows
