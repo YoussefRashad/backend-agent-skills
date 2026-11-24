@@ -44,7 +44,7 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 
 | Row (runbook section) | Status | Reason and what is known without the TUI |
 |---|---|---|
-| Section 1, row A: default-mode adopt | BLOCKED for this session; Phase 0 only run by the maintainer (see addendum), row INCOMPLETE | Reasons 1 and 2. Phase 0 observed from a paste; prompts, plan hash, commit and validate not recorded. |
+| Section 1, row A: default-mode adopt | BLOCKED for this session; two runs by the maintainer: run 1 stopped at the decisions (nothing written), run 2 applied to commit (addendum), validate and git state independently confirmed, permission prompts and the final PS report not recorded, row PARTIAL | Reasons 1 and 2. |
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
 | Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED for this session; run to commit by the maintainer (two addenda), outcome PS self-reported, validate and git state independently confirmed by the maintainer, permission prompts not recorded, row PARTIAL | Reasons 1 and 2. Observation made here: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
 | Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED for this session; positive leg run by the maintainer on `row-b` (addendum), PASS on what was shown with one sub-criterion unread; negative control observed as expected (refusal), see addendum | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged. |
@@ -246,10 +246,74 @@ and `reviewer.project.md` do not point Codex reviewers to `known-deviations.md` 
 mistake PS reported itself (03 section 12), these are findings on the interactive 3.2.0 update, recorded here, none fixed, and no
 shipped byte changed.
 
+## Addendum: Row A (adopt) applied, run 2 by the maintainer (2026-11-25, about 00:30 to 00:48 local)
+
+Source: pastes of the Claude Code 2.1.331 TUI (`--permission-mode default` per the runbook command) and the maintainer's own PowerShell
+output in `D:\ps-live\tui\row-a`. This session did not see the TUI. Two runs were made on the same clone, kept and labelled:
+
+- Run 1 (the first Phase 0 paste above, about 23:26): stopped at the nine decisions. The maintainer's own `validate.mjs`, `git status`
+  and `git diff --stat` at about 00:30 showed a clean clone (validate: 1 pass, no project-setup files; both git commands empty), so run 1
+  wrote nothing. Whether the session was closed or abandoned is not recorded.
+- Run 2 (fresh session, run id `ps-20261125-k7q2` per PS): the decisions came as a four-question dialog, not nine (Phase 0 text
+  reported as pasted, below). This is the applied run.
+
+Observed in run 2 (as pasted):
+
+- Phase 0: adopt mode, "existing Claude configuration without reliable v1 provenance"; mapping active (no stamp, provenance sentence at
+  `CLAUDE.md:70`, import at `:26`); 03 273 lines, 19,693 bytes (the baseline of the headless adopt of 2026-11-24). One mapped heading
+  missing: `Database > Schema changes`. Provisional pointer list as in run 1 (six applicable, glossary and database depending on a
+  decision, integrations and business-rules not applicable).
+- A permission denial: PS reported that one check, a command reading the skill's own `data/secret-paths.json` to compare coverage
+  against `env/**`, `cert/**`, `*.p12` and `.htpasswd`, "was denied by the permission system" and that it did not retry another way.
+  Who denied it (the maintainer at a prompt or a rule) is NOT recorded; the maintainer did not answer PS's question about it.
+- Decisions answered by the maintainer: mode Normal; glossary and database become pointers and 03 gets a `Schema changes` heading;
+  replace both backend-standards agents (the shared reviewer's severity scale and output format win, docs-sync's raw `git diff`
+  fallback and `model: opus` dropped); keep `CLAUDE.md` intact and give `AGENTS.md` a commands summary. The maintainer then said "go"
+  without answering the secret-policy read question, so PS first said it would fall back to keeping the reviewer's never-read rule in
+  `reviewer.project.md`. Later PS dropped those lines instead, on the grounds that the generated `.claude/settings.json` deny list
+  covers every path they named (PS's own reasoning from the settings merge, not from reading the shipped policy).
+- Prepare stopped (exit 3) and asked `--approve-user-content` for exactly four paths: `CLAUDE.md`,
+  `.ai/standards/03-project-architecture.md`, `.claude/agents/reviewer.md`, `.claude/agents/docs-sync.md`. The maintainer chose
+  "Approve all four". The update runs asked for five and six paths, so the count depends on the starting state.
+- Plan hash dialog: `080f8b734fd63df0e6cb842e434247cdc12cfdd9483de5efe2d07fd7e21e0de1` (64 hex), 32 files (27 created, 4 modified with
+  approval, 1 managed block in `.gitignore`). The files were then written, so the maintainer chose to commit; the choice text and the
+  final PS report were not pasted. PS states the commit refuses to run if the bound plan changed. The hash applied by the commit is not
+  shown.
+
+Independent checks by the maintainer after the commit (pasted, about 00:48; this session read the output only):
+
+- `validate.mjs --json`: `ok: true`, 16 pass, 0 warn, 0 fail. Informational: `codex-snippet` "Codex deny-read snippet has not been
+  recorded", `allow-local` (personal settings, not managed). `policy-managed`: managed patterns match the installed baseline;
+  `AGENTS.md` 113 lines, 7903 bytes; 32 generated files scanned; hook self-test passed with `claudeHookLoading: not-verified`. The
+  headless adopt reported 16 pass, 0 warn, 0 fail too.
+- `git status --short -uall`: 5 modified (`03`, both `.claude/agents/*.md`, `.gitignore`, `CLAUDE.md`) and 28 untracked: 27 created
+  files plus `.ai/manifest.json`, the plan's metadata operation. That matches 27 created and 5 modified (4 approved paths plus the
+  `.gitignore` block). Eight pointers exist: `project-tree`, `configuration`, `critical-modules`, `error-contract`, `glossary`,
+  `api-conventions`, `database`, `observability`. `.ai/context/code-patterns.md` was not created (PS: starter code only), where the
+  headless adopt wrote it in full.
+- `git diff --stat`: 5 files, 84 insertions, 235 deletions. `03` +9 (273 to 282, the three planned insertions), `CLAUDE.md` +48
+  (additions only), `.gitignore` +10, and the two wrappers -117 and -135 (replaced by the shipped 14 and 15 line wrappers). No
+  whole-file rewrite of a file that was meant to be only appended to. Line endings were not checked directly.
+- `.claude/settings.json` deny lines matching the secret paths (from `Select-String`): `Read(**/.env*)`, `Read(**/*.pem)`,
+  `Read(**/*.p12)`, `Read(**/*.cert)`, `Read(/env/**)`, `Read(/cert/**)`, `Read(**/.htpasswd)`. Every path of the dropped reviewer
+  never-read rule (`env/**`, `cert/**`, `*.pem`, `*.p12`, `.htpasswd`, `.env*`) has a matching deny line. This confirms PS's own
+  reason for dropping the rule; the deny rules themselves were not exercised (no canary).
+
+Comparison with the headless adopt of 2026-11-24 (one run each, different sessions and answers): both 32 operations, validate 16 pass,
+eight pointers; 03 ends at 282 against 286 lines (three insertions against four consolidations); `code-patterns.md` absent here,
+written there; the reviewer project file is 76 lines here against 83. Parity of the two adopt runs is not claimed.
+
+Environment contamination (not project-setup behaviour): `PostToolUse:Write` hooks failed with "Python was not found" and the
+`typescript-lsp` language server did not start, again, in this run.
+
+Not recorded for Row A: the count and wording of the Claude Code permission prompts and the status line; who denied the one read; the
+final PS report; the hash text applied by the commit; line endings; whether the hook and deny rules load in a new session (not
+exercised).
+
 ## What stays not measured
 
 Everything the runbook sections 1, 2, 3, 3b, 4 and 5 list, except what the addenda above record (Codex P4 PASS; Row A Phase 0 only;
-Row B to commit by self-report). The 2026-11-24 unmeasured-items results file remains the record of what
+Row B to commit by self-report; Row A to commit with independent validate). The 2026-11-24 unmeasured-items results file remains the record of what
 was measured headless; nothing in it changes.
 
 ## For whoever runs the rows
