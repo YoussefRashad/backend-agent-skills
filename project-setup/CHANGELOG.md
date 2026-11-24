@@ -23,7 +23,8 @@ two shipped deny patterns, new MUST rules and a new detect output field are addi
 
 Verification: tests/release-3.2.0.test.mjs, tests/v320.test.mjs and tests/bs-doc-map.test.mjs
 run in the working tree; the historical gates run only in the reconstructed 3.1.0 view through
-tests/run-310-view.mjs. CI runs none of them. None of the 3.2.0 changes is measured on a host yet.
+tests/run-310-view.mjs. CI runs none of them. The live measurements D1 to D10 ran on 2026-11-24; what they measured and
+what stays unmeasured is in RELEASE-NOTES-3.2.0.md ("Measured", "Not measured").
 
 See RELEASE-NOTES-3.2.0.md.
 

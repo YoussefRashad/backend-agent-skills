@@ -22,18 +22,6 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
 
 ## Needs manual review
 
-- **`project-setup` 3.0.0 reviewer residuals.** The rc.4 host measurements (2026-11-02) completed
-  with two criteria unmet, recorded in
-  `docs/plans/2026-11-02-project-setup-v3-rc4-host-measurements.md`. The Codex reviewer rated
-  the seeded wallet lost update INFO ("no funding path") in two of two runs, so the canonical
-  reviewer should say that a MUST-rule money violation keeps its severity whatever its
-  reachability. A Claude reviewer refused to start after the parent changed into a
-  subdirectory (the L16 launch-rule false refusal, now seen in the TUI). Both belong to a
-  3.0.x change; re-measure Codex change-1 and TUI P3 h afterwards.
-  Status 2026-11-22: project-setup 3.2.0 ships both fixes as text only (the money-severity rule
-  of the canonical reviewer and the delegated-agent launch bullet); neither is measured. This
-  item stays until measurements D1 and D2 of docs/plans/2026-11-22-project-setup-v3.2.0-plan.md
-  are recorded.
 - **Dependency pins are 1–2 majors behind.** `eslint` 9→10, `@eslint/js` 9→10,
   `typescript` 5→7, `lint-staged` 15→17, `eslint-plugin-sonarjs` 3→4,
   `simple-import-sort` 12→14, `eslint-plugin-security` 3→4. Deliberately held, with the
@@ -80,7 +68,8 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
   the rc.2 runs on the same host took 1189 s (C14) and 1222-1242 s (C15, 2026-10-24),
   mostly the I12-2/I12-4 alias coverage.
   C16 acceptance took 1318 s on 2026-10-25, leaving 482 s or
-  26.8% headroom. A slower or loaded host can still time out.
+  26.8% headroom. The 3.2.0 view run took 1271 s on 2026-11-24 (529 s, 29.4% headroom, same
+  host). A slower or loaded host can still time out.
   Maintainer decision (2026-10-24): keep the timeout and the coverage unchanged; revisit only
   if a full run exceeds 1500 s.
   Evidence: docs/plans/2026-10-25-project-setup-v3-rc3-c16-acceptance.md.
@@ -89,21 +78,34 @@ Nest 11. See `backend-standards/SKILL.md` § "Nest 12".
   (2026-11-14). The existing-project procedure is documented as writing no stamp. Decide which is
   intended and make the skill do it every time; project-setup accepts both signals.
 - project-setup installer backups live inside the skills directory. 3.2.0 makes detect report
-  them and documents the manual move. Moving the backup location out of host discovery is a
-  candidate for the next minor and needs the recorded skill-discovery probe (D8 of the 3.2.0
-  plan) first.
-- project-setup 3.1.0 rows not measured (`project-setup/RELEASE-NOTES-3.1.0.md`, "Not
-  measured"): the Codex P4 context check; the read-only and the documentation-writing
-  missing-destination cases, on either host; Codex PS rows; interactive default-mode PS rows for
-  the blank section, renamed heading, deleted pointer, local-instruction conflict and unchanged
-  rerun cases; a second Codex reviewer sample; the P8 Codex ownership grant (not obtainable as
-  specified while a wildcard `safe.directory` entry exists); the overwrite branch of the PS-first
-  recovery.
+  them and documents the manual move. The discovery probe (2026-11-24, D8 of the 3.2.0 plan) shows
+  that Claude Code 2.1.330 lists a dot-prefixed backup that has a SKILL.md at its top and Codex
+  0.163.0 does not, and that a nested SKILL.md is listed by Codex only. Moving the backup location
+  out of host discovery is a candidate for the next minor; a SKILL.md one level down inside a
+  dot-prefixed backup is inferred, not measured, to hide it from both
+  (`docs/plans/2026-11-22-project-setup-v3.2.0-live-results.md`).
+- project-setup rows still not measured after the 3.2.0 live measurements
+  (`docs/plans/2026-11-22-project-setup-v3.2.0-live-results.md`): the Codex PS rows (blank section,
+  renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) and the Codex
+  documentation-writing missing-destination case, which need a Codex writing lane; the interactive
+  default-mode PS rows and the TUI launch-rule row (P3 h; the L16 fix is measured headless only and
+  the TUI, where the defect was first seen, has not shown it), which need a person in the TUI; the Codex
+  P4 project-context check (inconclusive); the overwrite branch of the PS-first recovery; adopt
+  versus update parity on one source (the update leg ran); Codex runtime enforcement of `env/**`
+  and `cert/**`; the P8 Codex ownership grant (not obtainable as specified while a wildcard
+  `safe.directory` entry exists).
 - project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block without
   `--approve-user-content` (the normal `--approved-plan` approval at commit still applies):
   `onlyAddsBlocks` in `apply.mjs` compares only the text outside blocks,
   so the 3.2.0 block-edit protection is instruction-level only. A machine check needs a planned
   `apply.mjs` change and a deliberate update of the c16 case that pins today's behaviour.
+- project-setup observations from the 3.2.0 live runs, not fixed: `install.mjs` treats an unknown
+  flag such as `--help` as a plain install (it replaced 3.1.0 on this machine during the 3.2.0
+  work); after a take-new of docs-sync the backend-standards text in `CLAUDE.md` and one
+  `docs-sync.project.md` bullet still describe the dropped `known-deviations.md` rule; an update
+  reworded a sentence in 03 beyond the approved decisions and the new sentence quotes the stale
+  `PORT` default, which the live helper reports as a finding; a retained docs-sync edit and a
+  declined replacement left the evidence inventory with a style fact whose document PS had skipped.
 
 ## Missing information
 

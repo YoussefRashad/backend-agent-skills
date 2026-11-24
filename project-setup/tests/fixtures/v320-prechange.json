@@ -597,6 +597,11 @@
       "oldSha256": "c8d6261225a25b91af34395041ff9c3da7dbd9556d9b95d961f9e8980e667bd7",
       "neuSha256": "412befce5b08d1946ea8ab194f2a41437d4cbb0f550a4a822aa281cdbfa7cb0c"
     },
+    "CL320_2": {
+      "file": "CHANGELOG.md",
+      "oldSha256": "3f931338ea930047bcde028e4473af78c50aec9926cc4a99c03d60867241435e",
+      "neuSha256": "c8b963d20f9bb1492817bff79c3749dbff1ccbc08fa11d9efbf6e490080af7c5"
+    },
     "LH320_1": {
       "file": "tests/live/bs-doc-map.mjs",
       "oldSha256": "e723ae10622d42adadd67aba1fe721c4134066f478f0c7a2482b9a3d2ba7b2a9",
@@ -637,6 +642,11 @@
       "oldSha256": "6edda665e2a6fb3abc8bb4175ef7961d8624a3155973e22a0f0c860102dedeeb",
       "neuSha256": "f6437b3f8744de41cac4c94e528b7732c9b044cdc0523be6ba6b7026b5219d21"
     },
+    "PT320_4": {
+      "file": "@root/.ai/context/project-tree.md",
+      "oldSha256": "7fea24bb311617e9afc3fe925266e73138ac8692711f45667c78c2911a293c0b",
+      "neuSha256": "4f6d63637987f9254bffea3e798c4ce2fbe641b57aaab225e03f180c121e58d4"
+    },
     "RM320_1": {
       "file": "README.md",
       "oldSha256": "a1e3d40ce57a446a90ea3864ce570dfbc5525a47a3817e3b321930b72aedfaec",
@@ -667,6 +677,11 @@
       "oldSha256": "3ad75a5252654a03a9914f1ca7ea29d20c94f09b0288e7728ad01a64ae2e1dad",
       "neuSha256": "cac625b4ce4f4607bd0f8ca2560f2c4aa2649a9e206fa582fe4d5c72dfcab4dd"
     },
+    "RM320_9": {
+      "file": "README.md",
+      "oldSha256": "3a231c48f129fc7c850318064c6cad6ceec54b653bb982f59b563cb55526e171",
+      "neuSha256": "37a3932effb777b5f76a1c08355b65444716d8f2b9ddc210d8c546c2939cba43"
+    },
     "RR320_1": {
       "file": "@root/README.md",
       "oldSha256": "8b7ba5a058fa3e65090902dbb85cc5f51e50813b8d636ece64afa9b8e2a91b35",
@@ -687,15 +702,40 @@
       "oldSha256": "ff44490d8636237c3d5c868dad4743e62949374d62e59dc352d7c0b72876248d",
       "neuSha256": "b5c1d189a07038c2208e5328f3a424ac668c7de0f957c08b96fa3eb1ae1a5fc9"
     },
+    "RR320_6": {
+      "file": "@root/README.md",
+      "oldSha256": "0de71fb317f6aaebd5466939aeadaad07634f8cabb3e714b9e6687e1468f7700",
+      "neuSha256": "6523e23279ad683b455533709e3313ffae6dac79dca2499c76527263e3a2e539"
+    },
     "SK320_1": {
       "file": "SKILL.md",
       "oldSha256": "fb4bce9b4602777adcc40f62fc0b2502e090c42ab7d3d374a7b3cedab910adc6",
       "neuSha256": "8d8f88f52d7fc79ec6f1866f132c98013d0d0bf2ac18a8f29bd2dcccbe7b2d89"
     },
+    "TD320_10": {
+      "file": "@root/TODO.md",
+      "oldSha256": "6d1691da1aec578f668088773d057330f1eef5547f5346151e5d89d6652d9181",
+      "neuSha256": "5e829c95b79cbd8a78fa25ff46c011d5fa27455004f2c6aae76f939073e67bcd"
+    },
     "TD320_2": {
       "file": "@root/TODO.md",
       "oldSha256": "286581d2851e4d40e117b4ac6cc4da347d7dd62b4c507642893152cf2dfa4543",
       "neuSha256": "88023647a08bcf1f5f3e40784f730d9ddd7deea48ebb1b4e5de03ce78c890a38"
+    },
+    "TD320_7": {
+      "file": "@root/TODO.md",
+      "oldSha256": "7735a8b2e6cdac924b304ebb375d6bf386d9faf90a6f313e4eba67ceec722420",
+      "neuSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "TD320_8": {
+      "file": "@root/TODO.md",
+      "oldSha256": "022936dcc1505ebdba94bb27de305a6e06ea51052eca2eb8e8e9615a7f089e7c",
+      "neuSha256": "90ad24cf96c011c8a3534776e8beba70cafd0eb926423ca943dd8aa3f8ae4119"
+    },
+    "TD320_9": {
+      "file": "@root/TODO.md",
+      "oldSha256": "1b9eabbbf2608d94970c4ec252988100d894c247c42cc161684edb59cfe35cff",
+      "neuSha256": "b762433bf35cbe806bcd7b824b5fed05a1fdc9cb2a85aeaae40867db06441b84"
     },
     "VR320_1": {
       "file": "VERSION",

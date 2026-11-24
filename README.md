@@ -91,8 +91,9 @@ node project-setup/install/install.mjs && node project-setup/install/install.mjs
 This installs `project-setup` 3.2.0 for both tools; update each project installed
 by v2 with `project-setup/references/migration-v2.md`.
 The 3.1.0 live acceptance was measured on both hosts and supports a narrower claim than full cross-host compatibility; its scope, results and limitations are in the 3.1.0 release notes.
-The 3.2.0 changes are not yet measured on a host; before installing, read the "Upgrading" steps of
-`project-setup/RELEASE-NOTES-3.2.0.md` (installer backups, tracked root `env/` or `cert/` files).
+The 3.2.0 live measurements (one Windows host, headless) and what stays unmeasured are in
+`project-setup/RELEASE-NOTES-3.2.0.md`; before installing, read its "Upgrading" steps
+(installer backups, tracked root `env/` or `cert/` files).
 V2 validation rejects the schema-3 manifest of a migrated project, so roll the
 project back with the tooling used for the update before reverting the installed skill (see
 `project-setup/RELEASE-NOTES-3.1.0.md` § "Rollback").

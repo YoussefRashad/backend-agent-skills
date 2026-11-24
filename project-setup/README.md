@@ -206,7 +206,8 @@ cross-host compatibility; see RELEASE-NOTES-3.1.0.md.
 
 The paragraphs above describe 3.1.0. In 3.2.0 the canonical reviewer and the root AGENTS.md and
 CLAUDE.md templates changed, the mapping gained one applicability rule for every mode and
-partial-agent-layer variants, and none of these changes is measured yet; see RELEASE-NOTES-3.2.0.md.
+partial-agent-layer variants; the live measurements of 2026-11-24 and what stays unmeasured are in
+RELEASE-NOTES-3.2.0.md.
 
 ## Test first (no installation, no real config touched)
 

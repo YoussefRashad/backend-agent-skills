@@ -13,6 +13,10 @@
 // Every function takes the record set (and orders and pins) as an OPTIONAL last argument that defaults to the real module constants, so the
 // specs can prove the engine on synthetic records without a second implementation. The gate that judges pass or fail is the spec's own
 // (tests/release-3.2.0.test.mjs); this module is never asked to decide pass or fail there.
+// STAGE 2 (the sign-off after the live measurements, plan section 8): the records RM320_9, CL320_2, RR320_6, TD320_7 to TD320_11 and PT320_4 restate the "not measured" claims as measured. They
+// were generated from the final bytes with a scratch script outside the repository (the D-6 precedent) and apply AFTER the stage-1 records of their file, so the old text of a sign-off
+// record may be text that a stage-1 record inserted: a record describes the file at its own step of the forward order. TD320_7 is the reviewer-residuals closeout of the root TODO.md
+// (3.1.0 lines 25-32 plus the TD320_1 status sentence), the ONLY deletion (empty neu); CLOSEOUT_IDS320 names it and nothing else.
 // Importing this module reads no file and starts no process: only read310, buildView, to310Repo, overlay and verifyView read, and only when called.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -116,6 +120,14 @@ export const AM320 = Object.freeze({
     neu: "node install/release.mjs --tag project-setup-v3.2.0 --out <unused-directory>\n",
     after: "",
   }),
+  // stage 2 (sign-off): the last sentence of the paragraph inserted by RM320_3 restated as measured
+  RM320_9: Object.freeze({
+    file: "README.md",
+    before: "",
+    old: "partial-agent-layer variants, and none of these changes is measured yet; see RELEASE-NOTES-3.2.0.md.\n",
+    neu: "partial-agent-layer variants; the live measurements of 2026-11-24 and what stays unmeasured are in\nRELEASE-NOTES-3.2.0.md.\n",
+    after: "",
+  }),
 
   // CHANGELOG.md
   CL320_1: Object.freeze({
@@ -123,6 +135,14 @@ export const AM320 = Object.freeze({
     before: "# Changelog\n\n",
     old: "",
     neu: "## 3.2.0\n\nFixes for findings 1 to 10 of the 3.1.0 live acceptance and the two 3.0.x reviewer residuals.\nThe items promised for 3.1.x in RELEASE-NOTES-3.1.0.md ship here, as a minor release, because\ntwo shipped deny patterns, new MUST rules and a new detect output field are additive changes.\n\n- Shipped secret-path policy: root-anchored `env/**` and `cert/**`. Setup's own reads refuse them\n  as soon as 3.2.0 is installed; a project that tracks files there stops in Phase 0. A project\n  fresh-installed by 3.0.0 or 3.1.0 is recognised as baseline `v3.0.0` and is offered exactly the\n  two new coverage rows instead of a full re-review.\n- Canonical reviewer: a broken critical or MUST-level rule in a money or state-integrity flow is\n  rated HIGH or CRITICAL whatever its current reachability, and makes the verdict block.\n- Root CLAUDE.md template: a delegated agent no longer refuses on its own working directory alone;\n  root AGENTS.md template: the parent states the start directory in every delegation, and every\n  agent keeps managed-block markers intact.\n- Documentation mapping: one applicability rule for every mode, with configuration and compiler\n  strictness proposals; four Subagents line variants and three agents-block sentences for a\n  partial agent layer.\n- `detect.mjs` reports installer backups inside the skills directories (`installerBackups`) with\n  one warning per tool; the installer itself is unchanged.\n\nVerification: tests/release-3.2.0.test.mjs, tests/v320.test.mjs and tests/bs-doc-map.test.mjs\nrun in the working tree; the historical gates run only in the reconstructed 3.1.0 view through\ntests/run-310-view.mjs. CI runs none of them. None of the 3.2.0 changes is measured on a host yet.\n\nSee RELEASE-NOTES-3.2.0.md.\n\n",
+    after: "",
+  }),
+  // stage 2 (sign-off): the verification sentence of the 3.2.0 entry (inserted by CL320_1) restated as measured
+  CL320_2: Object.freeze({
+    file: "CHANGELOG.md",
+    before: "",
+    old: "tests/run-310-view.mjs. CI runs none of them. None of the 3.2.0 changes is measured on a host yet.\n",
+    neu: "tests/run-310-view.mjs. CI runs none of them. The live measurements D1 to D10 ran on 2026-11-24; what they measured and\nwhat stays unmeasured is in RELEASE-NOTES-3.2.0.md (\"Measured\", \"Not measured\").\n",
     after: "",
   }),
 
@@ -617,6 +637,14 @@ export const AM320 = Object.freeze({
     neu: "\u251c\u2500\u2500 project-setup/               general-purpose \u2014 shared Claude Code + Codex setup (3.2.0, own installer and tests)\n",
     after: "",
   }),
+  // stage 2 (sign-off): the sentence inserted by RR320_4 restated as measured
+  RR320_6: Object.freeze({
+    file: "@root/README.md",
+    before: "",
+    old: "The 3.2.0 changes are not yet measured on a host; before installing, read the \"Upgrading\" steps of\n`project-setup/RELEASE-NOTES-3.2.0.md` (installer backups, tracked root `env/` or `cert/` files).\n",
+    neu: "The 3.2.0 live measurements (one Windows host, headless) and what stays unmeasured are in\n`project-setup/RELEASE-NOTES-3.2.0.md`; before installing, read its \"Upgrading\" steps\n(installer backups, tracked root `env/` or `cert/` files).\n",
+    after: "",
+  }),
 
   // @root/TODO.md
   TD320_1: Object.freeze({
@@ -661,6 +689,44 @@ export const AM320 = Object.freeze({
     neu: "- project-setup `apply.mjs prepare` accepts a draft that replaces an edited managed block without\n  `--approve-user-content` (the normal `--approved-plan` approval at commit still applies):\n  `onlyAddsBlocks` in `apply.mjs` compares only the text outside blocks,\n  so the 3.2.0 block-edit protection is instruction-level only. A machine check needs a planned\n  `apply.mjs` change and a deliberate update of the c16 case that pins today's behaviour.\n",
     after: "\n## Missing information\n",
   }),
+  // stage 2 (sign-off): the reviewer-residuals closeout (3.1.0 lines 25-32 plus the TD320_1 status sentence), the ONLY deletion (empty neu)
+  TD320_7: Object.freeze({
+    file: "@root/TODO.md",
+    before: "## Needs manual review\n\n",
+    old: "- **`project-setup` 3.0.0 reviewer residuals.** The rc.4 host measurements (2026-11-02) completed\n  with two criteria unmet, recorded in\n  `docs/plans/2026-11-02-project-setup-v3-rc4-host-measurements.md`. The Codex reviewer rated\n  the seeded wallet lost update INFO (\"no funding path\") in two of two runs, so the canonical\n  reviewer should say that a MUST-rule money violation keeps its severity whatever its\n  reachability. A Claude reviewer refused to start after the parent changed into a\n  subdirectory (the L16 launch-rule false refusal, now seen in the TUI). Both belong to a\n  3.0.x change; re-measure Codex change-1 and TUI P3 h afterwards.\n  Status 2026-11-22: project-setup 3.2.0 ships both fixes as text only (the money-severity rule\n  of the canonical reviewer and the delegated-agent launch bullet); neither is measured. This\n  item stays until measurements D1 and D2 of docs/plans/2026-11-22-project-setup-v3.2.0-plan.md\n  are recorded.\n",
+    neu: "",
+    after: "- **Dependency pins are 1\u20132 majors behind.** `eslint` 9\u219210, `@eslint/js` 9\u219210,\n",
+  }),
+  // stage 2 (sign-off): TD320_8 the timeout data point, TD320_9 the D8 probe (the item of TD320_4), TD320_10 the rows still not measured
+  // (the item of TD320_5), TD320_11 the observations of the live runs (an insertion)
+  TD320_8: Object.freeze({
+    file: "@root/TODO.md",
+    before: "",
+    old: "  26.8% headroom. A slower or loaded host can still time out.\n",
+    neu: "  26.8% headroom. The 3.2.0 view run took 1271 s on 2026-11-24 (529 s, 29.4% headroom, same\n  host). A slower or loaded host can still time out.\n",
+    after: "",
+  }),
+  TD320_9: Object.freeze({
+    file: "@root/TODO.md",
+    before: "",
+    old: "  them and documents the manual move. Moving the backup location out of host discovery is a\n  candidate for the next minor and needs the recorded skill-discovery probe (D8 of the 3.2.0\n  plan) first.\n",
+    neu: "  them and documents the manual move. The discovery probe (2026-11-24, D8 of the 3.2.0 plan) shows\n  that Claude Code 2.1.330 lists a dot-prefixed backup that has a SKILL.md at its top and Codex\n  0.163.0 does not, and that a nested SKILL.md is listed by Codex only. Moving the backup location\n  out of host discovery is a candidate for the next minor; a SKILL.md one level down inside a\n  dot-prefixed backup is inferred, not measured, to hide it from both\n  (`docs/plans/2026-11-22-project-setup-v3.2.0-live-results.md`).\n",
+    after: "",
+  }),
+  TD320_10: Object.freeze({
+    file: "@root/TODO.md",
+    before: "",
+    old: "- project-setup 3.1.0 rows not measured (`project-setup/RELEASE-NOTES-3.1.0.md`, \"Not\n  measured\"): the Codex P4 context check; the read-only and the documentation-writing\n  missing-destination cases, on either host; Codex PS rows; interactive default-mode PS rows for\n  the blank section, renamed heading, deleted pointer, local-instruction conflict and unchanged\n  rerun cases; a second Codex reviewer sample; the P8 Codex ownership grant (not obtainable as\n  specified while a wildcard `safe.directory` entry exists); the overwrite branch of the PS-first\n  recovery.\n",
+    neu: "- project-setup rows still not measured after the 3.2.0 live measurements\n  (`docs/plans/2026-11-22-project-setup-v3.2.0-live-results.md`): the Codex PS rows (blank section,\n  renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) and the Codex\n  documentation-writing missing-destination case, which need a Codex writing lane; the interactive\n  default-mode PS rows and the TUI launch-rule row (P3 h; the L16 fix is measured headless only and\n  the TUI, where the defect was first seen, has not shown it), which need a person in the TUI; the Codex\n  P4 project-context check (inconclusive); the overwrite branch of the PS-first recovery; adopt\n  versus update parity on one source (the update leg ran); Codex runtime enforcement of `env/**`\n  and `cert/**`; the P8 Codex ownership grant (not obtainable as specified while a wildcard\n  `safe.directory` entry exists).\n",
+    after: "",
+  }),
+  TD320_11: Object.freeze({
+    file: "@root/TODO.md",
+    before: "",
+    old: "",
+    neu: "- project-setup observations from the 3.2.0 live runs, not fixed: `install.mjs` treats an unknown\n  flag such as `--help` as a plain install (it replaced 3.1.0 on this machine during the 3.2.0\n  work); after a take-new of docs-sync the backend-standards text in `CLAUDE.md` and one\n  `docs-sync.project.md` bullet still describe the dropped `known-deviations.md` rule; an update\n  reworded a sentence in 03 beyond the approved decisions and the new sentence quotes the stale\n  `PORT` default, which the live helper reports as a finding; a retained docs-sync edit and a\n  declined replacement left the evidence inventory with a style fact whose document PS had skipped.\n",
+    after: "\n## Missing information\n",
+  }),
 
   // @root/.ai/context/project-tree.md
   PT320_1: Object.freeze({
@@ -684,13 +750,21 @@ export const AM320 = Object.freeze({
     neu: "From 3.2.0 the standalone gates are `tests/release-3.2.0.test.mjs`, `tests/v320.test.mjs` and\n`tests/bs-doc-map.test.mjs`. The historical gates (`tests/release-3.1.test.mjs`,\n`tests/c18.test.mjs` and the strict gate `tests/accept-rc1.mjs`) run only in the reconstructed\n3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes are not yet\nmeasured on a host, see project-setup/RELEASE-NOTES-3.2.0.md.\n\n",
     after: "## `backend-standards/`\n",
   }),
+  // stage 2 (sign-off): the last sentence of the paragraph inserted by PT320_3 restated as measured
+  PT320_4: Object.freeze({
+    file: "@root/.ai/context/project-tree.md",
+    before: "",
+    old: "3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes are not yet\nmeasured on a host, see project-setup/RELEASE-NOTES-3.2.0.md.\n",
+    neu: "3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes were measured on\none Windows host on 2026-11-24 with a recorded unmeasured remainder, see project-setup/RELEASE-NOTES-3.2.0.md.\n",
+    after: "",
+  }),
 });
 /** file key -> frozen array of ids in apply order; every record exactly once under its own file. */
 export const FORWARD_ORDER320 = Object.freeze({
   "SKILL.md": Object.freeze(['SK320_1', 'SK320_3', 'SK320_2']),
   "VERSION": Object.freeze(['VR320_1']),
-  "README.md": Object.freeze(['RM320_1', 'RM320_2', 'RM320_3', 'RM320_4', 'RM320_5', 'RM320_6', 'RM320_7', 'RM320_8']),
-  "CHANGELOG.md": Object.freeze(['CL320_1']),
+  "README.md": Object.freeze(['RM320_1', 'RM320_2', 'RM320_3', 'RM320_4', 'RM320_5', 'RM320_6', 'RM320_7', 'RM320_8', 'RM320_9']),
+  "CHANGELOG.md": Object.freeze(['CL320_1', 'CL320_2']),
   "references/docs-generation.md": Object.freeze(['DG320_1', 'DG320_2', 'DG320_5', 'DG320_3', 'DG320_6', 'DG320_4', 'DG320_7']),
   "references/modes.md": Object.freeze(['MD320_1', 'MD320_3', 'MD320_2']),
   "references/migration-v2.md": Object.freeze(['MV320_1', 'MV320_2']),
@@ -705,13 +779,15 @@ export const FORWARD_ORDER320 = Object.freeze({
   "tests/bs-doc-map.test.mjs": Object.freeze(['BT320_3', 'BT320_4', 'BT320_5', 'BT320_2', 'BT320_6', 'BT320_7', 'BT320_1', 'BT320_8', 'BT320_9', 'BT320_10', 'BT320_11', 'BT320_12', 'BT320_13', 'BT320_14']),
   "tests/live/bs-doc-map.mjs": Object.freeze(['LH320_1', 'LH320_2', 'LH320_3', 'LH320_4', 'LH320_5', 'LH320_6', 'LH320_7', 'LH320_8']),
   "tests/live/BS-DOC-MAP-ACCEPTANCE.md": Object.freeze(['AC320_1', 'AC320_2', 'AC320_3', 'AC320_4', 'AC320_5', 'AC320_6', 'AC320_7', 'AC320_8', 'AC320_9', 'AC320_10']),
-  "@root/README.md": Object.freeze(['RR320_1', 'RR320_2', 'RR320_3', 'RR320_4', 'RR320_5']),
-  "@root/TODO.md": Object.freeze(['TD320_1', 'TD320_2', 'TD320_3', 'TD320_4', 'TD320_5', 'TD320_6']),
-  "@root/.ai/context/project-tree.md": Object.freeze(['PT320_1', 'PT320_2', 'PT320_3']),
+  "@root/README.md": Object.freeze(['RR320_1', 'RR320_2', 'RR320_3', 'RR320_4', 'RR320_5', 'RR320_6']),
+  "@root/TODO.md": Object.freeze(['TD320_1', 'TD320_2', 'TD320_3', 'TD320_4', 'TD320_5', 'TD320_6', 'TD320_7', 'TD320_8', 'TD320_9', 'TD320_10', 'TD320_11']),
+  "@root/.ai/context/project-tree.md": Object.freeze(['PT320_1', 'PT320_2', 'PT320_3', 'PT320_4']),
 });
 /** The exact per-file reverse of FORWARD_ORDER320. */
 export const REVERSAL_ORDER320 = Object.freeze(Object.fromEntries(Object.entries(FORWARD_ORDER320).map(([f, ids]) => [f, Object.freeze([...ids].reverse())])));
 export const AMENDED_FILES320 = Object.freeze(Object.keys(FORWARD_ORDER320));
+/** Stage 2: the closed list of closeouts, the only records with an empty neu (a deletion). The gate of tests/release-3.2.0.test.mjs pins its own list and compares this one with it. */
+export const CLOSEOUT_IDS320 = Object.freeze(['TD320_7']);
 /** The closed list of files 3.2.0 adds (plan 4.2), relative to project-setup/. to310Repo removes exactly these. */
 export const NEW_FILES320 = Object.freeze([
   'tests/helpers/v320-amendments.mjs',

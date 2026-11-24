@@ -50,8 +50,8 @@ compatibility, see project-setup/RELEASE-NOTES-3.1.0.md.
 From 3.2.0 the standalone gates are `tests/release-3.2.0.test.mjs`, `tests/v320.test.mjs` and
 `tests/bs-doc-map.test.mjs`. The historical gates (`tests/release-3.1.test.mjs`,
 `tests/c18.test.mjs` and the strict gate `tests/accept-rc1.mjs`) run only in the reconstructed
-3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes are not yet
-measured on a host, see project-setup/RELEASE-NOTES-3.2.0.md.
+3.1.0 view built by `tests/run-310-view.mjs`; CI runs none of them. The 3.2.0 changes were measured on
+one Windows host on 2026-11-24 with a recorded unmeasured remainder, see project-setup/RELEASE-NOTES-3.2.0.md.
 
 ## `backend-standards/`
 
