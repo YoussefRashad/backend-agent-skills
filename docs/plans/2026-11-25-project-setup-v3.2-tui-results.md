@@ -5,12 +5,14 @@ Status: evidence record, not an acceptance verdict. It follows `docs/plans/2026-
 Dated 2026-11-24 to 2026-11-25 (session local time, around midnight). Repository base: main at 7fe4017.
 
 Result in one line: none of the TUI-only rows could be measured by this session. The later maintainer runs are recorded in the
-addenda (Codex P4 passed on one sample; Rows A and B reached Phase 0 only and are incomplete). Every other row is BLOCKED, for the two
-reasons below. Nothing was fabricated; the only TUI screen read is the Codex trust dialog quoted under "What was observed".
+addenda (Codex P4 passed on one sample; Rows A and B applied to commit with the maintainer's own validate and git checks, but with prompts
+not counted and the final PS reports not pasted; the L16 pair ran in the TUI). Every row not in an addendum is BLOCKED or not attempted,
+for the two reasons below. Nothing was fabricated; the only TUI screen read is the Codex trust dialog quoted under "What was observed".
 
 ## Common record
 
-- Host: Windows 11 Pro 10.0.26100, Node v24.14.1, Claude Code 2.1.330, codex-cli 0.163.0. Installed project-setup 3.2.0
+- Host: Windows 11 Pro 10.0.26100, Node v24.14.1. This session first read Claude Code 2.1.330 and codex-cli 0.163.0; the maintainer's
+  runs report, and the host later reads, Claude Code 2.1.331 and codex-cli 0.172.0 (upgraded in between). Installed project-setup 3.2.0
   (`detect.mjs` reports `skillVersion` 3.2.0, mode `update` on the `d9f-ps-first` fixture at `6861636`).
 - Method attempted: an interactive session in the user's Terminal panel through the terminal tools
   (`run_in_terminal`, `list_terminal_tabs`, `read_terminal`, `stop_terminal_tab`), one tab, started at an absolute fixture root.
@@ -321,12 +323,23 @@ reported permission denial in Row A run 2 (who denied it is not recorded). This 
 
 ## What stays not measured
 
-Everything the runbook sections 1, 2, 3, 3b, 4 and 5 list, except what the addenda above record (Codex P4 PASS; Row A Phase 0 only;
-Row B to commit by self-report; Row A to commit with independent validate). The 2026-11-24 unmeasured-items results file remains the record of what
+By runbook section, what the addenda above leave unmeasured:
+
+- Section 1: permission-prompt count and status-line check in both rows; the final PS reports; the keep and take-new wrapper answers;
+  line endings; whether the hook and deny rules load in a new session.
+- Section 2: the reviewer's own statement of the start directory and the exact brief text; one sample each leg.
+- Section 3: the Codex version at the P4 run (unrecorded, most likely 0.172.0); one sample.
+- Section 3b (Codex deny-read profile for `env/**` and `cert/**`): not attempted.
+- Section 4 (Codex PS rows r1 to r5, Codex doc-writing case): not attempted.
+- Section 5 (P8): blocked by the global wildcard `safe.directory`; the global Git config was not changed.
+
+The maintainer chose to stop at this point (2026-11-25 about 00:52 local) with 3b and section 4 optional and left unrun. The 2026-11-24 unmeasured-items results file remains the record of what
 was measured headless; nothing in it changes.
 
 ## For whoever runs the rows
 
-- Run them in your own Terminal tab; fixtures and commands are in the runbook. `D:\ps-live\u32` is still the source for the clones.
-- Section 3 on a new clone location needs one trust decision first (above).
-- This session's scratch (`D:\ContactRepos\codex-fixtures\tui`) was deleted, so recreate the clone with the section 3 commands.
+- Open items are 3b and section 4 (needs a Codex TUI, approvals and, for 3b, a paste into `~/.codex/config.toml` that only the
+  maintainer does). Fixtures and commands are in the runbook; `D:\ps-live\u32` is still the source for the clones.
+- A Codex session on a new clone location asks one trust decision first (above).
+- Clones left by the maintainer's runs, theirs to delete once they no longer need them: `D:\ps-live\tui` (row-a, row-b) and
+  `D:\ContactRepos\codex-fixtures\tui` (p4). This session's own scratch was deleted earlier; no scratch of this session remains.
