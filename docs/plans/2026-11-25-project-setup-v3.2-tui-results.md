@@ -4,7 +4,8 @@ Status: evidence record, not an acceptance verdict. It follows `docs/plans/2026-
 `docs/plans/2026-11-24-project-setup-v3.2-unmeasured-items-results.md`. It changes no shipped byte and edits no frozen plan.
 Dated 2026-11-24 (session local time, late evening). Repository base: main at 7fe4017.
 
-Result in one line: none of the TUI-only rows could be measured by this session. Every row is BLOCKED, for the two
+Result in one line: none of the TUI-only rows could be measured by this session; the one later run by the maintainer (Codex P4,
+see the addendum) passed. Every other row is BLOCKED, for the two
 reasons below. Nothing was fabricated; the only TUI screen read is the Codex trust dialog quoted under "What was observed".
 
 ## Common record
@@ -47,10 +48,32 @@ Consequence for whoever runs section 3: expect this dialog on a fresh clone loca
 | Rows named in the task (blank section, renamed heading, deleted pointer, local-instruction conflict, unchanged rerun) in default mode | BLOCKED | Reasons 1 and 2. The runbook carries these mutations only as section 4 (Codex, fixtures `D:\ps-live\rows\r1` to `r5`); no interactive run of any of them was made. |
 | Section 1, row B: default-mode update on `d9f-ps-first` | BLOCKED | Reasons 1 and 2. Only observation: `detect.mjs` at `6861636` reports mode `update`, one `warnings` entry that `.ai/.setup.lock` exists in the kept fixture (the runbook says clones do not carry it). |
 | Section 2: L16 launch rule in the TUI (P3 h) and its negative control | BLOCKED | Reasons 1 and 2. The headless result (Claude Code 2.1.330) in `2026-11-22-project-setup-v3.2.0-live-results.md` D2 stands unchanged and is not extended. |
-| Section 3: Codex P4 project-context check | BLOCKED | Reason 1, plus the trust dialog. Setup part measured: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate once someone runs it. No Codex answer was obtained, so the P4 question stays inconclusive. |
+| Section 3: Codex P4 project-context check | BLOCKED for this session; later MEASURED by the maintainer (see "Addendum: P4 run by the maintainer") | Reason 1, plus the trust dialog. Setup part measured here: the first bullet under `Critical rules` in the clone's `AGENTS.md` starts "Never read, print, copy, or summarize files matching `.ai/security-paths.json`", and the first words of `~/.codex/AGENTS.md` are "## Delegated roles". They differ, so the probe can discriminate. |
 | Section 3b: Codex deny-read profile canaries | NOT ATTEMPTED | Needs a paste into `~/.codex/config.toml`, which this session does not edit, and a TUI. Not in the task. |
 | Section 4: Codex PS rows r1 to r5 and doc-writing case | NOT ATTEMPTED | Needs a Codex session that may write and approve; reasons 1 and 2. Not in the task's list beyond the row names above. |
 | Section 5: P8 Codex ownership grant | BLOCKED | `git config --global --get-all safe.directory` still lists a wildcard (`*`) beside exact entries. The runbook gives no way that leaves the global Git config untouched, and the user's global Git config was not changed. |
+
+## Addendum: P4 run by the maintainer (2026-11-24, about 23:19 local)
+
+The maintainer ran runbook section 3 by hand in their own Terminal tab and pasted Codex's reply into the chat of this session. This
+session did not see the TUI; everything below comes from that paste and from the clone on disk. The clone was recreated by the maintainer from the
+runbook commands (`D:\ContactRepos\codex-fixtures\tui\p4`, clean at commit `6861636` when checked here after the run; this session had
+deleted its own copy earlier), codex-cli 0.163.0 (the version this session read earlier on the same
+host). Whether the maintainer answered the trust dialog and how is not recorded here.
+
+- Prompt: the exact section 3 prompt (quote the first bullet under "Critical rules" in the `AGENTS.md` of this project, say which file,
+  run no command).
+- Reply (paste): a quote of the whole first bullet, then "I quoted the project's AGENTS.md (AGENTS.md) from the text you provided."
+  Footer "Worked for 7s".
+- Check made here, on disk, ignoring the backtick formatting the paste lost: the quoted text equals the first bullet in the clone's
+  `AGENTS.md` lines 18 to 25 (it includes the two indented continuation lines about `git-safe` and the env variable names). It does
+  not match the first words of `~/.codex/AGENTS.md` ("## Delegated roles"), so the probe did discriminate.
+- Result: PASS on the section 3 criterion (quote equals the project bullet, attribution names the project file), one sample, codex-cli
+  0.163.0, Windows, one fixture. It shows that Codex at that fixture root had the project `AGENTS.md` text in its context before any
+  command; it does not show the mechanism.
+- Caveats: the paste is the final answer only, so "no command was run" is inferred from the 7 s run time and the reply wording, not
+  read from the TUI; the phrase "from the text you provided" was Codex's own and is not explained here; model and effort were not
+  recorded.
 
 ## What stays not measured
 
